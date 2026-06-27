@@ -12,7 +12,7 @@ Requirement tags reference [xtty-requirements](../03-analysis/xtty-requirements.
 
 ---
 
-## Phase 0 — Skeleton + the seam  ·  M2, M3
+## Phase 0 — Skeleton + the seam  ·  M2, M3  ✅ **done** (`add-app-skeleton`, archived)
 **Goal:** a buildable native macOS app with the architecture's seam drawn.
 - Xcode app (or generated project) + window; **App Sandbox OFF**, "Sign to Run Locally."
 - Stand up **`XttyCore`** as a local SPM package (near-empty) — the engine-facing seam.
@@ -21,7 +21,7 @@ Requirement tags reference [xtty-requirements](../03-analysis/xtty-requirements.
 **Done when:** the app launches an empty window and `swift build` is green.
 **Refs:** [stack sketch](01-stack-sketch.md); sandbox detail in its Spike findings.
 
-## Phase 1 — Integrate SwiftTerm → a working terminal  ·  M5, M6 *(collapses old P1–P3)*
+## Phase 1 — Integrate SwiftTerm → a working terminal  ·  M5, M6 *(collapses old P1–P3)*  ✅ **done** (`integrate-swiftterm`)
 **Goal:** a real, interactive terminal, fast.
 - Wrap SwiftTerm's `LocalProcessTerminalView` (PTY + view) in an `NSViewRepresentable`, hosted in the SwiftUI window.
 - Spawn `zsh`; confirm input/resize/paste/selection/scrollback all work (SwiftTerm provides these).
@@ -30,6 +30,7 @@ Requirement tags reference [xtty-requirements](../03-analysis/xtty-requirements.
 **Done when:** you can run `vim`/`htop`, resize, paste multi-line, scroll back, and select text — no corruption.
 **Refs:** [01-pty-fundamentals](../02-internals/01-pty-fundamentals.md), [02-vt-ansi-parsing](../02-internals/02-vt-ansi-parsing.md)
 **Note:** this single phase replaces the old "hello-PTY → VT engine → input/resize" sequence — all free via SwiftTerm.
+**Shipped as:** the view is hosted in an **AppKit `NSWindow`**, *not* the planned SwiftUI `NSViewRepresentable` — SwiftTerm renders black under SwiftUI hosting on macOS 26 (both CoreGraphics and Metal paths). The window opens on the built-in display. See [`integrate-swiftterm/design.md`](../../openspec/changes/integrate-swiftterm/design.md). Interactive behaviors verified hands-on + via the XCUITest harness ([`add-verification-harness`](../../openspec/changes/add-verification-harness/design.md), [native-app testing tooling](../03-analysis/native-app-testing-tooling.md)).
 
 ## Phase 2 — Daily-driver baseline  ·  M5 *(collapses old P4–P5)*
 **Goal:** good enough to use every day — mostly *configure & verify*, not build.

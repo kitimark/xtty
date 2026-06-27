@@ -4,14 +4,16 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 
 ## What this project is
 
-**xtty** is a **native macOS terminal emulator**. It is greenfield and currently transitioning from the **research/exploration** phase into the **build** phase — there is no application code yet, but the direction, requirements, and design are documented in `research/`.
+**xtty** is a **native macOS terminal emulator**. It is greenfield and in the **build** phase: the app already launches a live terminal (the user's login shell in a SwiftTerm engine hosted in AppKit). The direction, requirements, and design are documented in `research/`; implementation proceeds milestone-by-milestone via the OpenSpec workflow.
 
 ## Current status
 
 - ✅ Landscape + internals research, requirements, and a design (stack + milestones) — in `research/`.
 - ✅ Spec-driven workflow scaffolded — `openspec/`.
-- ✅ First change **implemented**: `add-app-skeleton` (milestone P0) — all 15 tasks done (app builds & launches an empty window, `XttyCore` seam + smoke test, SwiftTerm resolved, non-sandboxed signing). **Awaiting `/opsx:archive`**.
 - ✅ Build system live: `project.yml` (XcodeGen) → `xtty.xcodeproj` (gitignored), `XttyCore` SPM package. See **Building** below.
+- ✅ **P0 `add-app-skeleton`** — implemented **and archived**; established the `app-shell` spec.
+- ✅ **P1 `integrate-swiftterm`** — implemented: live login shell in a SwiftTerm view hosted in an AppKit `NSWindow` (SwiftUI hosting renders the view black on macOS 26), engine routed through `XttyCore`, window opens on the built-in display. All tasks done. **Awaiting `/opsx:archive`**.
+- ✅ **`add-verification-harness`** — implemented: an XCUITest e2e target (terminal content asserted via a DEBUG engine grid-dump, since the custom-drawn view exposes no text to accessibility) plus Peekaboo for manual driving. 13/14 tasks (optional Peekaboo-MCP registration deferred). **Awaiting `/opsx:archive`**.
 
 ## Repository structure
 
@@ -69,6 +71,8 @@ Signature features: at-a-glance per-session progress sidebar (from OSC 133); a *
 - **Implementation follows the phased plan** in `research/04-design/02-milestones.md` (P0 skeleton → P5 daily-driver → **P7 OSC capture (keystone)** → P8 sidebar → P10 polish). P8/P9 depend on P7.
 - **Use OpenSpec for non-trivial changes** (see the OpenSpec workflow section below). The project `context` in `openspec/config.yaml` is shown to the AI on every artifact.
 - **Research is background, not spec.** `research/` records *why*; `openspec/specs/` will record *what is true*. When they conflict once code exists, specs win.
+- **Write up research in `research/` when it's done.** Whenever an investigation or spike produces durable findings — a tooling landscape, a comparison, an internals discovery, a dead end worth remembering — capture it as a `research/` doc *as soon as it settles* (even mid-build), in the right subfolder (`03-analysis/` for analysis, `02-internals/` for internals, `04-design/` for build-plan shifts). Follow the research-doc conventions (Provenance + Sources + ✅/❌/❓) and add it to `research/README.md`. Keep the *why/landscape* in `research/`; the actionable *decision* belongs in the OpenSpec change.
+- **Keep progress current when implementation lands.** When a change (or a milestone's tasks) is done, update the trackers in the same session: tick the `tasks.md` checkboxes, refresh **Current status** above, and advance the milestone state in `research/04-design/02-milestones.md`. Don't leave finished work looking pending or stale.
 
 ## OpenSpec workflow
 
@@ -103,11 +107,11 @@ explore ──▶ propose ──▶ apply ──▶ archive
 
 **Lifecycle rule:** `openspec/specs/` is the source of truth and only grows via `openspec archive` after a change is implemented. In-flight work lives in `openspec/changes/<name>/`. Commit proposal artifacts as `docs(openspec): …`; commit the implementation under the relevant `feat`/`chore` scope.
 
-**Current open change:** `add-app-skeleton` (P0) — proposed & validated; run `/opsx:apply` to build it. Carries the architectural seam (all logic talks to the `Terminal` engine via `XttyCore`, never the view) and the staged SwiftTerm L3-start decision — see `research/04-design/01-stack-sketch.md`.
+**Current open changes:** `integrate-swiftterm` (P1) and `add-verification-harness` — both **implemented**; run `/opsx:archive` to merge their spec deltas into `openspec/specs/`. The architectural seam (all logic talks to the `Terminal` engine via `XttyCore`, never the view) and the staged SwiftTerm L3-start decision are now in place — see `research/04-design/01-stack-sketch.md`.
 
 ## Conventions
 
-- **Commits: [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)** — `type(scope): description`. Types seen so far: `docs` (research/design content), `chore` (tooling). Scopes: `research`, `design`, `openspec`. End commit messages with the `Co-Authored-By` trailer when authored with an AI.
+- **Commits: [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)** — `type(scope): description`. Types used so far: `docs` (research/design/openspec content), `feat`/`test` (implementation), `chore` (tooling). Scopes: `research`, `design`, `openspec`, `app`. End commit messages with the `Co-Authored-By` trailer when authored with an AI.
 - **Research docs** carry a **Provenance** note (date + how produced) and a **Sources** list; fact-checked claims use ✅/❌/❓. Snapshots are dated and time-sensitive — re-verify versions/latency/pricing before quoting.
 - **Engineering bias:** macOS-first; **reuse battle-tested components over hand-rolling** (especially the VT parser — use the Williams state machine via a library); favor **latency and low memory** in every tradeoff.
 - **Don't track local tooling:** `.claude/` is gitignored.
