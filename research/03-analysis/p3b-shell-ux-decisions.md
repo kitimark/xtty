@@ -31,6 +31,8 @@ P4:         file:line error-matching rides OSC 7 cwd
 
 ## Quick-Terminal (the "quake" dropdown)
 
+> **✅ Implemented 2026-06-28** as `add-quick-terminal`. Reconciled against the real P3a types during apply: `HotKeySpec` **reuses `ModifierSet`** (mapped to a Carbon mask in the app-layer `GlobalHotKey`, rather than storing a raw mask in core); the parser shares a `ChordTokenizing` helper with `KeybindParser`; accessory exclusion is a **private `SessionRegistry`** in `QuickTerminalController` (no `PaneController` change). v1 ships `quick-terminal` + `quick-terminal-hotkey` only; slide animation deferred. 69 `XttyCore` unit + 13 XCUITests green.
+
 ### Mechanism
 - ✅ **Global hotkey via Carbon `RegisterEventHotKey`** — no Accessibility permission prompt (unlike `NSEvent.addGlobalMonitorForEvents`, which also can't swallow the key, or `CGEventTap`, which needs the prompt). Registers the combo exclusively; fires when xtty is unfocused.
 - ✅ **Hand-rolled ~40-line shim, not the `soffes/HotKey` SPM dep.** The surface is tiny and keeps the dependency list lean (a product value); the reuse-bias is aimed at the VT parser, not a trivial Carbon wrapper. (Reasonable to revisit if touching Carbon is unappealing.)
@@ -138,9 +140,9 @@ untestable (manual/Peekaboo): the real global keypress ; slide animation ; multi
 ```
 
 ## Open questions to resolve at propose/apply time
-- ❓ Quick-Terminal: which config keys ship in v1 beyond `quick-terminal` + `quick-terminal-hotkey`.
+- ✅ Quick-Terminal v1 keys: `quick-terminal` + `quick-terminal-hotkey` only (resolved; shipped in `add-quick-terminal`). Position/size/screen/autohide/profile deferred to defaults.
+- ✅ `add-quick-terminal` and `add-profiles` are **two changes** (resolved; quick-terminal shipped 2026-06-28, profiles still pending).
 - ❓ Profiles: strict vs lenient unquoted section headers; the exact quote/escape grammar of the `command` tokenizer.
-- ❓ Whether `add-quick-terminal` and `add-profiles` are two changes or one (lean two).
 - ❓ Future: the persistent-background quake stance (ii) — out of scope for P3b, revisit if xtty ever wants a status-bar identity.
 
 ## Sources
