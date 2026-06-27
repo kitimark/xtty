@@ -3,11 +3,35 @@ schema: spec-driven
 # Project context (optional)
 # This is shown to AI when creating artifacts.
 # Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  xtty — a native macOS terminal emulator (greenfield, exploration → build phase).
+
+  Stack (primary, "All-Swift"):
+    - UI/chrome: Swift + SwiftUI/AppKit
+    - Renderer: custom Metal view (MTKView/CAMetalLayer), CoreText glyph atlas,
+      dedicated render thread, latency-first (frame pacing > throughput)
+    - VT engine: reuse SwiftTerm's headless Terminal core (parser + grid)
+    - PTY: Darwin posix_openpt/forkpty + kqueue read/write loop
+    - Shell integration: OSC 7 (cwd) + OSC 133 (command boundaries) capture
+    Alternatives on file if we hit limits: Rust core + Swift GUI; Zig/libghostty
+    + Swift; Swift + libghostty-vt. See research/04-design/01-stack-sketch.md.
+
+  Product values (hard requirements):
+    - Lean memory (nowhere near Warp; bound scrollback, manage atlas, no retain cycles)
+    - No account / no login, free and open, no paywalled features
+    - Native macOS feel; keep the user's existing zsh/tmux/dotfiles working
+    - Be a great host for agent CLIs (Claude Code, etc.); agents pluggable/local, not vendor-locked
+
+  Signature features: at-a-glance per-session progress sidebar (from OSC 133),
+  a lightweight in-terminal file/diff view (not a full IDE).
+
+  Background research lives in research/ (landscape, internals, requirements,
+  stack sketch, milestones). Implementation follows the phased plan in
+  research/04-design/02-milestones.md (P0 skeleton → P5 daily-driver →
+  P7 OSC capture keystone → P8 sidebar → P10 polish).
+
+  Conventions: macOS-first; reuse battle-tested components over hand-rolling
+  (esp. the VT parser); favor latency and low memory in every tradeoff.
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.
