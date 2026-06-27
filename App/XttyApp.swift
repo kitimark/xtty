@@ -35,6 +35,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         terminalController = TerminalWindowController()
+
+        // Install xtty's AppKit main menu. SwiftUI's `App` installs a default
+        // menu, but we replace it: Find needs an `NSMenuItem` sender routed
+        // through the AppKit responder chain (see `XttyMainMenu`). Done after the
+        // controller exists so the font-size items target the live delegate.
+        NSApp.mainMenu = XttyMainMenu.build(fontActionTarget: self)
+
         NSApp.activate(ignoringOtherApps: true)
 
         #if DEBUG
@@ -55,5 +62,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Terminate the child shell on quit so no orphan process is leaked.
     func applicationWillTerminate(_ notification: Notification) {
         terminalController?.terminate()
+    }
+
+    // MARK: Font-size menu actions
+    //
+    // Routed here (not the terminal view) because they adjust the session's font
+    // ephemerally; the controller owns the view + the configured base size. These
+    // are `target`ed at the delegate by `XttyMainMenu`, so they fire regardless of
+    // first responder.
+
+    @MainActor @objc func increaseFontSize(_ sender: Any?) {
+        terminalController?.adjustFontSize(by: +1)
+    }
+
+    @MainActor @objc func decreaseFontSize(_ sender: Any?) {
+        terminalController?.adjustFontSize(by: -1)
+    }
+
+    @MainActor @objc func resetFontSize(_ sender: Any?) {
+        terminalController?.resetFontSize()
     }
 }

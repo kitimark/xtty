@@ -32,6 +32,13 @@ final class TerminalWindowController: NSObject, LocalProcessTerminalViewDelegate
     private var session: TerminalSession?
     private var processEnded = false
     private var keyObserver: NSObjectProtocol?
+    /// The configured base font size (Cmd 0 returns here). Set at launch from the
+    /// terminal's font; later sourced from config.
+    private var configuredFontSize: CGFloat
+    /// The resolved launch configuration, retained so the DEBUG state dump can
+    /// report what was applied: the engine has no theme-name concept and the
+    /// scrollback cap isn't publicly readable back off the engine.
+    private let config: XttyConfig
 
     #if DEBUG
     /// DEBUG-only: drives the XCUITest grid-dump assertion channel (see change
@@ -39,10 +46,24 @@ final class TerminalWindowController: NSObject, LocalProcessTerminalViewDelegate
     /// the UI-test runner reads. Only started under the `-UITestGridDump` arg.
     private var gridDumpTimer: Timer?
     private static let gridDumpPath = "/tmp/xtty-grid-dump.txt"
+    /// Sibling of the grid dump holding config/engine state that the grid text
+    /// can't carry (font, theme, option-as-meta, scrollback depth) so UI tests
+    /// can assert config-applied + bounded-scrollback deterministically.
+    private static let stateDumpPath = "/tmp/xtty-state-dump.json"
     #endif
 
     init(contentSize: NSSize = NSSize(width: 900, height: 560)) {
+        // Load the user config (~/.config/xtty/config) through the XttyCore seam;
+        // a missing file yields defaults. Applied to the view below.
+        let loadedConfig = XttyConfigLoader.load(warn: { NSLog("[xtty] config: %@", $0) })
+        #if DEBUG
+        let appConfig = TerminalWindowController.applyUITestOverrides(to: loadedConfig)
+        #else
+        let appConfig = loadedConfig
+        #endif
         terminal = LocalProcessTerminalView(frame: NSRect(origin: .zero, size: contentSize))
+        config = appConfig
+        configuredFontSize = CGFloat(appConfig.fontSize)
         window = NSWindow(
             contentRect: NSRect(origin: .zero, size: contentSize),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
@@ -55,6 +76,12 @@ final class TerminalWindowController: NSObject, LocalProcessTerminalViewDelegate
         window.contentView = terminal
         window.tabbingMode = .disallowed
         terminal.processDelegate = self
+
+        // Apply the user config (font, theme palette, bounded scrollback,
+        // option-as-meta) before the shell starts so the initial PTY size and
+        // appearance reflect it. Font/theme knowledge lives here in the app layer;
+        // XttyCore only carries the toolkit-independent values.
+        TerminalConfigurator.apply(appConfig, to: terminal)
 
         // Accessibility wiring for the XCUITest harness. SwiftTerm's view is
         // custom-drawn, so AppKit exposes no per-cell text — these identifiers
@@ -143,6 +170,35 @@ final class TerminalWindowController: NSObject, LocalProcessTerminalViewDelegate
         return nil
     }
 
+    // MARK: Font size (ephemeral, not persisted to config)
+    //
+    // The configured base size is the launch font size; Cmd +/− adjust the live
+    // session and Cmd 0 returns to the configured base. Live changes are NOT
+    // written back to the config file (P2 policy).
+
+    /// Smallest/largest live font sizes, to keep the grid legible and bounded.
+    private static let fontSizeRange: ClosedRange<CGFloat> = 6...72
+
+    /// Adjust the live font size by `delta` points, clamped to `fontSizeRange`.
+    func adjustFontSize(by delta: CGFloat) {
+        let current = terminal.font
+        let newSize = min(max(current.pointSize + delta, Self.fontSizeRange.lowerBound),
+                          Self.fontSizeRange.upperBound)
+        guard newSize != current.pointSize else { return }
+        if let resized = NSFont(descriptor: current.fontDescriptor, size: newSize) {
+            terminal.font = resized
+        }
+    }
+
+    /// Reset the live font size to the configured base size (family unchanged).
+    func resetFontSize() {
+        let current = terminal.font
+        guard current.pointSize != configuredFontSize else { return }
+        if let reset = NSFont(descriptor: current.fontDescriptor, size: configuredFontSize) {
+            terminal.font = reset
+        }
+    }
+
     /// Terminate the child process (SIGTERM) unless it already exited, and remove
     /// observers. Safe to call multiple times.
     func terminate() {
@@ -161,6 +217,20 @@ final class TerminalWindowController: NSObject, LocalProcessTerminalViewDelegate
     }
 
     #if DEBUG
+    /// XCUITest determinism: `-UITestScrollback <n>` shrinks the scrollback cap so
+    /// the bounded-scrollback flood test runs fast with an exact saturation point.
+    /// No-op (returns the config unchanged) when the arg is absent/invalid.
+    private static func applyUITestOverrides(to config: XttyConfig) -> XttyConfig {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-UITestScrollback"),
+              i + 1 < args.count, let n = Int(args[i + 1]), n >= 0 else {
+            return config
+        }
+        var overridden = config
+        overridden.scrollback = n
+        return overridden
+    }
+
     /// Start polling the headless engine grid onto a temp file for the XCUITest
     /// harness. Gated by the `-UITestGridDump` launch arg (see `XttyApp`). The view
     /// is custom-drawn, so this engine grid — not the accessibility tree — is the
@@ -170,14 +240,47 @@ final class TerminalWindowController: NSObject, LocalProcessTerminalViewDelegate
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let engine = self.terminal.getTerminal()
+
+                // Grid text. `skipNullCellsFollowingWide` + a `characterProvider`
+                // are required so wide CJK (whose 2nd column is a NUL spacer cell)
+                // and non-BMP/grapheme emoji (stored as map-indexed codes the plain
+                // path can't resolve) reproduce intact in the dump. Without them CJK
+                // comes out NUL-separated and most emoji collapse to spaces.
                 var lines: [String] = []
                 lines.reserveCapacity(engine.rows)
                 for row in 0..<engine.rows {
-                    lines.append(engine.getLine(row: row)?.translateToString(trimRight: true) ?? "")
+                    lines.append(engine.getLine(row: row)?.translateToString(
+                        trimRight: true,
+                        skipNullCellsFollowingWide: true,
+                        characterProvider: { engine.getCharacter(for: $0) }
+                    ) ?? "")
                 }
                 try? lines.joined(separator: "\n").write(
                     toFile: TerminalWindowController.gridDumpPath,
                     atomically: true, encoding: .utf8)
+
+                // State dump: config knobs invisible in the grid text (font / theme
+                // / option-as-meta) plus scrollback depth. `bufferLines` uses the
+                // public proxy `getTopVisibleRow() + rows` because the true buffer
+                // line count is internal to SwiftTerm; once a flood overflows the
+                // cap the depth saturates at exactly the scrollback cap (valid only
+                // on the normal buffer with the view pinned to bottom — hence `isAlt`
+                // and `scrollbackDepth` are emitted so the test can check both).
+                let depth = engine.getTopVisibleRow()
+                let state: [String: Any] = [
+                    "fontFamily": self.terminal.font.familyName ?? self.terminal.font.fontName,
+                    "fontSize": Double(self.terminal.font.pointSize),
+                    "theme": self.config.themeName,
+                    "scrollbackCap": self.config.scrollback,
+                    "optionAsMeta": self.terminal.optionAsMetaKey,
+                    "rows": engine.rows,
+                    "isAlt": engine.isCurrentBufferAlternate,
+                    "scrollbackDepth": depth,
+                    "bufferLines": depth + engine.rows,
+                ]
+                if let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]) {
+                    try? data.write(to: URL(fileURLWithPath: TerminalWindowController.stateDumpPath))
+                }
             }
         }
     }

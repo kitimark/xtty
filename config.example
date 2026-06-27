@@ -1,0 +1,30 @@
+# xtty example configuration
+#
+# Copy this file to:   ~/.config/xtty/config
+#   (or $XDG_CONFIG_HOME/xtty/config if XDG_CONFIG_HOME is set)
+# then edit the values below. xtty reads it once at launch.
+#
+# Format: one `key = value` per line. `#` starts a comment; blank lines are
+# ignored; surrounding whitespace is trimmed. Unknown keys are ignored, and any
+# recognized key with an invalid value falls back to its default (and is logged).
+# Every line below shows xtty's built-in DEFAULT — uncomment and change to override.
+
+# Font family. Omit (or leave blank) to use the system monospaced font (SF Mono).
+# Any installed monospaced family works, e.g. "Menlo", "JetBrains Mono".
+# font-family =
+
+# Base font point size (clamped to 6...72). Cmd +/- adjust it live; Cmd 0 resets
+# to this value. Live changes are NOT written back to this file.
+# font-size = 13
+
+# Color theme. Built-ins: "dark" (default) or "light". Unknown names fall back
+# to dark.
+# theme = dark
+
+# Scrollback retention, in lines (clamped to 0...100000). Bounded by design —
+# there is no "unlimited". Larger values use more memory.
+# scrollback = 10000
+
+# Whether the Option key sends Meta (true) or composes characters like é (false).
+# Accepts true/false, yes/no, on/off, 1/0.
+# option-as-meta = true
