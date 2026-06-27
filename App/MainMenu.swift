@@ -14,17 +14,18 @@ import AppKit
 /// Routing:
 /// - **Find / Copy / Paste / Select All** → `target: nil` → first responder
 ///   (the SwiftTerm view implements and validates these).
-/// - **Font size** → custom selectors `target`ed at the app delegate, which owns
-///   the terminal controller.
+/// - **Font size** → `target: nil` → first responder, handled by the focused
+///   pane's `XttyTerminalView` (design D3: pane-scoped commands ride the
+///   responder chain, so "the active pane" is just the first responder).
 enum XttyMainMenu {
-    /// Build the full main menu. `fontActionTarget` receives the font-size
-    /// selectors (`increaseFontSize:` / `decreaseFontSize:` / `resetFontSize:`).
-    static func build(fontActionTarget: AnyObject?) -> NSMenu {
+    /// Build the full main menu.
+    @MainActor
+    static func build() -> NSMenu {
         let main = NSMenu()
 
         main.addItem(appMenuItem())
         main.addItem(editMenuItem())
-        main.addItem(viewMenuItem(target: fontActionTarget))
+        main.addItem(viewMenuItem())
         main.addItem(windowMenuItem())
 
         return main
@@ -104,22 +105,23 @@ enum XttyMainMenu {
 
     // MARK: View menu (font size)
 
-    private static func viewMenuItem(target: AnyObject?) -> NSMenuItem {
+    private static func viewMenuItem() -> NSMenuItem {
         let item = NSMenuItem()
         let menu = NSMenu(title: "View")
 
         let bigger = NSMenuItem(title: "Increase Font Size",
-                                action: #selector(AppDelegate.increaseFontSize(_:)),
+                                action: #selector(XttyTerminalView.increaseFontSize(_:)),
                                 keyEquivalent: "+")
         let smaller = NSMenuItem(title: "Decrease Font Size",
-                                 action: #selector(AppDelegate.decreaseFontSize(_:)),
+                                 action: #selector(XttyTerminalView.decreaseFontSize(_:)),
                                  keyEquivalent: "-")
         let reset = NSMenuItem(title: "Actual Size",
-                               action: #selector(AppDelegate.resetFontSize(_:)),
+                               action: #selector(XttyTerminalView.resetFontSize(_:)),
                                keyEquivalent: "0")
 
+        // target: nil → responder chain → the focused pane's XttyTerminalView.
         for entry in [bigger, smaller, reset] {
-            entry.target = target
+            entry.target = nil
             menu.addItem(entry)
         }
 
@@ -129,6 +131,7 @@ enum XttyMainMenu {
 
     // MARK: Window menu
 
+    @MainActor
     private static func windowMenuItem() -> NSMenuItem {
         let item = NSMenuItem()
         let menu = NSMenu(title: "Window")

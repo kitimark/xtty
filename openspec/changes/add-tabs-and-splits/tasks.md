@@ -1,10 +1,10 @@
 ## 1. Decompose into panes + view-free model (layer 1)
 
-- [ ] 1.1 Add `XttyCore` model: `Pane` (wraps `TerminalSession` + a stable `PaneID`), `PaneNode` (`.leaf`/`.split(axis, ratios, children)`), and `SessionRegistry` (all live panes + focused `PaneID`); no AppKit/view imports.
-- [ ] 1.2 Unit-test the model: split/close/collapse transforms and focus tracking, asserted without launching the app (extend `XttyCoreTests`).
-- [ ] 1.3 Extract `PaneController` (App): owns one `LocalProcessTerminalView` + PTY + `TerminalSession`, is its `LocalProcessTerminalViewDelegate` (title, `processTerminated`, font sizing, DEBUG dump moved here).
-- [ ] 1.4 Reduce `TerminalWindowController` to a window/tab owner of a single-leaf pane tree; preserve current behavior (one window, one pane), built-in-display placement, focus-on-key.
-- [ ] 1.5 Re-route font-size menu actions to the responder chain (`target: nil`), implemented on the focused pane/view; remove the `AppDelegate → single controller` font coupling. Verify existing font-size UI test still passes.
+- [x] 1.1 Add `XttyCore` model: `Pane` (wraps `TerminalSession` + a stable `PaneID`), `PaneNode` (`.leaf`/`.split(axis, children)`, n-ary), and `SessionRegistry` (all live panes + focused `PaneID`); no AppKit/view imports. (`Pane.swift`, `PaneNode.swift`, `SessionRegistry.swift`; ratios deferred to the view layer per design.)
+- [x] 1.2 Unit-test the model: split/close/collapse transforms and focus tracking, asserted without launching the app (`PaneModelTests.swift`, 9 tests; full suite 42 green).
+- [x] 1.3 Extract `PaneController` (App): owns one `XttyTerminalView` + PTY + `TerminalSession`, is its `LocalProcessTerminalViewDelegate` (title, `processTerminated`, DEBUG dump moved here); reports to its owner via `PaneControllerDelegate`.
+- [x] 1.4 Reduce `TerminalWindowController` to a window/tab owner of a `PaneNode` tree (single leaf) + `[PaneID: PaneController]`; preserve behavior (built-in-display placement, focus-on-key, exit→close-window). AppDelegate owns the shared `SessionRegistry` + loads config once.
+- [x] 1.5 Re-route font-size to the responder chain (`target: nil`) on `XttyTerminalView` (with a `validateUserInterfaceItem` override, since SwiftTerm returns false for unknown selectors); removed the `AppDelegate` font methods. Full suite green (42 unit + 8 UI).
 
 ## 2. Configurable keybindings (XttyCore model + presets + menu wiring)
 
