@@ -11,9 +11,10 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 - ✅ Landscape + internals research, requirements, and a design (stack + milestones) — in `research/`.
 - ✅ Spec-driven workflow scaffolded — `openspec/`.
 - ✅ Build system live: `project.yml` (XcodeGen) → `xtty.xcodeproj` (gitignored), `XttyCore` SPM package. See **Building** below.
-- ✅ **P0 `add-app-skeleton`** — implemented **and archived**; established the `app-shell` spec.
-- ✅ **P1 `integrate-swiftterm`** — implemented: live login shell in a SwiftTerm view hosted in an AppKit `NSWindow` (SwiftUI hosting renders the view black on macOS 26), engine routed through `XttyCore`, window opens on the built-in display. All tasks done. **Awaiting `/opsx:archive`**.
-- ✅ **`add-verification-harness`** — implemented: an XCUITest e2e target (terminal content asserted via a DEBUG engine grid-dump, since the custom-drawn view exposes no text to accessibility) plus Peekaboo for manual driving. 13/14 tasks (optional Peekaboo-MCP registration deferred). **Awaiting `/opsx:archive`**.
+- ✅ **P0 `add-app-skeleton`** — implemented **and archived**.
+- ✅ **P1 `integrate-swiftterm`** — implemented **and archived**: live login shell in a SwiftTerm view hosted in an AppKit `NSWindow` (SwiftUI hosting renders the view black on macOS 26), engine routed through `XttyCore`, window opens on the built-in display.
+- ✅ **`add-verification-harness`** — implemented **and archived** (13/14 tasks; optional Peekaboo-MCP registration deferred): an XCUITest e2e target (terminal content asserted via a DEBUG engine grid-dump, since the custom-drawn view exposes no text to accessibility) plus Peekaboo for manual driving.
+- 📋 **Established specs** (`openspec/specs/`): `app-shell`, `terminal-session`, `verification-harness`.
 
 ## Repository structure
 
@@ -107,7 +108,7 @@ explore ──▶ propose ──▶ apply ──▶ archive
 
 **Lifecycle rule:** `openspec/specs/` is the source of truth and only grows via `openspec archive` after a change is implemented. In-flight work lives in `openspec/changes/<name>/`. Commit proposal artifacts as `docs(openspec): …`; commit the implementation under the relevant `feat`/`chore` scope.
 
-**Current open changes:** `integrate-swiftterm` (P1) and `add-verification-harness` — both **implemented**; run `/opsx:archive` to merge their spec deltas into `openspec/specs/`. The architectural seam (all logic talks to the `Terminal` engine via `XttyCore`, never the view) and the staged SwiftTerm L3-start decision are now in place — see `research/04-design/01-stack-sketch.md`.
+**Current open changes:** none — P0/P1 are implemented and archived (`openspec/specs/` holds `app-shell`, `terminal-session`, `verification-harness`). The architectural seam (all logic talks to the `Terminal` engine via `XttyCore`, never the view) and the staged SwiftTerm L3-start decision are in place — see `research/04-design/01-stack-sketch.md`. Next: scope the **P2 daily-driver** milestone with `/opsx:propose`.
 
 ## Conventions
 
