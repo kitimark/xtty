@@ -41,13 +41,12 @@ Requirement tags reference [xtty-requirements](../03-analysis/xtty-requirements.
 **Done when:** you switch your own daily terminal to xtty and it doesn't annoy you.
 **Refs:** [04-fonts](../02-internals/04-fonts-text-shaping.md), [05-graphics-protocols](../02-internals/05-graphics-protocols.md) (Kitty/Sixel already supported)
 
-## Phase 3 — Native shell UX  ·  M6, N3
+## Phase 3 — Native shell UX  ·  M6, N3  *(P3a ✅ implemented; P3b pending)*
 **Goal:** the multiplexing/native conveniences SwiftTerm's single view doesn't provide.
-- Native **tabs** and **splits/panes** (multiple `TerminalView`s managed by xtty) + window management.
-- (Optional) Quick-Terminal dropdown; profile/config file.
-- Clickable links/error matching (OSC 8 hyperlinks are already parsed).
+- ✅ **P3a (`add-tabs-and-splits`)** — native **tabs** (native `NSWindow` tabbing, Ghostty-style) + custom **splits/panes** (`NSSplitView` tree over a view-free `XttyCore` pane model) + multiple windows + unified close/exit escalation; **configurable keybindings** (`iterm`/`ghostty` presets + per-action overrides); clickable URL links (SwiftTerm-inherited; non-`http(s)` guard deferred). 52 unit + 12 UI tests green.
+- 📋 **P3b** — Quick-Terminal dropdown + profiles (`add-quick-terminal` + `add-profiles`); **file:line error-matching deferred to P4** (needs OSC 7 cwd). Decisions: [`p3b-shell-ux-decisions`](../03-analysis/p3b-shell-ux-decisions.md).
 
-**Done when:** tabs + splits feel native and stable.
+**Done when:** tabs + splits feel native and stable. *(P3a meets this; P3b adds the extras.)*
 
 ## Phase 4 — Semantic capture / blocks  ·  H3 *(keystone — old P7)*
 **Goal:** the foundation for every differentiator.

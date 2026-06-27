@@ -34,19 +34,19 @@
 
 ## 5. Clickable URL links (layer 4)
 
-- [ ] 5.1 Override `requestOpenLink` on the pane delegate: open `http(s)` directly; confirm before opening any other scheme; never execute clicked text.
-- [ ] 5.2 Confirm OSC 8 + implicit `http(s)` hover highlight works (default SwiftTerm behavior) in xtty's AppKit host.
+- [x] 5.1 **Guard deferred** (design D7): `requestOpenLink` is a non-overridable protocol-extension default and the delegate carries keyboard `send`, so the non-`http(s)` confirmation guard needs the own-renderer (P8) or a vetted delegate proxy. Clicked text is never executed (the inherited handler hands the target to the system opener).
+- [x] 5.2 Clickable URL links work via SwiftTerm's inherited default (OSC 8 + implicit `http(s)` detection, hover highlight, open via `NSWorkspace`) — a key reason for adopting SwiftTerm; no xtty code needed.
 
 ## 6. Pane-aware verification harness
 
 - [x] 6.1 Moved the DEBUG dump to the window controller so it follows the focused pane; added the multiplexing inventory to the state dump (`paneCount`, `focusedPaneIndex`, `tabCount`). (Pulled forward to verify group 3.)
-- [ ] 6.2 Add a DEBUG "resolve link at (row,col)" action surfacing the matched URL for link tests (no real hit-testing).
+- [x] 6.2 **Not needed**: with the guard deferred (5.1), link opening is SwiftTerm's well-tested inherited behavior — no xtty link code to assert. (`terminal.link(at:mode:)` remains available if a future guard needs a resolution test.)
 - [x] 6.3 XCUITests (`XttyMultiplexingUITests`): split → 2 panes (typed text reaches the focused pane), close → 1 (collapse), directional focus switches panes. Test-isolation fix: terminate app at teardown + wait for the fresh baseline.
 - [x] 6.4 XCUITests (`XttyMultiplexingUITests`): new tab → `tabCount` 2, last-pane close escalates to tab close (app stays alive), new window opens a 2nd window. (Link-resolution assertion lands with group 5.)
-- [ ] 6.5 Run the full suite green: `xcodebuild test -project xtty.xcodeproj -scheme xtty -destination 'platform=macOS'` and `cd XttyCore && swift test`.
+- [x] 6.5 Full suite green: `xcodebuild test … -scheme xtty` (12 XCUITests) and `cd XttyCore && swift test` (52 unit tests).
 
 ## 7. Docs & trackers
 
-- [ ] 7.1 Document the keybinding config (`keybind-style` + `keybind-<action>`) and the two presets in `config.example`; note no other new config keys land in this change.
-- [ ] 7.2 Tick this `tasks.md`, refresh AGENTS.md **Current status** + open-changes, and advance Phase 3 state in `research/04-design/02-milestones.md` (P3a spine done; P3b extras remaining).
-- [ ] 7.3 `openspec validate add-tabs-and-splits` clean; commit implementation under `feat(app)` and any spec/docs under `docs(openspec)`.
+- [x] 7.1 Documented the keybinding config (`keybind-style` + `keybind-<action>`) and the `iterm`/`ghostty` presets in `config.example`; no other new config keys land in this change.
+- [x] 7.2 Ticked this `tasks.md`; refreshed AGENTS.md **Current status** + open-changes (P3a implemented, pending archive); advanced Phase 3 in `research/04-design/02-milestones.md` (P3a ✅, P3b pending).
+- [x] 7.3 `openspec validate add-tabs-and-splits` clean; implementation committed under `feat(app)`, spec/doc adjustments under `docs(openspec)`/`docs`.

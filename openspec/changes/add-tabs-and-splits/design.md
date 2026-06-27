@@ -55,8 +55,10 @@ Both a shell exiting (process-driven) and a user close command (Cmd+W) resolve t
 Add `Pane` (wraps the existing `TerminalSession`), `PaneNode` (the split tree, view-free), and a `SessionRegistry` (all live panes across windows + the focused pane id). The AppKit tree is the source of truth for geometry; `XttyCore` mirrors structure + identity + focus.
 - **Why:** preserves the load-bearing seam (logic talks to the engine via `XttyCore`, never the view) and keeps the L3→L1 escape hatch contained; gives P5/P4/agent-API one model to enumerate; unit-testable without the app.
 
-### D7 — Links: surface SwiftTerm + guard
-`http(s)`/OSC-8 detection, hover highlight, and open-on-click are already wired (`requestOpenLink` defaults to `NSWorkspace.open`). Override `requestOpenLink` to add the guard: open `http(s)` directly; for any other scheme, confirm first; never execute clicked text. (SwiftTerm's implicit matcher is URL-only and private — file:line is out of scope, see Non-Goals.)
+### D7 — Links: surface SwiftTerm; the guard is deferred
+`http(s)`/OSC-8 detection, hover highlight, and open-on-click are already wired (`requestOpenLink` defaults to `NSWorkspace.open`), so **clickable links work via inheritance** — a key reason we chose SwiftTerm. Clicked text is never executed (it goes to the URL opener).
+- **The non-`http(s)` confirmation guard is deferred.** `requestOpenLink` is a **protocol-extension default** on `TerminalViewDelegate` (statically dispatched), so a subclass can't override it; and the `terminalDelegate` can't be replaced with a guarding proxy because it also carries keyboard `send`. A clean guard needs either the own-renderer (P8) or a vetted full delegate proxy — out of scope for this change. This matches Terminal.app/iTerm default behavior (clicks open via the system).
+- **`file:line` matching** is also out of scope (SwiftTerm's implicit matcher is URL-only and private; relative-path resolution needs P4 cwd — see Non-Goals).
 
 ### D8 — Pane-aware harness
 The grid dump follows the **focused pane** (one fixed path, e2e drives the focused pane). The DEBUG state dump gains a multiplexing inventory (pane count, focused pane, tab count, per-pane cols/rows). New XCUITests assert split/close/focus/new-tab/new-window and link resolution; a DEBUG "resolve link at (row,col)" action lets tests check matching without real hit-testing.

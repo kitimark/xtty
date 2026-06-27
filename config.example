@@ -28,3 +28,22 @@
 # Whether the Option key sends Meta (true) or composes characters like é (false).
 # Accepts true/false, yes/no, on/off, 1/0.
 # option-as-meta = true
+
+# --- Keybindings ---
+#
+# Pick a preset, then override individual actions as needed. Default: iterm.
+#   iterm    Cmd+D split right, Cmd+Shift+D split down, Cmd+Opt+arrows focus,
+#            Cmd+T new tab, Cmd+N new window, Cmd+W close pane
+#   ghostty  same, but pane focus on Cmd+[ (prev) / Cmd+] (next)
+# keybind-style = iterm
+#
+# Per-action overrides. A chord is one or more modifiers + exactly one key,
+# joined by "+", e.g. "cmd+shift+d".
+#   modifiers: cmd, ctrl, opt (alt), shift
+#   keys:      letters/digits, a single symbol, the arrows left/right/up/down,
+#              or the names plus, minus, equal, space
+# Actions (key = keybind-<action>): split-right, split-down, focus-left,
+# focus-right, focus-up, focus-down, new-tab, new-window, close, font-increase,
+# font-decrease, font-reset, find. An invalid value keeps the preset's binding.
+# keybind-split-down = cmd+shift+d
+# keybind-focus-left = cmd+opt+left
