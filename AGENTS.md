@@ -108,6 +108,8 @@ explore ──▶ propose ──▶ apply ──▶ archive
 
 **Lifecycle rule:** `openspec/specs/` is the source of truth and only grows via `openspec archive` after a change is implemented. In-flight work lives in `openspec/changes/<name>/`. Commit proposal artifacts as `docs(openspec): …`; commit the implementation under the relevant `feat`/`chore` scope.
 
+**After archiving, finish the merge by hand:** `openspec archive` merges spec deltas mechanically, so check the result before committing — (1) fill in the `## Purpose` of any **newly-created** spec (archive stubs it with `TBD - … Update Purpose after archive.`); (2) make the merged requirement text reflect *what actually shipped*, not what the proposal guessed (specs record what is true — e.g. correct the delta if the implementation diverged); (3) `openspec validate --all --type spec` and skim the diff for collapsed blank lines. Then commit as `docs(openspec): archive …`.
+
 **Current open changes:** none — P0/P1 are implemented and archived (`openspec/specs/` holds `app-shell`, `terminal-session`, `verification-harness`). The architectural seam (all logic talks to the `Terminal` engine via `XttyCore`, never the view) and the staged SwiftTerm L3-start decision are in place — see `research/04-design/01-stack-sketch.md`. Next: scope the **P2 daily-driver** milestone with `/opsx:propose`.
 
 ## Conventions
