@@ -39,6 +39,9 @@ Research library on terminal emulators — competitive landscape, internals, and
 - [Adjacent tools](03-analysis/adjacent-tools.md) — agent multiplexers & terminal-layer tooling that xtty would host (Herdr, …)
 - [xtty requirements](03-analysis/xtty-requirements.md) — the opinionated product target: must-haves, features, non-goals
 
+### 04 — Design
+- [Stack sketch](04-design/01-stack-sketch.md) — primary All-Swift stack + researched alternative stacks and when to switch
+
 ### Reference
 - [Consolidated sources](sources.md)
 
@@ -50,7 +53,8 @@ research/
 ├── 00-overview/               # synthesis + comparison
 ├── 01-terminals/              # one deep-dive per terminal
 ├── 02-internals/              # architecture topics (PTY, parsing, GPU, fonts, ...)
-├── 03-analysis/               # fact-checks + opportunities
+├── 03-analysis/               # fact-checks, opportunities, requirements
+├── 04-design/                 # the build plan: stack sketch + alternatives
 └── sources.md                 # deduped source URLs
 ```
 
