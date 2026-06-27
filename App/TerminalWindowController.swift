@@ -371,33 +371,30 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
     }
 
     #if DEBUG
-    private static let gridDumpPath = "/tmp/xtty-grid-dump.txt"
-    private static let stateDumpPath = "/tmp/xtty-state-dump.json"
-
     /// Write this window's focused-pane grid + multiplexing inventory to the temp
     /// files the XCUITest harness reads. Called by the app delegate's single dump
     /// timer for the **key** window's controller, so multiple tab/window
     /// controllers never fight over the shared path. The custom-drawn view has no
     /// AX text, so this engine grid is the deterministic content source.
     func writeUITestDumps() {
+        writeGridDump()
+        writeStateDump()
+    }
+
+    /// The content channel: the focused pane's engine grid. Split out so the quick
+    /// terminal can write its own grid when its panel is key (the app timer then
+    /// pairs it with a main window's `writeStateDump()`).
+    func writeGridDump() {
+        guard let active = panes[activePaneID] else { return }
+        UITestDump.writeGrid(engine: active.engine)
+    }
+
+    /// The structure channel: this window's multiplexing inventory + config knobs.
+    /// Always sourced from a main window controller, so the quick terminal (which
+    /// uses a private registry and is not a controller) never affects the counts.
+    func writeStateDump() {
         guard let active = panes[activePaneID] else { return }
         let engine = active.engine
-
-        // Grid of the focused pane. `skipNullCellsFollowingWide` + a
-        // `characterProvider` keep wide CJK (NUL spacer 2nd column) and non-BMP/
-        // grapheme emoji (map-indexed codes) intact.
-        var lines: [String] = []
-        lines.reserveCapacity(engine.rows)
-        for row in 0..<engine.rows {
-            lines.append(engine.getLine(row: row)?.translateToString(
-                trimRight: true,
-                skipNullCellsFollowingWide: true,
-                characterProvider: { engine.getCharacter(for: $0) }
-            ) ?? "")
-        }
-        try? lines.joined(separator: "\n").write(
-            toFile: Self.gridDumpPath, atomically: true, encoding: .utf8)
-
         let depth = engine.getTopVisibleRow()
         let leaves = tree.leaves()
         let state: [String: Any] = [
@@ -416,7 +413,7 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             "tabCount": window.tabbedWindows?.count ?? 1,
         ]
         if let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]) {
-            try? data.write(to: URL(fileURLWithPath: Self.stateDumpPath))
+            try? data.write(to: URL(fileURLWithPath: UITestDump.stateDumpPath))
         }
     }
     #endif

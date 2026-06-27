@@ -30,9 +30,32 @@ enum XttyMainMenu {
         main.addItem(viewMenuItem(keybindings: keybindings))
         main.addItem(terminalMenuItem(keybindings: keybindings))
         main.addItem(windowMenuItem())
+        #if DEBUG
+        main.addItem(debugMenuItem())
+        #endif
 
         return main
     }
+
+    #if DEBUG
+    /// A DEBUG-only menu so XCUITest can drive paths a synthesized event can't —
+    /// e.g. the quick terminal, whose real global hotkey is un-synthesizable.
+    /// `target: nil` routes through the responder chain to the app delegate.
+    @MainActor
+    private static func debugMenuItem() -> NSMenuItem {
+        let item = NSMenuItem()
+        let menu = NSMenu(title: "Debug")
+        let toggle = NSMenuItem(
+            title: "Toggle Quick Terminal",
+            action: #selector(AppDelegate.toggleQuickTerminalForTest(_:)),
+            keyEquivalent: ""
+        )
+        toggle.target = nil
+        menu.addItem(toggle)
+        item.submenu = menu
+        return item
+    }
+    #endif
 
     // MARK: Terminal menu (splits + pane focus; tabs/windows added in layer 3)
 

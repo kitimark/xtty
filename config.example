@@ -47,3 +47,15 @@
 # font-decrease, font-reset, find. An invalid value keeps the preset's binding.
 # keybind-split-down = cmd+shift+d
 # keybind-focus-left = cmd+opt+left
+
+# --- Quick terminal (the "quake" drop-down) ---
+#
+# A scratch terminal summoned by a global hotkey from anywhere, even when xtty is
+# not focused. Off by default. When on, you MUST also set a hotkey, or it stays
+# disabled (a reserved combo that the system rejects also disables it, logged).
+# quick-terminal = false
+#
+# The global hotkey. Same chord grammar as keybindings (modifiers + one key),
+# using a physical key by name — e.g. "grave" is the ` key regardless of layout.
+# The `fn` key is not supported. Example: toggle on Ctrl+Option+Backtick.
+# quick-terminal-hotkey = ctrl+opt+grave

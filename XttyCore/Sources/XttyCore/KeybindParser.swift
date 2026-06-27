@@ -14,16 +14,14 @@ import Foundation
 /// anything else returns `nil` (the caller falls back + warns — fail-soft).
 public enum KeybindParser {
     public static func parse(_ string: String) -> KeyChord? {
-        let tokens = string.lowercased()
-            .split(separator: "+", omittingEmptySubsequences: false)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
+        let tokens = ChordTokenizing.tokens(string)
 
         var modifiers: ModifierSet = []
         var key: KeyToken?
 
         for token in tokens {
             if token.isEmpty { return nil }  // e.g. "cmd++" or trailing "+"
-            if let modifier = modifier(for: token) {
+            if let modifier = ChordTokenizing.modifier(for: token) {
                 modifiers.insert(modifier)
             } else if let parsed = keyToken(for: token) {
                 if key != nil { return nil }  // more than one non-modifier key
@@ -35,16 +33,6 @@ public enum KeybindParser {
 
         guard let key, !modifiers.isEmpty else { return nil }
         return KeyChord(key: key, modifiers: modifiers)
-    }
-
-    private static func modifier(for token: String) -> ModifierSet? {
-        switch token {
-        case "cmd", "command": return .command
-        case "ctrl", "control": return .control
-        case "opt", "option", "alt": return .option
-        case "shift": return .shift
-        default: return nil
-        }
     }
 
     private static func keyToken(for token: String) -> KeyToken? {

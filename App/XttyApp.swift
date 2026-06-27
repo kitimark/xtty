@@ -32,12 +32,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
     private var windowControllers: [TerminalWindowController] = []
     /// Resolved once at launch; reused when opening new windows/tabs.
     private var config = XttyConfig.default
+    /// The optional quake drop-down terminal + its global hotkey (the
+    /// `quick-terminal` capability). Both nil when the feature is off.
+    private var quickTerminal: QuickTerminalController?
+    private var quickTerminalHotKey: GlobalHotKey?
     #if DEBUG
     private var dumpTimer: Timer?
     #endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let (config, keybindings) = AppDelegate.loadConfigAndKeybindings()
+        let (config, keybindings, quickTerminalSettings) = AppDelegate.loadConfigAndKeybindings()
         self.config = config
 
         let controller = TerminalWindowController(config: config, registry: registry)
@@ -49,6 +53,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
         NSApp.mainMenu = XttyMainMenu.build(keybindings: keybindings)
         NSApp.activate(ignoringOtherApps: true)
 
+        setUpQuickTerminal(quickTerminalSettings)
+
         #if DEBUG
         // XCUITest harness: one app-level timer mirrors the KEY window's focused-
         // pane grid + inventory to temp files (handles multiple tabs/windows
@@ -59,15 +65,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
         #endif
     }
 
+    /// Create the quake controller and register its global hotkey when enabled
+    /// with a valid chord. Fail-soft: a failed `RegisterEventHotKey` (e.g. a
+    /// reserved combo) is logged; the panel just can't be summoned by the hotkey
+    /// (in DEBUG the harness's toggle action still drives it). Design D11.
+    private func setUpQuickTerminal(_ settings: QuickTerminalSettings) {
+        guard settings.enabled, let spec = settings.hotKey else { return }
+        let controller = QuickTerminalController(config: config)
+        quickTerminal = controller
+        quickTerminalHotKey = GlobalHotKey(spec: spec) { [weak controller] in
+            controller?.toggle()
+        }
+        if quickTerminalHotKey == nil {
+            NSLog("[xtty] quick-terminal: could not register the global hotkey (%@); it may be reserved", spec.display)
+        }
+    }
+
     #if DEBUG
+    /// XCUITest hook: drive the exact `toggle()` the global hotkey calls (a real
+    /// global keypress can't be synthesized by XCUITest). Routed via the responder
+    /// chain to this delegate from the DEBUG "Toggle Quick Terminal" menu item.
+    @objc func toggleQuickTerminalForTest(_ sender: Any?) {
+        quickTerminal?.toggle()
+    }
+
     private func startUITestDump() {
         dumpTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let key = NSApp.keyWindow
-                let controller = self.windowControllers.first { $0.window === key }
-                    ?? self.windowControllers.last
-                controller?.writeUITestDumps()
+                // When the quake panel is key, its pane is the content under test,
+                // but the inventory must still come from a main window so the quake
+                // stays excluded from the pane/tab counts. The `key` lookup never
+                // matches (the panel isn't a controller), so it falls back to a main
+                // window; that list is non-empty whenever a quake is key (an empty
+                // list would have terminated the app), and `?.` guards it anyway.
+                if let quake = self.quickTerminal, quake.isPanelKey {
+                    quake.writeGridDump()
+                    (self.windowControllers.first { $0.window === key }
+                        ?? self.windowControllers.last)?.writeStateDump()
+                } else {
+                    let controller = self.windowControllers.first { $0.window === key }
+                        ?? self.windowControllers.last
+                    controller?.writeUITestDumps()
+                }
             }
         }
     }
@@ -82,6 +123,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
     // Terminate every child shell on quit so no orphan process is leaked.
     func applicationWillTerminate(_ notification: Notification) {
         for controller in windowControllers { controller.terminate() }
+        quickTerminal?.terminate()
+        quickTerminalHotKey = nil  // deinit unregisters the global hotkey
     }
 
     // MARK: WindowCoordinator
@@ -105,7 +148,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
         // Defer releasing the controller (and thus its window/views) to the next
         // runloop, so they outlive the in-progress close display cycle.
         DispatchQueue.main.async { [weak self] in
-            self?.windowControllers.removeAll { $0 === controller }
+            guard let self else { return }
+            self.windowControllers.removeAll { $0 === controller }
+            // The quick terminal is an accessory: once the last main window is
+            // gone, a lingering (possibly visible) panel must not keep the app
+            // alive (design D8). The no-quake path keeps relying on AppKit's
+            // applicationShouldTerminateAfterLastWindowClosed.
+            if self.windowControllers.isEmpty, self.quickTerminal != nil {
+                self.quickTerminal?.terminate()
+                self.quickTerminal = nil
+                self.quickTerminalHotKey = nil
+                NSApp.terminate(nil)
+            }
         }
     }
 
@@ -122,7 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
     /// Load + resolve the user config and keybindings once at launch from a single
     /// file read (P2 read-once policy). Keybindings live in the
     /// `terminal-keybindings` capability; config in `terminal-configuration`.
-    private static func loadConfigAndKeybindings() -> (XttyConfig, Keybindings) {
+    private static func loadConfigAndKeybindings() -> (XttyConfig, Keybindings, QuickTerminalSettings) {
         let environment = ProcessInfo.processInfo.environment
         let path = XttyConfigLoader.configPath(environment: environment, homeDirectory: NSHomeDirectory())
         let text = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
@@ -131,10 +185,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
 
         var config = XttyConfigLoader.resolve(from: pairs, warn: warn)
         let keybindings = KeybindResolver.resolve(from: pairs, warn: warn)
+        // Quick-terminal keys live in their own capability (parsed from the same
+        // single read), so the terminal-configuration schema stays untouched.
+        let quickTerminal = HotKeyResolver.resolve(from: pairs, warn: warn)
         #if DEBUG
         config = applyUITestOverrides(to: config)
         #endif
-        return (config, keybindings)
+        return (config, keybindings, quickTerminal)
     }
 
     #if DEBUG
