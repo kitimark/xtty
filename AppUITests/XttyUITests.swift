@@ -131,4 +131,97 @@ final class XttyUITests: XCTestCase {
             XCTAssertTrue(app.mainWindow.exists)
         }
     }
+
+    // 5. Find bar: Cmd+F opens it, a query locates a match, Escape dismisses and
+    //    restores terminal focus (task 6.1). SwiftTerm's find bar sets no a11y
+    //    identifiers, so we match its NSSearchField + the "Aa" option checkbox
+    //    (a real AXTitle). The highlight itself is render-only (not in the grid
+    //    text) → captured via screenshot; existence + dismissal + focus-restore
+    //    are the deterministic assertions.
+    func testFindBarOpensLocatesAndDismisses() throws {
+        app.activate()
+        let token = "FINDME\(Int.random(in: 1000...9999))"
+        app.typeText("printf '%s\\n' \(token)")
+        app.typeKey(.enter, modifierFlags: [])
+        if GridDumpReader.isAvailable {
+            XCTAssertTrue(GridDumpReader.waitForContains(token, timeout: 5),
+                          "seed token never reached the grid")
+        }
+
+        // Cmd+F → the AppKit Find menu → SwiftTerm's native bar. Fall back to
+        // clicking the menu item if the synthetic key-equivalent doesn't register.
+        app.typeKey("f", modifierFlags: .command)
+        let searchField = app.searchFields.firstMatch
+        if !searchField.waitForExistence(timeout: 3) {
+            app.menuItems["Find…"].click()
+        }
+        let caseToggle = app.checkBoxes["Aa"]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 5),
+                      "find bar search field never appeared after Cmd+F")
+        XCTAssertTrue(caseToggle.waitForExistence(timeout: 2),
+                      "find bar option checkbox (Aa) missing")
+        attachScreenshot("find-bar-open")
+
+        // showFindBar makes the search field first responder, so typing lands in it.
+        app.typeText(token)
+        attachScreenshot("find-query-located")
+
+        // Escape dismisses the bar (it's only hidden, so assert it leaves queries).
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(caseToggle.waitForNonExistence(timeout: 3),
+                      "find bar should be hidden after Escape")
+
+        // Focus restored: a typed marker must reach the terminal grid, not a field.
+        let marker = "AFTERFIND\(Int.random(in: 1000...9999))"
+        app.typeText(marker)
+        attachGridDump("find-focus-restored-grid")
+        if GridDumpReader.isAvailable {
+            XCTAssertTrue(GridDumpReader.waitForContains(marker, timeout: 5),
+                          "focus did not return to the terminal after dismissing find")
+        }
+        app.typeKey("u", modifierFlags: .control) // clear staged marker
+    }
+
+    // 6. Truecolor + emoji + wide chars (task 6.3). Color is render-only (no
+    //    color in the grid text) → screenshot; emoji/CJK text is asserted from
+    //    the (fixed) grid dump. Non-ASCII is driven through the shell — typed as
+    //    ASCII printf bytes for color, pasted as literal UTF-8 for emoji/CJK —
+    //    because XCUITest typeText is unreliable for emoji/CJK.
+    //    Ligatures: SwiftTerm's default CoreText grid path applies no ligature
+    //    substitution, so for P2 this is a no-op (recorded finding, not asserted).
+    func testTruecolorEmojiAndWideChars() throws {
+        app.activate()
+        let tag = Int.random(in: 1000...9999)
+
+        // 24-bit truecolor via an SGR escape (typed ASCII). The text "ORANGE<tag>"
+        // lands in the grid; the orange color is verified in the screenshot.
+        app.typeText("printf '\\033[38;2;255;110;0mORANGE\(tag)\\033[0m\\n'")
+        app.typeKey(.enter, modifierFlags: [])
+        if GridDumpReader.isAvailable {
+            XCTAssertTrue(GridDumpReader.waitForContains("ORANGE\(tag)", timeout: 5),
+                          "truecolor line text missing (color itself is screenshot-verified)")
+        }
+
+        // Emoji + wide CJK as literal UTF-8 via the pasteboard (avoids typeText).
+        let i18n = "echo ROCKET\(tag) 🚀 日本語 ✅"
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(i18n, forType: .string)
+        app.typeKey("v", modifierFlags: .command)
+        app.typeKey(.enter, modifierFlags: [])
+
+        attachScreenshot("i18n-truecolor-emoji-wide")
+        attachGridDump("i18n-grid")
+
+        if GridDumpReader.isAvailable {
+            XCTAssertTrue(GridDumpReader.waitForContains("🚀", timeout: 5),
+                          "non-BMP emoji (🚀) missing from grid — characterProvider not applied?")
+            XCTAssertTrue(GridDumpReader.waitForContains("日本語", timeout: 5),
+                          "wide CJK garbled/missing — skipNullCellsFollowingWide not applied?")
+            XCTAssertTrue(GridDumpReader.waitForContains("✅", timeout: 5),
+                          "BMP emoji (✅) missing from grid")
+        } else {
+            XCTAssertTrue(app.mainWindow.exists)
+        }
+    }
 }
