@@ -41,7 +41,7 @@ Research library on terminal emulators — competitive landscape, internals, and
 
 ### 04 — Design
 - [Stack sketch](04-design/01-stack-sketch.md) — primary All-Swift stack + researched alternative stacks and when to switch
-- [Milestones](04-design/02-milestones.md) — phased build plan (P0 skeleton → P5 daily-driver → P8 session sidebar → polish)
+- [Milestones](04-design/02-milestones.md) — phased build plan, SwiftTerm L3-start (P0 skeleton → P1 integrate → P2 daily-driver → P4 OSC keystone → P5 sidebar → P7 measure → P8 conditional own-renderer)
 
 ### Reference
 - [Consolidated sources](sources.md)

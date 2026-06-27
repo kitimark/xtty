@@ -8,7 +8,8 @@
 |---|---|---|
 | Core language / UI | **All-Swift** (Swift + SwiftUI/AppKit) | Fastest path to a real native macOS app; one language; Ghostty proves a Swift macOS frontend stays lean |
 | Platform | **macOS-first** | Matches positioning; Metal + CoreText are first-class |
-| Renderer | **Metal** (custom view), latency-first | Metal is the macOS dividing line; latency > throughput ([06-performance](../02-internals/06-performance-latency.md)) |
+| Renderer | **Metal** (custom view), latency-first — *but staged* (see below) | Metal is the macOS dividing line; latency > throughput ([06-performance](../02-internals/06-performance-latency.md)) |
+| **SwiftTerm adoption** | **Staged: start Level 3** (wrap SwiftTerm's `TerminalView`), drop to **Level 1** (own Metal renderer) only if measurement demands | Reuse now / control later; the engine seam is reversible (`getTerminal()` is public). See "Decision" under Spike findings. |
 | Footprint | **Lean** (bound scrollback, manage atlas, no retain cycles) | Memory is an *architecture* problem, not a language one — Swift/ARC is lean |
 | Distribution | **Free / open, no account, no paywall** | [xtty-requirements](../03-analysis/xtty-requirements.md) M1–M3 |
 
@@ -122,6 +123,26 @@ The engine is genuinely UI-agnostic and the per-cell read path we need exists an
 - A **non-sandboxed** app spawns `/bin/zsh` and reads the user's files with normal Unix privileges — **no special entitlement needed.**
 - Milestone mapping: **P0** = set Sandbox OFF + "Sign to Run Locally"; **P1** = spawn shell works as-is; **P10** = add Hardened Runtime + Developer ID + notarize.
 
+### Decision (2026-06-27) — SwiftTerm adoption: **staged, start at Level 3**
+
+The spike found the three "adoption levels" are **one engine with different render skins**, and the engine is always reachable (`TerminalView.getTerminal() -> Terminal` is public). So the choice is reversible, and the reuse-vs-control tension can be resolved by *measurement* rather than guessing.
+
+```
+   Level 1  engine + OUR Metal renderer + own input/selection   (max control, most work)
+   Level 2  engine + SwiftTerm's Metal renderer                 (awkward: experimental +
+            └─ NOT a distinct target — coupled to MacTerminalView;  coupled → folds into L1/L3)
+   Level 3  engine + SwiftTerm's full TerminalView (AppKit)      (fastest to daily-driver;
+            selection/input/scrollback/search/graphics = done)      least render control)
+```
+
+**Decision:** **Start at Level 3.** Wrap SwiftTerm's `TerminalView` / `LocalProcessTerminalView` in an `NSViewRepresentable`; build xtty's differentiators (tabs/splits, OSC 133 blocks, session sidebar, file/diff) around it. **Drop to Level 1** (own Metal renderer, keeping the same engine) **only if** measured latency/memory misses M1/M4 — first trying the experimental `useMetalRenderer` flag and frame-pacing tuning.
+
+**Why:** satisfies both AGENTS.md conventions *in sequence* — "reuse battle-tested components" now, "latency/low-memory control" later if data demands. Matches "thin vertical slice first" and "measure before changing."
+
+**Load-bearing rule (P0):** all differentiator logic talks to the **`Terminal` engine**, never to `TerminalView` internals — so the render layer stays swappable (the `XttyCore` seam). L3→L1 then becomes a contained render-layer refactor, not a rewrite.
+
+**Bonus capabilities already free at any level:** OSC 7 cwd (`hostCurrentDirectoryUpdated`), OSC 9;4 **progress** (`progressReport` + `Terminal.ProgressReport` — direct fuel for the sidebar), Kitty/Sixel graphics, hyperlinks, clipboard, search. OSC 133 is added in one call: `terminal.registerOscHandler(code: 133, …)`.
+
 ## Risks & triggers to revisit this sketch
 
 - **SwiftTerm limitations** (perf, data model, maintenance) → consider Alt C (libghostty-vt) or Alt A.
@@ -130,7 +151,7 @@ The engine is genuinely UI-agnostic and the per-cell read path we need exists an
 - **Memory creeping up** → check scrollback cap, atlas eviction, retain cycles *before* blaming the stack.
 
 ## Open questions (for later)
-- **SwiftTerm adoption level** (NEW, from spike): engine-only vs engine+Metal-renderer vs full `TerminalView`. Reshapes P2–P6 — decide before/at the P0 proposal. Note SwiftTerm already ships graphics protocols (Kitty/Sixel) and search, so those milestones may shrink.
+- ~~SwiftTerm adoption level~~ → **RESOLVED**: staged, start Level 3 (see Decision above). Milestones re-mapped in [02-milestones](02-milestones.md).
 - Scrollback default + cap; reflow strategy on resize ([07-multiplexing](../02-internals/07-multiplexing-sessions.md)). (SwiftTerm handles scrollback/reflow; libghostty-vt also does.)
 - Graphics protocol support (kitty/iTerm2/Sixel) — likely **free via SwiftTerm** ([05-graphics-protocols](../02-internals/05-graphics-protocols.md)).
 - Splits/tabs model and whether to offer a Quick-Terminal dropdown (N3).
