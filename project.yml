@@ -27,6 +27,12 @@ targets:
     platform: macOS
     sources:
       - App
+    # Make `xcodebuild test -scheme xtty` run the UI tests (the auto-generated
+    # scheme's Test action). See the verification-harness change.
+    scheme:
+      testTargets:
+        - xttyUITests
+      gatherCoverageData: false
     dependencies:
       - package: XttyCore
         product: XttyCore
@@ -38,7 +44,8 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: xtty
-        # Pure SwiftUI app (no storyboard / no AppDelegate adaptor needed).
+        # SwiftUI App lifecycle; the terminal NSWindow is created by an AppKit
+        # AppDelegate (SwiftTerm renders black under SwiftUI hosting on macOS 26).
         INFOPLIST_KEY_NSPrincipalClass: NSApplication
         SWIFT_VERSION: "6.0"
         # --- Signing posture (P0) ---
@@ -50,4 +57,28 @@ targets:
         CODE_SIGN_IDENTITY: "-"
         DEVELOPMENT_TEAM: ""
         # Hardened Runtime / notarization deferred to a later milestone.
+        ENABLE_HARDENED_RUNTIME: NO
+
+  # --- macOS UI test target -------------------------------------------------
+  # Drives the real xtty app via XCUIApplication (change: add-verification-harness).
+  # type bundle.ui-testing applies BUNDLE_LOADER=$(TEST_HOST) + runpaths, and the
+  # `target: xtty` dependency makes XcodeGen auto-set TEST_TARGET_NAME=xtty — do
+  # NOT set it by hand. Mirrors the host's ad-hoc/manual signing (one identity
+  # covers both the .xctest bundle and the generated xttyUITests-Runner.app).
+  xttyUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - AppUITests
+    dependencies:
+      - target: xtty
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xtty.appUITests
+        PRODUCT_NAME: xttyUITests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "6.0"
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
         ENABLE_HARDENED_RUNTIME: NO
