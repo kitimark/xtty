@@ -37,6 +37,7 @@ Research library on terminal emulators — competitive landscape, internals, and
 - [Opportunities & design implications](03-analysis/opportunities.md) — gaps and what they mean for `xtty`
 - [Agents & xtty](03-analysis/agents-and-xtty.md) — the integrated-agents vs agent-host fork, and OSC 133 as the foundation
 - [Adjacent tools](03-analysis/adjacent-tools.md) — agent multiplexers & terminal-layer tooling that xtty would host (Herdr, …)
+- [xtty requirements](03-analysis/xtty-requirements.md) — the opinionated product target: must-haves, features, non-goals
 
 ### Reference
 - [Consolidated sources](sources.md)
