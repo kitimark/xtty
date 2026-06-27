@@ -17,5 +17,5 @@ The project SHALL declare SwiftTerm as a dependency that resolves and builds, an
 
 #### Scenario: SwiftTerm view is hosted in the window
 - **WHEN** the app launches
-- **THEN** SwiftTerm's terminal view is presented in the window via a SwiftUI host
+- **THEN** SwiftTerm's terminal view is presented in the window via an AppKit window (`NSWindow`)
 - **AND** xtty logic accesses the underlying `Terminal` engine only through `XttyCore` (the engine-facing seam)

@@ -3,16 +3,14 @@
 ## Purpose
 
 Defines the foundational native macOS application shell for xtty: how the app launches and presents its window, its signing/sandboxing posture, the engine-facing core seam (`XttyCore`), the availability of the SwiftTerm dependency, and reproducible Xcode project generation. This establishes the P0 skeleton that later milestones build upon.
-
 ## Requirements
-
 ### Requirement: Native application window
-The application SHALL launch as a native macOS app and present a single window on startup.
+The application SHALL launch as a native macOS app and present a single window on startup that hosts a live terminal session.
 
-#### Scenario: App launches to an empty window
+#### Scenario: App launches showing a terminal
 - **WHEN** the user launches the built app
 - **THEN** a native macOS window appears
-- **AND** no terminal session, rendering, or shell process is started (out of scope for this milestone)
+- **AND** the window hosts a terminal session running the user's shell (see the `terminal-session` capability)
 
 ### Requirement: Non-sandboxed signing posture
 The application SHALL be configured with App Sandbox disabled so that later milestones can spawn an arbitrary shell and access the user's filesystem.
@@ -38,12 +36,16 @@ Core logic SHALL reside in a dedicated `XttyCore` module, decoupled from any ter
 - **THEN** at least one `XttyCore` test executes without launching the app
 
 ### Requirement: SwiftTerm dependency available
-The project SHALL declare SwiftTerm as a dependency that resolves and builds, without yet wiring it into the user interface.
+The project SHALL declare SwiftTerm as a dependency that resolves and builds, and SHALL host SwiftTerm's terminal view in the application window.
 
 #### Scenario: Dependency resolves
 - **WHEN** the project is generated and built
 - **THEN** the SwiftTerm package resolves and compiles
-- **AND** no SwiftTerm view is presented in the window (deferred to the next milestone)
+
+#### Scenario: SwiftTerm view is hosted in the window
+- **WHEN** the app launches
+- **THEN** SwiftTerm's terminal view is presented in the window via an AppKit window (`NSWindow`)
+- **AND** xtty logic accesses the underlying `Terminal` engine only through `XttyCore` (the engine-facing seam)
 
 ### Requirement: Reproducible project generation
 The Xcode project SHALL be produced from a committed XcodeGen specification, and the generated `.xcodeproj` SHALL NOT be tracked in version control.
@@ -55,3 +57,4 @@ The Xcode project SHALL be produced from a committed XcodeGen specification, and
 #### Scenario: Generated project is ignored by git
 - **WHEN** the repository status is checked after generating the project
 - **THEN** `xtty.xcodeproj` is not listed as a tracked or untracked file (it is gitignored)
+

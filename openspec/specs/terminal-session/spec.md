@@ -1,5 +1,8 @@
-## ADDED Requirements
+# terminal-session Specification
 
+## Purpose
+TBD - created by archiving change integrate-swiftterm. Update Purpose after archive.
+## Requirements
 ### Requirement: Live terminal running the user's login shell
 The application SHALL present, on launch, a single interactive terminal that runs the user's login shell over a PTY, so that the user's existing dotfiles and PATH are in effect.
 
@@ -55,8 +58,8 @@ The terminal SHALL support the core interactions of a usable terminal: keyboard 
 The application SHALL manage the shell process lifecycle correctly: start it exactly once, keep keyboard focus on the terminal, and terminate the child process when its window closes.
 
 #### Scenario: Shell is spawned exactly once
-- **WHEN** SwiftUI re-renders the view after it is created (state changes, redraws)
-- **THEN** no additional shell process is spawned (the shell is started only at view creation)
+- **WHEN** the UI updates or the window redraws after the terminal is created
+- **THEN** no additional shell process is spawned (the shell is started only once, at window/terminal creation)
 
 #### Scenario: Terminal has keyboard focus
 - **WHEN** the window becomes key
@@ -85,3 +88,4 @@ xtty logic SHALL access the terminal's `Terminal` engine only through `XttyCore`
 #### Scenario: Core observes, view drives
 - **WHEN** terminal output is processed
 - **THEN** byte feeding/driving of the engine is performed by the SwiftTerm view + PTY, not by `XttyCore`
+
