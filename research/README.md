@@ -37,6 +37,7 @@ Research library on terminal emulators — competitive landscape, internals, and
 - [Opportunities & design implications](03-analysis/opportunities.md) — gaps and what they mean for `xtty`
 - [Agents & xtty](03-analysis/agents-and-xtty.md) — the integrated-agents vs agent-host fork, and OSC 133 as the foundation
 - [Adjacent tools](03-analysis/adjacent-tools.md) — agent multiplexers & terminal-layer tooling that xtty would host (Herdr, …)
+- [Native-app testing tooling](03-analysis/native-app-testing-tooling.md) — how an agent drives/inspects a native macOS app (Peekaboo + XCUITest), and the AX-content ceiling that forces engine-grid assertions
 - [xtty requirements](03-analysis/xtty-requirements.md) — the opinionated product target: must-haves, features, non-goals
 
 ### 04 — Design
