@@ -1,7 +1,9 @@
 # verification-harness Specification
 
 ## Purpose
-TBD - created by archiving change add-verification-harness. Update Purpose after archive.
+
+Defines xtty's verification harness: a committed macOS XCUITest target that launches the real app and drives it via `XCUIApplication`, a deterministic content-assertion channel that reads the headless engine grid (a DEBUG-only, `-UITestGridDump`-gated hook) — necessary because the custom-drawn terminal view exposes no per-cell text to accessibility — and documented local manual tooling (Peekaboo) for exploratory/agent-driven inspection. It establishes how the P1 interactive behaviors are checked repeatably without relying on the accessibility tree.
+
 ## Requirements
 ### Requirement: Committed end-to-end UI test layer
 

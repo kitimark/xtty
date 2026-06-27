@@ -1,7 +1,9 @@
 # terminal-session Specification
 
 ## Purpose
-TBD - created by archiving change integrate-swiftterm. Update Purpose after archive.
+
+Defines xtty's live terminal session: launching the user's login shell over a PTY (so existing dotfiles and PATH are in effect), view-free shell resolution and launch configuration in `XttyCore`, the core interactive behaviors (keyboard input, resize/reflow, bracketed-paste, scrollback, selection — without display corruption), the shell process lifecycle (spawned exactly once, keyboard focus, no orphaned processes), the shell-exit policy, and the rule that all engine access flows through the `XttyCore` seam (observe-only) while the SwiftTerm view + PTY drive the engine. This is the P1 milestone that turns the P0 skeleton into a real, interactive terminal.
+
 ## Requirements
 ### Requirement: Live terminal running the user's login shell
 The application SHALL present, on launch, a single interactive terminal that runs the user's login shell over a PTY, so that the user's existing dotfiles and PATH are in effect.

@@ -3,7 +3,9 @@
 ## Purpose
 
 Defines the foundational native macOS application shell for xtty: how the app launches and presents its window, its signing/sandboxing posture, the engine-facing core seam (`XttyCore`), the availability of the SwiftTerm dependency, and reproducible Xcode project generation. This establishes the P0 skeleton that later milestones build upon.
+
 ## Requirements
+
 ### Requirement: Native application window
 The application SHALL launch as a native macOS app and present a single window on startup that hosts a live terminal session.
 
