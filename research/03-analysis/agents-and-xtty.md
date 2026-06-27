@@ -65,5 +65,6 @@ Don't choose "AI terminal vs. fast terminal." Build a fast native terminal with 
 ## Related
 
 - [Warp deep-dive](../01-terminals/warp.md) · [Ghostty deep-dive](../01-terminals/ghostty.md)
+- [Adjacent tools](adjacent-tools.md) — agent multiplexers (e.g. Herdr) that prove the agent-host model as a layer
 - [Modern innovations: blocks, AI, OSC integration](../02-internals/08-modern-innovations.md)
 - [Opportunities & design implications](opportunities.md)
