@@ -32,11 +32,11 @@ Requirement tags reference [xtty-requirements](../03-analysis/xtty-requirements.
 **Note:** this single phase replaces the old "hello-PTY → VT engine → input/resize" sequence — all free via SwiftTerm.
 **Shipped as:** the view is hosted in an **AppKit `NSWindow`**, *not* the planned SwiftUI `NSViewRepresentable` — SwiftTerm renders black under SwiftUI hosting on macOS 26 (both CoreGraphics and Metal paths). The window opens on the built-in display. See [`integrate-swiftterm/design.md`](../../openspec/changes/integrate-swiftterm/design.md). Interactive behaviors verified hands-on + via the XCUITest harness ([`add-verification-harness`](../../openspec/changes/add-verification-harness/design.md), [native-app testing tooling](../03-analysis/native-app-testing-tooling.md)).
 
-## Phase 2 — Daily-driver baseline  ·  M5 *(collapses old P4–P5)*
+## Phase 2 — Daily-driver baseline  ·  M5 *(collapses old P4–P5)*  ✅ **done** (`add-daily-driver-baseline`)
 **Goal:** good enough to use every day — mostly *configure & verify*, not build.
-- Font/size/theme config; confirm 24-bit truecolor, ligatures, wide/emoji handling (SwiftTerm-provided).
-- Set a sane **scrollback cap**; confirm search/find bar.
-- Evaluate (don't commit to) SwiftTerm's experimental `useMetalRenderer` flag; note latency/feel.
+- ✅ Font/size/theme config via `~/.config/xtty/config` (view-free loader in `XttyCore`); live Cmd +/−/0 font sizing. Confirmed 24-bit truecolor + wide/emoji (CJK 日本語, 🚀✅) via the harness; **ligatures are a no-op** in SwiftTerm's grid path (see [Metal spike note](../03-analysis/swiftterm-metal-renderer-spike.md)).
+- ✅ Bounded **scrollback cap** (default 10 000 / ceiling 100 000), asserted saturating under a flood; Cmd+F find bar wired + verified.
+- ✅ Evaluated SwiftTerm's experimental `setUseMetal` — works in the AppKit host; adoption deferred to the P7 latency gate ([spike note](../03-analysis/swiftterm-metal-renderer-spike.md)).
 
 **Done when:** you switch your own daily terminal to xtty and it doesn't annoy you.
 **Refs:** [04-fonts](../02-internals/04-fonts-text-shaping.md), [05-graphics-protocols](../02-internals/05-graphics-protocols.md) (Kitty/Sixel already supported)
