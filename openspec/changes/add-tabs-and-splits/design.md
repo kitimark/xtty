@@ -16,6 +16,7 @@ This change is the **spine** of P3 (layers 1–4: decompose → splits → nativ
 - Native macOS tabs (window tabbing) + multiple windows + custom splits, feeling native and stable.
 - A unified close/exit-escalation lifecycle (pane → tab/window → quit) replacing today's "shell exit closes the window."
 - Route pane-scoped commands through the responder chain so "the active pane" needs no central tracking for dispatch.
+- Configurable keybindings with `iterm`/`ghostty` presets + per-action overrides, so iTerm/Ghostty users migrate easily and can still rebind individual actions.
 - Clickable `http(s)`/OSC-8 links with a confirmation guard for other schemes.
 - A view-free multiplexing model in `XttyCore` that mirrors structure + identity + focus (the thing P5's sidebar and a future agent API will read), plus a pane-aware harness.
 
@@ -60,6 +61,14 @@ Add `Pane` (wraps the existing `TerminalSession`), `PaneNode` (the split tree, v
 ### D8 — Pane-aware harness
 The grid dump follows the **focused pane** (one fixed path, e2e drives the focused pane). The DEBUG state dump gains a multiplexing inventory (pane count, focused pane, tab count, per-pane cols/rows). New XCUITests assert split/close/focus/new-tab/new-window and link resolution; a DEBUG "resolve link at (row,col)" action lets tests check matching without real hit-testing.
 
+### D9 — Configurable keybindings: a neutral chord model, presets, reused by P3b
+Keybindings are config-driven, not hardcoded: a `keybind-style` preset (`iterm` default, `ghostty`) sets the base chord per action, and `keybind-<action>` keys override individual actions (preset ⊕ overrides, the same shape as profiles). The model is **view-free in `XttyCore`** — a `KeyAction` enum, a toolkit-independent `KeyChord` (key token + modifier set), a pure `KeybindParser`, the two presets, and the resolution — all unit-testable.
+- **App adapters translate the neutral chord per toolkit:** `KeyChord → NSMenuItem` (`keyEquivalent: String` + `NSEvent.ModifierFlags`) now; `KeyChord → Carbon` (`kVK` keycode + carbon modifier mask) in **P3b's Quick-Terminal global hotkey**. **One parser, two adapters** — building it here front-loads the exact chord primitive the P3b research note specced for `HotKeyParser`.
+- **The keys live in the new `terminal-keybindings` capability**, NOT in `terminal-configuration` — so P2's config spec is untouched. Still read **once at launch** (P2 policy); the menu is built once from the resolved `Keybindings`.
+- **Fail-soft** (config posture): unknown `keybind-style` → `iterm` + warn; an unparseable `keybind-<action>` → keep the preset's chord + warn; a valid chord requires ≥1 modifier + exactly 1 key.
+- **Arrow-key wrinkle:** `NSMenuItem` key equivalents for arrows need AppKit's special form (`NSUpArrowFunctionKey` etc. + `.function`/`.numericPad`); the `KeyChord → NSMenuItem` adapter special-cases arrows. Letters/digits map directly.
+- **Why:** delivers the iTerm/Ghostty migration story + per-action customization, and the chord parser is reused by P3b. **Alternative considered:** hardcode `iterm` defaults now, add configurability later — rejected because it blocks Ghostty-user migration and would re-touch the menu wiring twice.
+
 ## Risks / Trade-offs
 
 - **Native-tab termination accounting** (a tab == a window) → keep `applicationShouldTerminateAfterLastWindowClosed = true`; verify last-tab-closes and last-window-quits in the harness. (Becomes more delicate once `add-shell-ux-extras` adds a quick-term panel, which is why that's deferred.)
@@ -80,6 +89,6 @@ Rollback is per-step (each is an isolated commit); no persisted state or data mi
 
 ## Open Questions
 
-- **Default keybindings** (configurable later): proposed Cmd+D = split vertical (side-by-side), Cmd+Shift+D = split horizontal (stacked), Cmd+Opt+arrows = directional focus, Cmd+T/Cmd+N = new tab/window, Cmd+W = escalating close. Confirm at apply time.
+- **Default keybindings** — *resolved:* now configurable via the `terminal-keybindings` capability (D9). Default preset `iterm` (Cmd+D split-right, Cmd+Shift+D split-down, Cmd+Opt+arrows focus, Cmd+T/Cmd+N tab/window, Cmd+W escalating close); `ghostty` preset swaps focus-nav to Cmd+[ / Cmd+]; any action rebindable via `keybind-<action>`.
 - **`confirm-close` config key** name/default — proposed default **on**; the key formally lands with the profiles/config work in `add-shell-ux-extras`, so in this change it can be a built-in default with a constant.
 - **n-ary vs strictly-binary split nodes** — design assumes n-ary; revisit only if `NSSplitView` arrangement proves awkward.
