@@ -3,7 +3,6 @@
 ## Purpose
 
 Defines xtty's live terminal session: launching the user's login shell over a PTY (so existing dotfiles and PATH are in effect), view-free shell resolution and launch configuration in `XttyCore`, the core interactive behaviors (keyboard input, resize/reflow, bracketed-paste, scrollback, selection — without display corruption), the shell process lifecycle (spawned exactly once, keyboard focus, no orphaned processes), the shell-exit policy, and the rule that all engine access flows through the `XttyCore` seam (observe-only) while the SwiftTerm view + PTY drive the engine. This is the P1 milestone that turns the P0 skeleton into a real, interactive terminal.
-
 ## Requirements
 ### Requirement: Live terminal running the user's login shell
 The application SHALL present, on launch, a single interactive terminal that runs the user's login shell over a PTY, so that the user's existing dotfiles and PATH are in effect.
@@ -57,27 +56,32 @@ The terminal SHALL support the core interactions of a usable terminal: keyboard 
 - **AND** the user can select text without corrupting the display
 
 ### Requirement: Terminal process lifecycle
-The application SHALL manage the shell process lifecycle correctly: start it exactly once, keep keyboard focus on the terminal, and terminate the child process when its window closes.
+The application SHALL manage each session's shell process lifecycle correctly: start each session's shell exactly once, keep keyboard focus on the focused pane, and terminate a session's child process when its pane (or the window containing it) closes — leaving no orphaned shells.
 
-#### Scenario: Shell is spawned exactly once
-- **WHEN** the UI updates or the window redraws after the terminal is created
-- **THEN** no additional shell process is spawned (the shell is started only once, at window/terminal creation)
+#### Scenario: Each session's shell is spawned exactly once
+- **WHEN** the UI updates or a window redraws after a pane is created
+- **THEN** no additional shell process is spawned for that pane (its shell is started only once, at pane creation)
 
-#### Scenario: Terminal has keyboard focus
-- **WHEN** the window becomes key
-- **THEN** the terminal is the first responder and receives keystrokes without an extra click
+#### Scenario: Focused pane has keyboard focus
+- **WHEN** a window becomes key
+- **THEN** the focused pane's terminal is the first responder and receives keystrokes without an extra click
 
 #### Scenario: No orphaned process on close
-- **WHEN** the window or app is closed
-- **THEN** the shell child process is terminated (no orphaned shell remains)
+- **WHEN** a pane is closed, or the window/app is closed
+- **THEN** the affected session's shell child process is terminated (no orphaned shell remains)
 
 ### Requirement: Shell exit policy
-When the shell process exits, the application SHALL close the terminal's window and record the process exit code on the session.
+When a session's shell process exits, the application SHALL close that session's pane and record the process exit code on the session. Closing the last pane in a tab SHALL close that tab/window, and closing the last window SHALL terminate the app.
 
-#### Scenario: Window closes when the shell exits
-- **WHEN** the running shell exits (e.g. the user types `exit`)
-- **THEN** the terminal's window closes
+#### Scenario: Pane closes when its shell exits
+- **WHEN** a pane's shell exits (e.g. the user types `exit`) while other panes remain in the tab
+- **THEN** that pane closes and the remaining panes reflow to fill the space
 - **AND** the session's recorded exit status reflects the shell's exit code
+
+#### Scenario: Closing the last pane escalates to the window
+- **WHEN** the shell in the only remaining pane of a window exits
+- **THEN** the window closes
+- **AND** if it was the last window, the app terminates
 
 ### Requirement: Engine accessed only through the core seam
 xtty logic SHALL access the terminal's `Terminal` engine only through `XttyCore` (observe-only), while the SwiftTerm view and PTY drive the engine; `XttyCore` SHALL NOT import a concrete terminal view.
