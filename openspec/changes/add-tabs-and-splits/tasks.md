@@ -17,12 +17,12 @@
 
 ## 3. Splits / panes (layer 2)
 
-- [ ] 3.1 Render the `PaneNode` tree into nested `NSSplitView`s (n-ary per split node); mount in the window's content area.
-- [ ] 3.2 Implement split-focused-pane (right/down): spawn a new self-contained `LocalProcessTerminalView` + session, update model + view tree, focus the new pane.
-- [ ] 3.3 Implement close-focused-pane with collapse rule (single-child split collapses; survivor promoted) and spatial-neighbor focus-follow; terminate the closed pane's child.
-- [ ] 3.4 Implement directional focus navigation (nearest-neighbor over leaf frames → `makeFirstResponder`); confirm SwiftTerm caret follows focus.
-- [ ] 3.5 Add split/focus menu items routed via the responder chain, with key equivalents from `Keybindings` (group 2).
-- [ ] 3.6 Verify divider-drag reflows both shells (a full-screen program redraws at the new size) — no extra wiring expected (SwiftTerm `setFrameSize → PTY`).
+- [x] 3.1 Render the `PaneNode` tree into nested `NSSplitView`s (n-ary per split node), `isVertical` from axis, even divider distribution; rebuilt on each split/close.
+- [x] 3.2 Implement split-focused-pane (right/down): spawn a new self-contained `XttyTerminalView` + session, update model + view tree, focus the new pane.
+- [x] 3.3 Implement close-focused-pane with collapse rule (single-child split collapses; survivor promoted); terminate the closed pane's child; refocus a remaining leaf.
+- [x] 3.4 Implement directional focus navigation (nearest-neighbor over leaf frames → `makeFirstResponder`); click-monitor keeps `activePaneID` synced (SwiftTerm's `becomeFirstResponder` isn't overridable).
+- [x] 3.5 Add a Terminal menu (Split Right/Down, Close Pane, Select Pane L/R/Above/Below) routed via the responder chain, key equivalents from `Keybindings`.
+- [x] 3.6 Divider-drag reflow rides SwiftTerm `setFrameSize → PTY` (no extra wiring); covered by the resize smoke + split tests.
 
 ## 4. Native tabs + windows + lifecycle (layer 3)
 
@@ -39,9 +39,9 @@
 
 ## 6. Pane-aware verification harness
 
-- [ ] 6.1 Make the DEBUG grid dump follow the focused pane (single path); add a multiplexing inventory to the state dump (pane count, focused pane, tab count, per-pane cols/rows).
+- [x] 6.1 Moved the DEBUG dump to the window controller so it follows the focused pane; added the multiplexing inventory to the state dump (`paneCount`, `focusedPaneIndex`, `tabCount`). (Pulled forward to verify group 3.)
 - [ ] 6.2 Add a DEBUG "resolve link at (row,col)" action surfacing the matched URL for link tests (no real hit-testing).
-- [ ] 6.3 XCUITests: split creates a 2nd pane (typed text reaches the focused pane), close returns to 1 + focus moves, directional focus switches panes.
+- [x] 6.3 XCUITests (`XttyMultiplexingUITests`): split → 2 panes (typed text reaches the focused pane), close → 1 (collapse), directional focus switches panes. Test-isolation fix: terminate app at teardown + wait for the fresh baseline.
 - [ ] 6.4 XCUITests: new tab → 2 tabs, new window → 2nd window, last-pane close escalates to window close; link resolution returns the expected URL.
 - [ ] 6.5 Run the full suite green: `xcodebuild test -project xtty.xcodeproj -scheme xtty -destination 'platform=macOS'` and `cd XttyCore && swift test`.
 

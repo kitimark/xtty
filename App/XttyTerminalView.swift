@@ -2,29 +2,44 @@ import AppKit
 import SwiftTerm
 import XttyCore
 
+/// Direction for pane focus navigation.
+enum FocusDirection { case left, right, up, down }
+
+/// Pane-scoped commands a focused `XttyTerminalView` forwards to its owner. The
+/// view is the responder-chain target (design D3); it doesn't know the tree, so
+/// it hands intent to the `PaneController`, which relays to the window controller.
+@MainActor
+protocol XttyTerminalViewCommands: AnyObject {
+    func splitPane(axis: SplitAxis)
+    func closePane()
+    func moveFocus(_ direction: FocusDirection)
+    func newTab()
+    func newWindow()
+}
+
 /// xtty's terminal view: SwiftTerm's `LocalProcessTerminalView` plus the
 /// pane-scoped command handlers that ride the **responder chain**.
 ///
-/// Pane-scoped menu commands (font size now; split/close/focus arrive in later
-/// layers) are sent with `target: nil`, so AppKit routes them to the key
-/// window's first responder — which is the focused pane's view. Handling them
+/// Pane-scoped menu commands are sent with `target: nil`, so AppKit routes them
+/// to the key window's first responder — the focused pane's view. Handling them
 /// here means "the active pane" is simply the first responder; no controller
-/// tracks it for dispatch (design D3).
+/// tracks it for dispatch (design D3). Each handler forwards to `commands`.
 ///
-/// **Why the `validateUserInterfaceItem` override:** SwiftTerm's implementation
-/// returns `false` for any action it doesn't recognize (and logs it), which would
-/// leave our custom menu items disabled. We whitelist our selectors and defer the
-/// rest to `super`.
+/// **Why the `validateUserInterfaceItem` override:** SwiftTerm returns `false`
+/// for any action it doesn't recognize (and logs it), which would disable our
+/// custom items. We whitelist our selectors and defer the rest to `super`.
 @MainActor
 final class XttyTerminalView: LocalProcessTerminalView {
     /// The configured base font size; `resetFontSize` (Cmd 0) returns here.
-    /// Set by the owning `PaneController` from the resolved config at creation.
     var configuredFontSize: CGFloat = CGFloat(XttyConfig.default.fontSize)
+
+    /// The owner that fulfills pane-scoped commands (the `PaneController`).
+    weak var commands: XttyTerminalViewCommands?
 
     /// Smallest/largest live font sizes, to keep the grid legible and bounded.
     private static let fontSizeRange: ClosedRange<CGFloat> = 6...72
 
-    // MARK: Font size (ephemeral; not persisted to config — P2 policy)
+    // MARK: Font size (ephemeral; responder-chain routed)
 
     @objc func increaseFontSize(_ sender: Any?) { adjustFontSize(by: +1) }
     @objc func decreaseFontSize(_ sender: Any?) { adjustFontSize(by: -1) }
@@ -45,13 +60,34 @@ final class XttyTerminalView: LocalProcessTerminalView {
         font = resized
     }
 
+    // MARK: Pane commands (responder-chain routed → commands owner)
+
+    @objc func splitPaneRight(_ sender: Any?) { commands?.splitPane(axis: .row) }
+    @objc func splitPaneDown(_ sender: Any?) { commands?.splitPane(axis: .column) }
+    @objc func closePane(_ sender: Any?) { commands?.closePane() }
+    @objc func focusPaneLeft(_ sender: Any?) { commands?.moveFocus(.left) }
+    @objc func focusPaneRight(_ sender: Any?) { commands?.moveFocus(.right) }
+    @objc func focusPaneUp(_ sender: Any?) { commands?.moveFocus(.up) }
+    @objc func focusPaneDown(_ sender: Any?) { commands?.moveFocus(.down) }
+    @objc func newTerminalTab(_ sender: Any?) { commands?.newTab() }
+    @objc func newTerminalWindow(_ sender: Any?) { commands?.newWindow() }
+
     // MARK: Menu validation
 
     override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
         switch item.action {
         case #selector(increaseFontSize(_:)),
              #selector(decreaseFontSize(_:)),
-             #selector(resetFontSize(_:)):
+             #selector(resetFontSize(_:)),
+             #selector(splitPaneRight(_:)),
+             #selector(splitPaneDown(_:)),
+             #selector(closePane(_:)),
+             #selector(focusPaneLeft(_:)),
+             #selector(focusPaneRight(_:)),
+             #selector(focusPaneUp(_:)),
+             #selector(focusPaneDown(_:)),
+             #selector(newTerminalTab(_:)),
+             #selector(newTerminalWindow(_:)):
             return true
         default:
             return super.validateUserInterfaceItem(item)

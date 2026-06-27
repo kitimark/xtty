@@ -28,9 +28,38 @@ enum XttyMainMenu {
         main.addItem(appMenuItem())
         main.addItem(editMenuItem(keybindings: keybindings))
         main.addItem(viewMenuItem(keybindings: keybindings))
+        main.addItem(terminalMenuItem(keybindings: keybindings))
         main.addItem(windowMenuItem())
 
         return main
+    }
+
+    // MARK: Terminal menu (splits + pane focus; tabs/windows added in layer 3)
+
+    @MainActor
+    private static func terminalMenuItem(keybindings: Keybindings) -> NSMenuItem {
+        let item = NSMenuItem()
+        let menu = NSMenu(title: "Terminal")
+
+        func make(_ title: String, _ action: Selector, _ binding: KeyAction) -> NSMenuItem {
+            let entry = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            KeybindAdapter.apply(keybindings.chord(for: binding), to: entry)
+            entry.target = nil  // responder chain → focused pane's XttyTerminalView
+            return entry
+        }
+
+        menu.addItem(make("Split Right", #selector(XttyTerminalView.splitPaneRight(_:)), .splitRight))
+        menu.addItem(make("Split Down", #selector(XttyTerminalView.splitPaneDown(_:)), .splitDown))
+        menu.addItem(.separator())
+        menu.addItem(make("Close Pane", #selector(XttyTerminalView.closePane(_:)), .close))
+        menu.addItem(.separator())
+        menu.addItem(make("Select Pane on Left", #selector(XttyTerminalView.focusPaneLeft(_:)), .focusLeft))
+        menu.addItem(make("Select Pane on Right", #selector(XttyTerminalView.focusPaneRight(_:)), .focusRight))
+        menu.addItem(make("Select Pane Above", #selector(XttyTerminalView.focusPaneUp(_:)), .focusUp))
+        menu.addItem(make("Select Pane Below", #selector(XttyTerminalView.focusPaneDown(_:)), .focusDown))
+
+        item.submenu = menu
+        return item
     }
 
     // MARK: App menu

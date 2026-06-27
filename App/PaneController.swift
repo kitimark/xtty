@@ -10,6 +10,15 @@ protocol PaneControllerDelegate: AnyObject {
     func paneDidTerminate(_ pane: PaneController, exitCode: Int32?)
     /// The pane's terminal title changed (drives the window/tab title when focused).
     func paneDidUpdateTitle(_ pane: PaneController, title: String)
+    /// The pane requests a split alongside itself along `axis`.
+    func paneRequestsSplit(_ pane: PaneController, axis: SplitAxis)
+    /// The pane requests to be closed (the owner collapses + escalates).
+    func paneRequestsClose(_ pane: PaneController)
+    /// The pane requests focus move to a neighbor.
+    func paneRequestsFocusMove(_ pane: PaneController, direction: FocusDirection)
+    /// The pane requests a new tab / new window.
+    func paneRequestsNewTab(_ pane: PaneController)
+    func paneRequestsNewWindow(_ pane: PaneController)
 }
 
 /// Owns one terminal pane: a single `XttyTerminalView` (its own PTY + shell +
@@ -21,22 +30,15 @@ protocol PaneControllerDelegate: AnyObject {
 /// `TerminalWindowController`). The DEBUG harness dump lives here too, so each
 /// pane can report its own engine grid + state.
 @MainActor
-final class PaneController: NSObject, LocalProcessTerminalViewDelegate {
+final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerminalViewCommands {
     let view: XttyTerminalView
     /// The model handle registered in the `SessionRegistry` (identity + session).
     let pane: Pane
 
     private let session: TerminalSession
-    private let config: XttyConfig
     private let registry: SessionRegistry
     weak var delegate: PaneControllerDelegate?
     private var processEnded = false
-
-    #if DEBUG
-    private var gridDumpTimer: Timer?
-    private static let gridDumpPath = "/tmp/xtty-grid-dump.txt"
-    private static let stateDumpPath = "/tmp/xtty-state-dump.json"
-    #endif
 
     init(config: XttyConfig, registry: SessionRegistry, frame: NSRect) {
         // Build everything via locals first — `self` is unavailable before super.init.
@@ -48,11 +50,11 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate {
         self.view = view
         self.session = session
         self.pane = pane
-        self.config = config
         self.registry = registry
         super.init()
 
         view.processDelegate = self
+        view.commands = self
         view.configuredFontSize = CGFloat(config.fontSize)
 
         // Apply config (font / theme palette / bounded scrollback / option-as-meta)
@@ -80,10 +82,6 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate {
     /// Terminate the child (unless already exited) and unregister from the model.
     /// Safe to call multiple times.
     func terminate() {
-        #if DEBUG
-        gridDumpTimer?.invalidate()
-        gridDumpTimer = nil
-        #endif
         if !processEnded {
             processEnded = true
             view.terminate()
@@ -114,51 +112,14 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate {
     // OSC 7 cwd capture is P4; ignore here.
     nonisolated func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
 
-    #if DEBUG
-    /// Poll this pane's headless engine grid + state onto temp files the XCUITest
-    /// harness reads. Gated by `-UITestGridDump` (started by the window controller
-    /// for the focused pane). The view is custom-drawn, so this engine grid — not
-    /// the accessibility tree — is the deterministic content source for UI tests.
-    func startGridDumpForUITests() {
-        gridDumpTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                let engine = self.view.getTerminal()
+    /// This pane's headless engine (read by the window controller's DEBUG dump).
+    var engine: Terminal { view.getTerminal() }
 
-                // `skipNullCellsFollowingWide` + a `characterProvider` keep wide CJK
-                // (NUL spacer 2nd column) and non-BMP/grapheme emoji (map-indexed
-                // codes) intact; without them CJK is NUL-separated and emoji vanish.
-                var lines: [String] = []
-                lines.reserveCapacity(engine.rows)
-                for row in 0..<engine.rows {
-                    lines.append(engine.getLine(row: row)?.translateToString(
-                        trimRight: true,
-                        skipNullCellsFollowingWide: true,
-                        characterProvider: { engine.getCharacter(for: $0) }
-                    ) ?? "")
-                }
-                try? lines.joined(separator: "\n").write(
-                    toFile: PaneController.gridDumpPath, atomically: true, encoding: .utf8)
+    // MARK: XttyTerminalViewCommands (forward the focused view's intent to the owner)
 
-                // State the grid text can't carry (font / theme / option-as-meta) plus
-                // scrollback depth via the public proxy `getTopVisibleRow() + rows`.
-                let depth = engine.getTopVisibleRow()
-                let state: [String: Any] = [
-                    "fontFamily": self.view.font.familyName ?? self.view.font.fontName,
-                    "fontSize": Double(self.view.font.pointSize),
-                    "theme": self.config.themeName,
-                    "scrollbackCap": self.config.scrollback,
-                    "optionAsMeta": self.view.optionAsMetaKey,
-                    "rows": engine.rows,
-                    "isAlt": engine.isCurrentBufferAlternate,
-                    "scrollbackDepth": depth,
-                    "bufferLines": depth + engine.rows,
-                ]
-                if let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]) {
-                    try? data.write(to: URL(fileURLWithPath: PaneController.stateDumpPath))
-                }
-            }
-        }
-    }
-    #endif
+    func splitPane(axis: SplitAxis) { delegate?.paneRequestsSplit(self, axis: axis) }
+    func closePane() { delegate?.paneRequestsClose(self) }
+    func moveFocus(_ direction: FocusDirection) { delegate?.paneRequestsFocusMove(self, direction: direction) }
+    func newTab() { delegate?.paneRequestsNewTab(self) }
+    func newWindow() { delegate?.paneRequestsNewWindow(self) }
 }

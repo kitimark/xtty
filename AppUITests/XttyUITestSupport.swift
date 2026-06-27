@@ -53,7 +53,6 @@ extension XCTestCase {
         try? fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
         try? configText.write(toFile: (dir as NSString).appendingPathComponent("config"),
                               atomically: true, encoding: .utf8)
-        addTeardownBlock { try? fm.removeItem(atPath: base) }
 
         GridDumpReader.reset()
         StateDumpReader.reset()
@@ -63,6 +62,12 @@ extension XCTestCase {
         app.launchArguments = args
         app.launchEnvironment["XDG_CONFIG_HOME"] = base
         app.launch()
+        // Terminate at teardown so a still-running instance can't overwrite the
+        // shared /tmp dump for the next test (state like pane count is sticky).
+        addTeardownBlock {
+            app.terminate()
+            try? fm.removeItem(atPath: base)
+        }
         return app
     }
 

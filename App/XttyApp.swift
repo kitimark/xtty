@@ -26,19 +26,23 @@ struct XttyApp: App {
 /// Creates and owns the terminal window(s), the shared session registry, and the
 /// app-level config resolved once at launch.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
     /// The view-free model of all live panes across windows (P5/agents enumerate it).
     private let registry = SessionRegistry()
     private var windowControllers: [TerminalWindowController] = []
+    /// Resolved once at launch; reused when opening new windows/tabs.
+    private var config = XttyConfig.default
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let (config, keybindings) = AppDelegate.loadConfigAndKeybindings()
+        self.config = config
 
         let controller = TerminalWindowController(config: config, registry: registry)
+        controller.coordinator = self
         windowControllers.append(controller)
 
         // Install xtty's AppKit main menu with key equivalents from config (Find/
-        // font ride the responder chain to the focused pane).
+        // font/split/focus ride the responder chain to the focused pane).
         NSApp.mainMenu = XttyMainMenu.build(keybindings: keybindings)
         NSApp.activate(ignoringOtherApps: true)
 
@@ -60,6 +64,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Terminate every child shell on quit so no orphan process is leaked.
     func applicationWillTerminate(_ notification: Notification) {
         for controller in windowControllers { controller.terminate() }
+    }
+
+    // MARK: WindowCoordinator
+
+    func openNewWindow() {
+        let controller = TerminalWindowController(config: config, registry: registry)
+        controller.coordinator = self
+        windowControllers.append(controller)
+    }
+
+    func openNewTab(relativeTo controller: TerminalWindowController) {
+        // Layer 3 (native tabbing) wires the real tabbed-window path; until then a
+        // new tab opens as a new window.
+        openNewWindow()
     }
 
     /// Load + resolve the user config and keybindings once at launch from a single
