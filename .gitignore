@@ -1,2 +1,14 @@
 # Claude Code local files
 .claude/
+
+# Generated Xcode project (produced from project.yml via `xcodegen generate`)
+xtty.xcodeproj/
+
+# Swift Package Manager build artifacts
+.build/
+XttyCore/.build/
+.swiftpm/
+XttyCore/.swiftpm/
+
+# macOS
+.DS_Store

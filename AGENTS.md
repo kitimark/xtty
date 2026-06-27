@@ -10,8 +10,8 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 
 - ✅ Landscape + internals research, requirements, and a design (stack + milestones) — in `research/`.
 - ✅ Spec-driven workflow scaffolded — `openspec/`.
-- ✅ First change proposed: `add-app-skeleton` (milestone P0) — artifacts complete & validated, **awaiting `/opsx:apply`**.
-- ⬜ No application code, build system, or tests yet. (Don't reference build/test commands until they exist.)
+- ✅ First change **implemented**: `add-app-skeleton` (milestone P0) — all 15 tasks done (app builds & launches an empty window, `XttyCore` seam + smoke test, SwiftTerm resolved, non-sandboxed signing). **Awaiting `/opsx:archive`**.
+- ✅ Build system live: `project.yml` (XcodeGen) → `xtty.xcodeproj` (gitignored), `XttyCore` SPM package. See **Building** below.
 
 ## Repository structure
 
@@ -42,6 +42,18 @@ Start here: `research/README.md` (index), `research/03-analysis/xtty-requirement
 - **Shell integration:** OSC 7 (cwd) + OSC 133 (command boundaries) capture
 
 Researched alternatives if we hit limits (Rust core + Swift, Zig/libghostty + Swift, Swift + libghostty-vt) are in `research/04-design/01-stack-sketch.md` with switch triggers.
+
+## Building
+
+The Xcode project is generated from a committed `project.yml` via **XcodeGen**; the resulting `xtty.xcodeproj` is **gitignored** (never commit it).
+
+- **Prerequisite:** XcodeGen — `brew install xcodegen` (developed against **v2.45.4**). Building/testing the app target needs **full Xcode** (the Command Line Tools alone lack `xcodebuild`, `XCTest`, and swift-testing). Verified against **Xcode 26.6**.
+- **Metal Toolchain (one-time):** SwiftTerm bundles a `.metal` shader, so even though we don't use its renderer yet, the build compiles it. On Xcode 26+ the Metal compiler is a separate component — install it once with `sudo xcodebuild -downloadComponent MetalToolchain` (or Xcode → Settings → Components) or the build fails with `cannot execute tool 'metal'`.
+- **Generate the project:** `xcodegen generate` (re-run after editing `project.yml` or adding/removing source files).
+- **Build & run:** open `xtty.xcodeproj` in Xcode, or `xcodebuild -project xtty.xcodeproj -scheme xtty build`.
+- **Core package:** `XttyCore` is a local SPM package (the engine-facing seam). It builds/tests standalone from `XttyCore/` via `swift build` / `swift test` (tests need Xcode's toolchain for XCTest).
+
+Signing posture (P0): **App Sandbox OFF** (`App/xtty.entitlements`), **Sign to Run Locally** (ad-hoc identity), Hardened Runtime/notarization deferred.
 
 ## Product values (hard requirements)
 

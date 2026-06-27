@@ -1,0 +1,53 @@
+# XcodeGen project spec for xtty.
+#
+# This file is the source of truth for the Xcode project. The generated
+# `xtty.xcodeproj` is NOT tracked in git (see .gitignore). Regenerate with:
+#
+#     xcodegen generate
+#
+# Requires XcodeGen (`brew install xcodegen`). See AGENTS.md → Building.
+
+name: xtty
+
+options:
+  bundleIdPrefix: com.xtty
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+# Local Swift package: the engine-facing seam. All terminal logic lives here,
+# decoupled from the view. XttyCore in turn depends on SwiftTerm.
+packages:
+  XttyCore:
+    path: XttyCore
+
+targets:
+  xtty:
+    type: application
+    platform: macOS
+    sources:
+      - App
+    dependencies:
+      - package: XttyCore
+        product: XttyCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xtty.app
+        PRODUCT_NAME: xtty
+        MARKETING_VERSION: "0.0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: xtty
+        # Pure SwiftUI app (no storyboard / no AppDelegate adaptor needed).
+        INFOPLIST_KEY_NSPrincipalClass: NSApplication
+        SWIFT_VERSION: "6.0"
+        # --- Signing posture (P0) ---
+        # App Sandbox OFF via the entitlements file so later milestones can
+        # spawn a shell and read the user's files.
+        CODE_SIGN_ENTITLEMENTS: App/xtty.entitlements
+        # "Sign to Run Locally": ad-hoc signing identity, no team required.
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+        # Hardened Runtime / notarization deferred to a later milestone.
+        ENABLE_HARDENED_RUNTIME: NO

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  App Sandbox is OFF. A sandboxed terminal cannot usefully spawn shells or
+	  read the user's files (children inherit the sandbox). This rules out the
+	  Mac App Store, which is consistent with xtty's free/open, no-account
+	  values. Hardened Runtime / notarization are independent and deferred to a
+	  later milestone. See openspec/changes/add-app-skeleton/design.md.
+	-->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+</dict>
+</plist>
