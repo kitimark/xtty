@@ -48,6 +48,9 @@ enum XttyMainMenu {
             return entry
         }
 
+        menu.addItem(make("New Tab", #selector(XttyTerminalView.newTerminalTab(_:)), .newTab))
+        menu.addItem(make("New Window", #selector(XttyTerminalView.newTerminalWindow(_:)), .newWindow))
+        menu.addItem(.separator())
         menu.addItem(make("Split Right", #selector(XttyTerminalView.splitPaneRight(_:)), .splitRight))
         menu.addItem(make("Split Down", #selector(XttyTerminalView.splitPaneDown(_:)), .splitDown))
         menu.addItem(.separator())

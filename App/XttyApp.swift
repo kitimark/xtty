@@ -32,6 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
     private var windowControllers: [TerminalWindowController] = []
     /// Resolved once at launch; reused when opening new windows/tabs.
     private var config = XttyConfig.default
+    #if DEBUG
+    private var dumpTimer: Timer?
+    #endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let (config, keybindings) = AppDelegate.loadConfigAndKeybindings()
@@ -47,13 +50,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
         NSApp.activate(ignoringOtherApps: true)
 
         #if DEBUG
-        // XCUITest harness: mirror the focused pane's engine grid to a temp file
-        // the test runner reads. Never active in normal runs.
+        // XCUITest harness: one app-level timer mirrors the KEY window's focused-
+        // pane grid + inventory to temp files (handles multiple tabs/windows
+        // without controllers fighting over the path). Never active in normal runs.
         if ProcessInfo.processInfo.arguments.contains("-UITestGridDump") {
-            controller.startGridDumpForUITests()
+            startUITestDump()
         }
         #endif
     }
+
+    #if DEBUG
+    private func startUITestDump() {
+        dumpTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let key = NSApp.keyWindow
+                let controller = self.windowControllers.first { $0.window === key }
+                    ?? self.windowControllers.last
+                controller?.writeUITestDumps()
+            }
+        }
+    }
+    #endif
 
     // Quit when the last window closes (a native tab is a window, so this still
     // yields correct quit-on-last semantics once tabbing lands in layer 3).
@@ -68,16 +86,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
 
     // MARK: WindowCoordinator
 
-    func openNewWindow() {
+    @discardableResult
+    func openNewWindow() -> TerminalWindowController {
         let controller = TerminalWindowController(config: config, registry: registry)
         controller.coordinator = self
         windowControllers.append(controller)
+        return controller  // the app-level dump timer covers every window
     }
 
     func openNewTab(relativeTo controller: TerminalWindowController) {
-        // Layer 3 (native tabbing) wires the real tabbed-window path; until then a
-        // new tab opens as a new window.
-        openNewWindow()
+        let newController = openNewWindow()
+        // Group it as a native tab of the originating window.
+        controller.window.addTabbedWindow(newController.window, ordered: .above)
+        newController.window.makeKeyAndOrderFront(nil)
+    }
+
+    func windowControllerDidClose(_ controller: TerminalWindowController) {
+        // Defer releasing the controller (and thus its window/views) to the next
+        // runloop, so they outlive the in-progress close display cycle.
+        DispatchQueue.main.async { [weak self] in
+            self?.windowControllers.removeAll { $0 === controller }
+        }
+    }
+
+    /// The native tab bar's "+" button (and the default New-Tab path) route here.
+    @objc func newWindowForTab(_ sender: Any?) {
+        if let key = NSApp.keyWindow,
+           let controller = windowControllers.first(where: { $0.window == key }) {
+            openNewTab(relativeTo: controller)
+        } else {
+            openNewWindow()
+        }
     }
 
     /// Load + resolve the user config and keybindings once at launch from a single

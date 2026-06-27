@@ -7,8 +7,9 @@ import XttyCore
 /// the app delegate, which holds the shared registry + config).
 @MainActor
 protocol WindowCoordinator: AnyObject {
-    func openNewWindow()
+    @discardableResult func openNewWindow() -> TerminalWindowController
     func openNewTab(relativeTo controller: TerminalWindowController)
+    func windowControllerDidClose(_ controller: TerminalWindowController)
 }
 
 /// Owns one xtty window/tab and the **tree of panes** inside it.
@@ -36,10 +37,14 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
     private var activePaneID: PaneID
 
     private var keyObserver: NSObjectProtocol?
+    private var closeObserver: NSObjectProtocol?
     private var clickMonitor: Any?
-    #if DEBUG
-    private var gridDumpTimer: Timer?
-    #endif
+    private var isTerminated = false
+
+    /// Confirm before closing a pane that has a running foreground process.
+    /// A built-in default in this milestone (the `confirm-close` config key lands
+    /// with the profiles work in P3b — design D5).
+    private static let confirmCloseEnabled = true
 
     init(config: XttyConfig, registry: SessionRegistry, contentSize: NSSize = NSSize(width: 900, height: 560)) {
         self.config = config
@@ -62,8 +67,16 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         panes[root.pane.id] = root
 
         window.title = "xtty"
+        // The controller owns the window's lifetime; closing must NOT release it,
+        // or AppKit's deferred touch-bar/display-cycle update can touch freed views
+        // (EXC_BAD_ACCESS in objc_release). It's freed when the controller is.
+        window.isReleasedWhenClosed = false
         window.contentView = root.view  // single leaf; splits build NSSplitViews
-        window.tabbingMode = .disallowed  // layer 3 flips to .preferred
+        // Native macOS window tabbing: a tab IS a window (Ghostty model). Shared
+        // identifier groups xtty windows; macOS provides the tab bar, Cmd+Shift+[/],
+        // drag-tab-out, and Merge All for free.
+        window.tabbingMode = .preferred
+        window.tabbingIdentifier = NSWindow.TabbingIdentifier("xtty")
         window.setAccessibilityIdentifier("xtty.window")
         window.identifier = NSUserInterfaceItemIdentifier("xtty.window")
 
@@ -85,6 +98,19 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             MainActor.assumeIsolated { self?.updateActivePaneFromClick(event) }
             return event
         }
+
+        // When the window (a tab) closes — by the red button, escalation, or
+        // drag-out merge — terminate its panes and drop it from the coordinator,
+        // so no orphan shells remain and the controller list stays accurate.
+        closeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: window, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.coordinator?.windowControllerDidClose(self)
+                self.terminate()
+            }
+        }
     }
 
     /// The focused pane's controller (used by the DEBUG harness hook).
@@ -103,16 +129,16 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         focusActivePane()
     }
 
-    /// Terminate every pane in this window and remove observers.
+    /// Terminate every pane in this window and remove observers. Idempotent
+    /// (fires from both `willClose` and app quit).
     func terminate() {
-        #if DEBUG
-        gridDumpTimer?.invalidate()
-        gridDumpTimer = nil
-        #endif
-        if let keyObserver {
-            NotificationCenter.default.removeObserver(keyObserver)
-            self.keyObserver = nil
+        if isTerminated { return }
+        isTerminated = true
+        for observer in [keyObserver, closeObserver].compactMap({ $0 }) {
+            NotificationCenter.default.removeObserver(observer)
         }
+        keyObserver = nil
+        closeObserver = nil
         if let clickMonitor {
             NSEvent.removeMonitor(clickMonitor)
             self.clickMonitor = nil
@@ -154,7 +180,32 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
     }
 
     func paneRequestsClose(_ pane: PaneController) {
+        // Confirm only on user-initiated close of a pane with a running foreground
+        // job (shell-exit goes through paneDidTerminate, which never prompts).
+        if Self.confirmCloseEnabled, hasForegroundJob(pane.view), !confirmClose() {
+            return
+        }
         closePane(pane)
+    }
+
+    /// Whether the pane's terminal has a foreground process group other than the
+    /// shell itself (i.e. a command is running). Standard `tcgetpgrp` check.
+    private func hasForegroundJob(_ view: XttyTerminalView) -> Bool {
+        let process = view.process
+        let fd = process?.childfd ?? -1
+        let shellPid = process?.shellPid ?? 0
+        guard fd >= 0, shellPid > 0 else { return false }
+        let foreground = tcgetpgrp(fd)
+        return foreground > 0 && foreground != shellPid
+    }
+
+    private func confirmClose() -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Close this pane?"
+        alert.informativeText = "A process is still running."
+        alert.addButton(withTitle: "Close")
+        alert.addButton(withTitle: "Cancel")
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     func paneRequestsFocusMove(_ pane: PaneController, direction: FocusDirection) {
@@ -191,6 +242,10 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         panes[pane.pane.id] = nil
 
         guard let newTree = tree.removing(pane.pane.id) else {
+            // Detach the first responder before closing: otherwise the touch-bar /
+            // responder machinery can reference the focused custom view as it's torn
+            // down during the display cycle (EXC_BAD_ACCESS in objc_release).
+            window.makeFirstResponder(nil)
             window.close()
             return
         }
@@ -319,17 +374,12 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
     private static let gridDumpPath = "/tmp/xtty-grid-dump.txt"
     private static let stateDumpPath = "/tmp/xtty-state-dump.json"
 
-    /// Start the XCUITest grid/state dump. Window-level so it always follows the
-    /// **focused** pane (the grid) and reports the multiplexing inventory (pane
-    /// count, focused index, tab count) — the deterministic source for the
-    /// split/close/focus/tab tests, since the custom-drawn view has no AX text.
-    func startGridDumpForUITests() {
-        gridDumpTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.writeUITestDumps() }
-        }
-    }
-
-    private func writeUITestDumps() {
+    /// Write this window's focused-pane grid + multiplexing inventory to the temp
+    /// files the XCUITest harness reads. Called by the app delegate's single dump
+    /// timer for the **key** window's controller, so multiple tab/window
+    /// controllers never fight over the shared path. The custom-drawn view has no
+    /// AX text, so this engine grid is the deterministic content source.
+    func writeUITestDumps() {
         guard let active = panes[activePaneID] else { return }
         let engine = active.engine
 

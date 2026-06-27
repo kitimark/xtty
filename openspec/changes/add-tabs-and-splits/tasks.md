@@ -26,11 +26,11 @@
 
 ## 4. Native tabs + windows + lifecycle (layer 3)
 
-- [ ] 4.1 Enable native window tabbing: set `tabbingMode = .preferred` and a shared `tabbingIdentifier`; let macOS draw the tab bar + Cmd+Shift+[/].
-- [ ] 4.2 New tab via `newWindowForTab(_:)` (+ the new-tab keybinding) creating a tabbed window controller with its own pane tree; new window via the new-window keybinding.
-- [ ] 4.3 Implement the unified close/exit escalation (pane → tab/window → quit) for BOTH shell-exit and user close; keep `applicationShouldTerminateAfterLastWindowClosed = true`.
-- [ ] 4.4 Add `confirm-close` (built-in default on) prompting before closing a pane with a running foreground process.
-- [ ] 4.5 Confirm tab title tracks `setTerminalTitle` per window/tab; verify drag-tab-out-to-window works (no state migration needed).
+- [x] 4.1 Native window tabbing: `tabbingMode = .preferred` + shared `tabbingIdentifier` ("xtty"); macOS draws the tab bar + Cmd+Shift+[/].
+- [x] 4.2 New tab via the new-tab keybinding → `addTabbedWindow` (+ `newWindowForTab(_:)` for the native "+"); new window via the new-window keybinding. Menu items added to the Terminal menu.
+- [x] 4.3 Unified close/exit escalation (pane → tab/window → quit) for shell-exit AND user close: `closePane` → `window.close()` when the tree empties; `willClose` observer terminates panes + drops the controller; `applicationShouldTerminateAfterLastWindowClosed = true`. Fixed an `isReleasedWhenClosed` over-release crash (defer controller release past the close display cycle).
+- [x] 4.4 `confirm-close` (built-in default on, constant — config key is P3b) prompts via `NSAlert` before closing a pane with a running foreground job (`tcgetpgrp(childfd) != shellPid`); shell-exit never prompts.
+- [x] 4.5 Tab title tracks `setTerminalTitle` (window.title → tab label, free); drag-tab-out works with no state migration (each tab is its own window+controller).
 
 ## 5. Clickable URL links (layer 4)
 
@@ -42,7 +42,7 @@
 - [x] 6.1 Moved the DEBUG dump to the window controller so it follows the focused pane; added the multiplexing inventory to the state dump (`paneCount`, `focusedPaneIndex`, `tabCount`). (Pulled forward to verify group 3.)
 - [ ] 6.2 Add a DEBUG "resolve link at (row,col)" action surfacing the matched URL for link tests (no real hit-testing).
 - [x] 6.3 XCUITests (`XttyMultiplexingUITests`): split → 2 panes (typed text reaches the focused pane), close → 1 (collapse), directional focus switches panes. Test-isolation fix: terminate app at teardown + wait for the fresh baseline.
-- [ ] 6.4 XCUITests: new tab → 2 tabs, new window → 2nd window, last-pane close escalates to window close; link resolution returns the expected URL.
+- [x] 6.4 XCUITests (`XttyMultiplexingUITests`): new tab → `tabCount` 2, last-pane close escalates to tab close (app stays alive), new window opens a 2nd window. (Link-resolution assertion lands with group 5.)
 - [ ] 6.5 Run the full suite green: `xcodebuild test -project xtty.xcodeproj -scheme xtty -destination 'platform=macOS'` and `cd XttyCore && swift test`.
 
 ## 7. Docs & trackers
