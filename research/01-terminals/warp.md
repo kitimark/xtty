@@ -51,6 +51,44 @@ macOS was the original and lead platform (launched here first in 2022). Built as
 
 Renders on the GPU via Metal on macOS, claiming smooth high-frame-rate output even at 4K. No official independent benchmark of raw throughput vs. peers surfaced; it does not market itself as the literal "fastest" terminal. Memory consumption is notably higher than minimalist native terminals. Performance value-add is more about UX/AI than raw I/O speed.
 
+## Pricing & feature gating
+
+> Researched 2026-06-27 from [Warp pricing](https://www.warp.dev/pricing), [plans & billing docs](https://docs.warp.dev/support-and-community/plans-and-billing/plans-pricing-refunds/), and [lifting the login requirement](https://www.warp.dev/blog/lifting-login-requirement). Pricing is in flux (Warp recently collapsed Pro/Turbo/Lightspeed into a single "Build" plan) — re-verify before quoting.
+
+**The model has three layers. All terminal features are free; only AI is gated, and AI has a free escape hatch (BYOK).**
+
+### Layer 1 — Free, no login (anonymous)
+All core terminal features: blocks, IDE-style input editor, native tabs/panes, autocomplete, Workflows, themes, project file view, GPU/Metal rendering — plus a preview/taste of AI. Caveat: an anonymous ID is still attached, and Warp has said more features *may* be gated to logged-in users over time.
+
+### Layer 2 — Logging in (free account, $0)
+Login unlocks **cloud-connected** features at no cost (within limits):
+- **Warp Drive** — sync/share Workflows, Notebooks, Sessions, Prompts, Preferences, env vars across machines/teams
+- Collaboration / "multiplayer" sharing
+- Cloud conversation storage (limited on free)
+- Fuller AI surface than the logged-out preview
+
+### Layer 3 — Paid subscription (AI usage)
+Paid plans are almost entirely about **AI credits**.
+
+| Plan | Price | AI credits | Key inclusions |
+|---|---|---|---|
+| **Free** | $0 | Small allowance only (reported ~150/mo first 2 months, then ~75/mo; **no bundled credits for the full Warp Agent**) | All terminal features, limited Warp Drive/cloud, BYOK option |
+| **Build** | $20/mo ($18/mo annual) | **1,500/mo** | Full Warp Agent (frontier OpenAI/Anthropic/Google models), extended cloud agents, highest codebase-indexing limits, **unlimited** Warp Drive + cloud storage, email support |
+| **Business** | $50/user/mo ($45 annual, ≤25 seats) | 1,500/mo per user | Build + team usage metrics, admin data controls, **SAML SSO** |
+| **Enterprise** | Custom | Custom shared pool | Unlimited seats, BYO-LLM, self-hosted cloud agents, spend controls, governance, dedicated support |
+
+**Credits pay for:** code generation, debugging, and multi-agent / agentic workflows (the Warp 2.0 "Agentic Development Environment", Oz background orchestrator, etc.). Each AI action consumes credits. "Reload Credits" can be purchased and roll over for up to 12 months with an active subscription.
+
+### BYOK escape hatch
+You can use Warp's AI **without a subscription** by bringing your own inference: a personal **API key** (OpenAI/Anthropic/Google), a custom inference endpoint, or a SuperGrok / X Premium subscription. You pay your model provider directly instead of Warp's $20/mo.
+
+### Takeaways
+- The **terminal never costs money**; login is optional unless you want sync/collab; only AI + cloud are gated.
+- Free-tier AI is deliberately thin — a taste, not something to rely on. Real AI use assumes Build ($20) or BYOK.
+- The **credit-based pricing is the most-criticized part** (allotments cut over time); BYOK sidesteps it.
+
+**Relevance to xtty:** Warp monetizes AI credits, gates sync/collab behind login, and keeps the terminal free. xtty's target (free/open, no login, no paywall — see [xtty-requirements](../03-analysis/xtty-requirements.md)) deliberately rejects all three gates; BYOK + local models is the "AI grounded in semantics, locally and privately" opportunity minus the credit meter.
+
 ## Fact-checks
 
 #### ✅ CONFIRMED
