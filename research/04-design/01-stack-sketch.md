@@ -95,6 +95,33 @@ Kept on file so we have a direction if we hit a limitation. Each lists **when yo
 
 ---
 
+## Spike findings (2026-06-27)
+
+> Resolved the two open unknowns by reading SwiftTerm's source (cloned `migueldeicaza/SwiftTerm`, MIT, v1.13.0 / Mar 2026) and Apple's sandbox/notarization docs. Both resolved favorably; one surfaced a bigger discovery.
+
+### Finding 1 — Reusing SwiftTerm as a headless engine is ✅ validated (and it does far more than parse)
+The engine is genuinely UI-agnostic and the per-cell read path we need exists and is public:
+- **Feed:** `Terminal.feed(byteArray:)` / `feed(text:)` / `feed(buffer: ArraySlice<UInt8>)`
+- **Read grid:** `Terminal.getCharData(col:row:) -> CharData?`, `getLine(row:) -> BufferLine?`, `getScrollInvariantLine(row:)`; `BufferLine` exposes `subscript(i) -> CharData`, `.count`, `.getData() -> [CharData]`, `.getWidth(i)`
+- **Cell model:** `CharData` → `.getCharacter()`, `.width: Int8`, `.attribute: Attribute`; `Attribute` → `.fg`/`.bg` (`Color`: ANSI/256/TrueColor), `.style: CharacterStyle` (bold/italic/underline/blink/inverse/invisible/dim/crossedOut), `.underlineStyle`, `.underlineColor`
+- **Dims/resize/damage:** `Terminal.cols`/`rows`, `resize(cols:rows:)`, `getScrollInvariantUpdateRange() -> (startY,endY)?` (enables damage-tracked redraws), `sendResponse(...)` for replies; dedicated `HeadlessTerminal` class for no-UI use.
+
+**Bigger discovery — SwiftTerm is a near-complete terminal, not just a parser.** Its sources already include:
+- a **Metal renderer** (`Apple/Metal/MetalTerminalRenderer.swift`, ~2,780 LOC, `MTKViewDelegate`-based) with **grayscale + BGRA glyph atlases**, a **CoreText glyph rasterizer**, ligature shaper cache, image batches, and a buffer pool — but it is **experimental and opt-in** (`MacTerminalView` defaults `useMetalRenderer = false`).
+- **PTY/process** (`LocalProcess`, `Pty`, `MacLocalTerminalView`), **graphics protocols** (Kitty + Sixel), **kitty keyboard**, and **search**.
+- A SwiftUI wrapper exists but is **iOS-only** (`UIViewRepresentable`); a macOS SwiftUI host is a trivial `NSViewRepresentable` we'd add.
+
+**Implication — a new decision this raises (see Open questions):** *how much* of SwiftTerm to adopt. Three levels: (1) **engine only** → write our own Metal renderer (max control, most work; SwiftTerm's renderer is a great reference/vendoring source); (2) **engine + its Metal renderer**; (3) **its full `TerminalView`** wholesale, building the sidebar/file-diff/OSC features around it (fastest to a working terminal; least control; Metal path still experimental). This materially affects milestones P2–P6.
+
+**Fallback unchanged:** `libghostty-vt` is real and capable (zero-dep, scrollback/wrap/reflow, macOS/Linux/Windows/WASM) but its **API/ABI is explicitly in flux and unversioned** — so it stays Alt-C, not a now-choice.
+
+### Finding 2 — Sandbox / entitlements for spawning a shell is ✅ clarified
+**App Sandbox and Hardened Runtime are independent switches** (the common confusion):
+- **App Sandbox** — required only for the **Mac App Store**; *optional* for Developer ID. A sandboxed terminal is crippled (child procs inherit the sandbox; file access limited). → **xtty: OFF.**
+- **Hardened Runtime** — required for **notarization** (= Developer ID distribution), separate from sandbox, and it does **not** block spawning child processes. → **xtty: ON, but only matters at P10.**
+- A **non-sandboxed** app spawns `/bin/zsh` and reads the user's files with normal Unix privileges — **no special entitlement needed.**
+- Milestone mapping: **P0** = set Sandbox OFF + "Sign to Run Locally"; **P1** = spawn shell works as-is; **P10** = add Hardened Runtime + Developer ID + notarize.
+
 ## Risks & triggers to revisit this sketch
 
 - **SwiftTerm limitations** (perf, data model, maintenance) → consider Alt C (libghostty-vt) or Alt A.
@@ -103,8 +130,9 @@ Kept on file so we have a direction if we hit a limitation. Each lists **when yo
 - **Memory creeping up** → check scrollback cap, atlas eviction, retain cycles *before* blaming the stack.
 
 ## Open questions (for later)
-- Scrollback default + cap; reflow strategy on resize ([07-multiplexing](../02-internals/07-multiplexing-sessions.md)).
-- Graphics protocol support (kitty/iTerm2/Sixel) — if/when ([05-graphics-protocols](../02-internals/05-graphics-protocols.md)).
+- **SwiftTerm adoption level** (NEW, from spike): engine-only vs engine+Metal-renderer vs full `TerminalView`. Reshapes P2–P6 — decide before/at the P0 proposal. Note SwiftTerm already ships graphics protocols (Kitty/Sixel) and search, so those milestones may shrink.
+- Scrollback default + cap; reflow strategy on resize ([07-multiplexing](../02-internals/07-multiplexing-sessions.md)). (SwiftTerm handles scrollback/reflow; libghostty-vt also does.)
+- Graphics protocol support (kitty/iTerm2/Sixel) — likely **free via SwiftTerm** ([05-graphics-protocols](../02-internals/05-graphics-protocols.md)).
 - Splits/tabs model and whether to offer a Quick-Terminal dropdown (N3).
 - Agent-drivable local API shape (N1) — model on [Herdr](../03-analysis/adjacent-tools.md)'s socket API.
 
