@@ -32,13 +32,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowControllers: [TerminalWindowController] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let config = AppDelegate.loadConfig()
+        let (config, keybindings) = AppDelegate.loadConfigAndKeybindings()
 
         let controller = TerminalWindowController(config: config, registry: registry)
         windowControllers.append(controller)
 
-        // Install xtty's AppKit main menu (Find/font ride the responder chain).
-        NSApp.mainMenu = XttyMainMenu.build()
+        // Install xtty's AppKit main menu with key equivalents from config (Find/
+        // font ride the responder chain to the focused pane).
+        NSApp.mainMenu = XttyMainMenu.build(keybindings: keybindings)
         NSApp.activate(ignoringOtherApps: true)
 
         #if DEBUG
@@ -61,14 +62,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for controller in windowControllers { controller.terminate() }
     }
 
-    /// Load + resolve the user config once at launch (P2 read-once policy).
-    private static func loadConfig() -> XttyConfig {
-        let loaded = XttyConfigLoader.load(warn: { NSLog("[xtty] config: %@", $0) })
+    /// Load + resolve the user config and keybindings once at launch from a single
+    /// file read (P2 read-once policy). Keybindings live in the
+    /// `terminal-keybindings` capability; config in `terminal-configuration`.
+    private static func loadConfigAndKeybindings() -> (XttyConfig, Keybindings) {
+        let environment = ProcessInfo.processInfo.environment
+        let path = XttyConfigLoader.configPath(environment: environment, homeDirectory: NSHomeDirectory())
+        let text = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+        let pairs = XttyConfigLoader.parse(text)
+        let warn: (String) -> Void = { NSLog("[xtty] config: %@", $0) }
+
+        var config = XttyConfigLoader.resolve(from: pairs, warn: warn)
+        let keybindings = KeybindResolver.resolve(from: pairs, warn: warn)
         #if DEBUG
-        return applyUITestOverrides(to: loaded)
-        #else
-        return loaded
+        config = applyUITestOverrides(to: config)
         #endif
+        return (config, keybindings)
     }
 
     #if DEBUG

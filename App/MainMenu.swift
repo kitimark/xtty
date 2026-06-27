@@ -1,4 +1,5 @@
 import AppKit
+import XttyCore
 
 /// Builds xtty's main menu in **AppKit**, not SwiftUI `.commands`.
 ///
@@ -18,14 +19,15 @@ import AppKit
 ///   pane's `XttyTerminalView` (design D3: pane-scoped commands ride the
 ///   responder chain, so "the active pane" is just the first responder).
 enum XttyMainMenu {
-    /// Build the full main menu.
+    /// Build the full main menu, with key equivalents from the resolved
+    /// `Keybindings` (the `terminal-keybindings` capability).
     @MainActor
-    static func build() -> NSMenu {
+    static func build(keybindings: Keybindings) -> NSMenu {
         let main = NSMenu()
 
         main.addItem(appMenuItem())
-        main.addItem(editMenuItem())
-        main.addItem(viewMenuItem())
+        main.addItem(editMenuItem(keybindings: keybindings))
+        main.addItem(viewMenuItem(keybindings: keybindings))
         main.addItem(windowMenuItem())
 
         return main
@@ -57,7 +59,8 @@ enum XttyMainMenu {
 
     // MARK: Edit menu (Copy / Paste / Select All + Find)
 
-    private static func editMenuItem() -> NSMenuItem {
+    @MainActor
+    private static func editMenuItem(keybindings: Keybindings) -> NSMenuItem {
         let item = NSMenuItem()
         let menu = NSMenu(title: "Edit")
 
@@ -71,21 +74,24 @@ enum XttyMainMenu {
                      action: #selector(NSText.selectAll(_:)),
                      keyEquivalent: "a")
         menu.addItem(.separator())
-        menu.addItem(findMenuItem())
+        menu.addItem(findMenuItem(keybindings: keybindings))
 
         item.submenu = menu
         return item
     }
 
     /// The Find submenu. Each item uses `performFindPanelAction:` with a tag that
-    /// SwiftTerm reads to choose show / next / previous.
-    private static func findMenuItem() -> NSMenuItem {
+    /// SwiftTerm reads to choose show / next / previous. The "Find…" item's key
+    /// equivalent comes from the `find` keybinding; next/previous stay conventional.
+    @MainActor
+    private static func findMenuItem(keybindings: Keybindings) -> NSMenuItem {
         let item = NSMenuItem(title: "Find", action: nil, keyEquivalent: "")
         let menu = NSMenu(title: "Find")
         let action = #selector(NSTextView.performFindPanelAction(_:))
 
-        let find = NSMenuItem(title: "Find…", action: action, keyEquivalent: "f")
+        let find = NSMenuItem(title: "Find…", action: action, keyEquivalent: "")
         find.tag = Int(NSFindPanelAction.showFindPanel.rawValue)
+        KeybindAdapter.apply(keybindings.chord(for: .find), to: find)
 
         let next = NSMenuItem(title: "Find Next", action: action, keyEquivalent: "g")
         next.tag = Int(NSFindPanelAction.next.rawValue)
@@ -105,19 +111,24 @@ enum XttyMainMenu {
 
     // MARK: View menu (font size)
 
-    private static func viewMenuItem() -> NSMenuItem {
+    @MainActor
+    private static func viewMenuItem(keybindings: Keybindings) -> NSMenuItem {
         let item = NSMenuItem()
         let menu = NSMenu(title: "View")
 
         let bigger = NSMenuItem(title: "Increase Font Size",
                                 action: #selector(XttyTerminalView.increaseFontSize(_:)),
-                                keyEquivalent: "+")
+                                keyEquivalent: "")
         let smaller = NSMenuItem(title: "Decrease Font Size",
                                  action: #selector(XttyTerminalView.decreaseFontSize(_:)),
-                                 keyEquivalent: "-")
+                                 keyEquivalent: "")
         let reset = NSMenuItem(title: "Actual Size",
                                action: #selector(XttyTerminalView.resetFontSize(_:)),
-                               keyEquivalent: "0")
+                               keyEquivalent: "")
+
+        KeybindAdapter.apply(keybindings.chord(for: .fontIncrease), to: bigger)
+        KeybindAdapter.apply(keybindings.chord(for: .fontDecrease), to: smaller)
+        KeybindAdapter.apply(keybindings.chord(for: .fontReset), to: reset)
 
         // target: nil → responder chain → the focused pane's XttyTerminalView.
         for entry in [bigger, smaller, reset] {

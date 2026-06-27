@@ -8,12 +8,12 @@
 
 ## 2. Configurable keybindings (XttyCore model + presets + menu wiring)
 
-- [ ] 2.1 Add `XttyCore` keybinding model: `KeyAction` enum (split-right/down, focus-left/right/up/down, new-tab, new-window, close, font-up/down/reset, find), toolkit-independent `KeyChord` (key token + modifier set), and `ModifierSet`; no AppKit imports.
-- [ ] 2.2 Implement a pure `KeybindParser` (`"cmd+shift+d"` → `KeyChord`): name→token table (letters, digits, arrows, grave, space, etc.), modifier names, validation (≥1 modifier + exactly 1 key); fail-soft (invalid → nil).
-- [ ] 2.3 Add the `iterm` (default) and `ghostty` presets as `[KeyAction: KeyChord]` maps, and `Keybindings` resolution = preset ⊕ per-action overrides.
-- [ ] 2.4 Extend the config layer: parse `keybind-style` (unknown → `iterm` + warn) and `keybind-<action>` overrides (unparseable → keep preset + warn). Keys owned by this capability; do NOT modify P2's `XttyConfig` appearance fields.
-- [ ] 2.5 Unit-test parser + presets + resolution (`swift test`): valid/invalid chords, preset selection + fallback, single-action override leaves others intact.
-- [ ] 2.6 App adapter `KeyChord → NSMenuItem` (`keyEquivalent` + `NSEvent.ModifierFlags`), special-casing arrows (`NSUpArrowFunctionKey` + `.function`/`.numericPad`). Build `MainMenu` key equivalents from the resolved `Keybindings` (rebind existing font/find items from config; remove hardcoded equivalents).
+- [x] 2.1 Add `XttyCore` keybinding model (`KeyChord.swift`): `KeyAction` enum, toolkit-independent `KeyChord` (`KeyToken` + `ModifierSet`); no AppKit imports.
+- [x] 2.2 Implement a pure `KeybindParser` (`KeybindParser.swift`): name→token table (letters, digits, arrows, `plus`/`minus`/`equal`/`space`), modifier aliases, validation (≥1 modifier + exactly 1 key); fail-soft (invalid → nil).
+- [x] 2.3 Add the `iterm` (default) + `ghostty` presets and `Keybindings.resolve` = preset ⊕ overrides (`Keybindings.swift`).
+- [x] 2.4 `KeybindResolver.resolve(from:warn:)` reads `keybind-style` (unknown → `iterm` + warn) and `keybind-<action>` overrides (unparseable → keep preset + warn) from the parsed pairs; P2's `XttyConfig` untouched. AppDelegate loads config + keybinds from one file read.
+- [x] 2.5 Unit-tests (`KeybindTests.swift`, 10): chord parse valid/invalid, preset shape + completeness, style selection/fallback, single-action override. Suite 52 green.
+- [x] 2.6 App adapter `KeybindAdapter` (`KeyChord → NSMenuItem`, arrows via `NSUpArrowFunctionKey` + `.function`); `MainMenu.build(keybindings:)` applies chords to font + Find items (hardcoded equivalents removed). 8 UI tests green.
 
 ## 3. Splits / panes (layer 2)
 
