@@ -39,6 +39,7 @@ Research library on terminal emulators — competitive landscape, internals, and
 - [Adjacent tools](03-analysis/adjacent-tools.md) — agent multiplexers & terminal-layer tooling that xtty would host (Herdr, …)
 - [Native-app testing tooling](03-analysis/native-app-testing-tooling.md) — how an agent drives/inspects a native macOS app (Peekaboo + XCUITest), and the AX-content ceiling that forces engine-grid assertions
 - [SwiftTerm Metal renderer spike](03-analysis/swiftterm-metal-renderer-spike.md) — P2 finding: SwiftTerm's GPU path works in xtty's AppKit host; adoption deferred to the P7 latency gate
+- [P3b shell-UX decisions](03-analysis/p3b-shell-ux-decisions.md) — explore-phase decisions for the deferred half of P3 (Quick-Terminal + Profiles); error-matching moved to P4
 - [xtty requirements](03-analysis/xtty-requirements.md) — the opinionated product target: must-haves, features, non-goals
 
 ### 04 — Design
