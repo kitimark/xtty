@@ -27,7 +27,7 @@ The user chose a **config-file** model (Ghostty-style `~/.config/xtty/config`) o
 
 **D4 — Scrollback set at engine creation; finite default.** `TerminalOptions.scrollback` is applied when the `Terminal`/view is constructed (changing it post-hoc isn't reliable). Default cap is finite (target 10 000 lines) to honor M1; we disallow an "unlimited" setting in P2 — an out-of-range/huge value is clamped to a sane maximum. (Exact numbers in Open Questions.)
 
-**D5 — Find + font menu commands route through the AppKit responder chain.** The app keeps SwiftUI's `App` lifecycle but the terminal is an AppKit `NSWindow`. We add menu commands (a Find group → `performFindPanelAction:`; a View/font group → increase/decrease/reset actions) whose actions travel up the **key window's responder chain** to the terminal view. Find is fully provided by SwiftTerm; font actions are small handlers on the controller/view that set `terminal.font`. Live size changes are ephemeral overrides on top of the configured size; Cmd 0 resets to configured.
+**D5 — Find + font menu commands route through an AppKit main menu (spike-confirmed).** The app keeps SwiftUI's `App` lifecycle, but the menu is built in **AppKit** (`XttyMainMenu`) and installed as `NSApp.mainMenu` in `applicationDidFinishLaunching` — *not* via SwiftUI `.commands`. Reason (found during the task-1 spike): SwiftTerm's `performFindPanelAction(_:)` requires the *sender* to be an `NSMenuItem` whose `.tag` selects show/next/previous; a SwiftUI `Button` closure can't supply that. A real `NSMenuItem` with `target: nil` travels the key window's responder chain straight to the terminal view (first responder). **Verified empirically:** Cmd+F opens SwiftTerm's native find bar, and the AppKit menu is not clobbered by SwiftUI. Find/Copy/Paste/Select-All items use `target: nil`; font-size items (`increaseFontSize:`/`decreaseFontSize:`/`resetFontSize:`) target the app delegate, which owns the controller. Live size changes are ephemeral overrides on top of the configured size; Cmd 0 resets to configured. **No responder-chain fallback was needed** (task 1.2).
 
 **D6 — Metal renderer: evaluate, don't adopt.** Toggle `updateMetalRenderer(enabled:)` behind a throwaway flag, feel latency/scroll, and write a dated `research/` note (per the project's research convention). The renderer decision stays with P7's measurement gate.
 
@@ -39,9 +39,9 @@ The user chose a **config-file** model (Ghostty-style `~/.config/xtty/config`) o
 - **Theme fidelity** — a hand-picked palette can look off vs. a known scheme. Mitigation: base the default dark palette on a well-known scheme's RGB values; keep the set tiny so it's easy to get right.
 - **option-as-meta default** — SwiftTerm defaults to `true`; we keep `true` as xtty's default to match common expectations (Option sends Meta for emacs/tmux). Configurable to `false` for users who want typographic Option characters.
 
-## Open Questions
+## Open Questions (resolved)
 
-- Default font + size: **SF Mono 13**? (vs Menlo). Pick one as the documented default.
-- P2 theme set: ship **dark only**, or **dark + light**? (Leaning dark + a light for completeness.)
-- Scrollback default and hard maximum: **10 000** default, clamp ceiling TBD (e.g. 100 000) — confirm against an M1 memory sanity check.
-- Should Cmd 0 reset also clear to default font *family*, or size only? (Proposed: size only.)
+- **Default font + size → SF Mono 13.** A `nil` `font-family` resolves to `NSFont.monospacedSystemFont(ofSize: 13)` (SF Mono on modern macOS) rather than hardcoding Menlo, so the default tracks the system monospaced face. `font-size` default is 13, clamped to 6…72.
+- **P2 theme set → dark + light**, default **dark**. Both share the standard xterm 16-ANSI palette; an unknown `theme` name falls back to dark. (`TerminalTheme.builtIns`.)
+- **Scrollback → default 10 000 lines, hard ceiling 100 000.** Values are clamped to `0…100 000`; "unlimited" is disallowed (M1). Memory sanity: at ~100 cols a stored line is a few KB, so the 10 000 default is on the order of tens of MB and the 100 000 ceiling stays in the low hundreds of MB worst-case — acceptable as a hard cap. (`XttyConfig.default.scrollback`, `XttyConfigLoader.scrollbackMax`.)
+- **Cmd 0 resets size only**, not family. `resetFontSize()` rebuilds the font from the current descriptor at the configured base size, leaving the family untouched. (`TerminalWindowController.resetFontSize`.)
