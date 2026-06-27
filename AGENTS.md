@@ -10,6 +10,7 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 
 - ✅ Landscape + internals research, requirements, and a design (stack + milestones) — in `research/`.
 - ✅ Spec-driven workflow scaffolded — `openspec/`.
+- ✅ First change proposed: `add-app-skeleton` (milestone P0) — artifacts complete & validated, **awaiting `/opsx:apply`**.
 - ⬜ No application code, build system, or tests yet. (Don't reference build/test commands until they exist.)
 
 ## Repository structure
@@ -54,8 +55,43 @@ Signature features: at-a-glance per-session progress sidebar (from OSC 133); a *
 ## How to work here
 
 - **Implementation follows the phased plan** in `research/04-design/02-milestones.md` (P0 skeleton → P5 daily-driver → **P7 OSC capture (keystone)** → P8 sidebar → P10 polish). P8/P9 depend on P7.
-- **Use OpenSpec for non-trivial changes:** create a change in `openspec/changes/<name>/` (proposal + tasks + spec deltas), get it approved, implement, then archive into `openspec/specs/`. The project `context` in `openspec/config.yaml` is shown to the AI on every artifact.
+- **Use OpenSpec for non-trivial changes** (see the OpenSpec workflow section below). The project `context` in `openspec/config.yaml` is shown to the AI on every artifact.
 - **Research is background, not spec.** `research/` records *why*; `openspec/specs/` will record *what is true*. When they conflict once code exists, specs win.
+
+## OpenSpec workflow
+
+We do **spec-driven development**: formalize *what* changes as reviewable artifacts, approve, then implement. Don't write feature code straight from a chat prompt — capture it as a change first.
+
+**The loop** (one change per milestone from `research/04-design/02-milestones.md`):
+
+```
+explore ──▶ propose ──▶ apply ──▶ archive
+(think)    (artifacts) (implement) (merge into specs/)
+```
+
+**Slash commands** (preferred entry points):
+- `/opsx:explore <topic>` — thinking/investigation mode. **Never implements**; may read code/clone OSS to `/tmp` for understanding and may create OpenSpec artifacts. Use it before committing to an approach.
+- `/opsx:propose <name>` — create a change and generate all artifacts (`proposal.md` → `design.md` + `specs/` → `tasks.md`).
+- `/opsx:apply` — implement a proposed change by walking its `tasks.md` checkboxes. This is where real code gets written.
+
+**Underlying CLI** (`openspec`, v1.4.x):
+- `openspec list` — active changes · `openspec list --specs` — established specs
+- `openspec new change "<name>"` — scaffold a change
+- `openspec status --change "<name>" [--json]` — artifact build order & paths
+- `openspec instructions <artifact> --change "<name>" --json` — template + rules for an artifact (follow these; do NOT copy the `context`/`rules` blocks into the file)
+- `openspec validate "<name>"` — validate before committing
+- `openspec archive "<name>"` — on completion, merge spec deltas into `openspec/specs/`
+
+**Artifact order & dependencies:** `proposal` → (`design` + `specs`) → `tasks`. `tasks` is the apply gate.
+
+**Spec delta format** (in `changes/<name>/specs/<capability>/spec.md`):
+- Use `## ADDED Requirements` / `## MODIFIED Requirements` / `## REMOVED Requirements`.
+- `### Requirement: <name>` with **SHALL/MUST** (avoid should/may); every requirement needs ≥1 scenario.
+- `#### Scenario: <name>` with **WHEN/THEN** — scenarios MUST use exactly **4 hashtags** (3 fails silently).
+
+**Lifecycle rule:** `openspec/specs/` is the source of truth and only grows via `openspec archive` after a change is implemented. In-flight work lives in `openspec/changes/<name>/`. Commit proposal artifacts as `docs(openspec): …`; commit the implementation under the relevant `feat`/`chore` scope.
+
+**Current open change:** `add-app-skeleton` (P0) — proposed & validated; run `/opsx:apply` to build it. Carries the architectural seam (all logic talks to the `Terminal` engine via `XttyCore`, never the view) and the staged SwiftTerm L3-start decision — see `research/04-design/01-stack-sketch.md`.
 
 ## Conventions
 
