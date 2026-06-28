@@ -45,7 +45,7 @@ extension XCTestCase {
     /// to shrink the cap for a fast, exact bounded-scrollback flood. The temp dir
     /// is removed via a teardown block.
     func launchConfigured(config configText: String, scrollbackOverride: Int? = nil,
-                          extraEnv: [String: String] = [:]) -> XCUIApplication {
+                          extraEnv: [String: String] = [:], extraArgs: [String] = []) -> XCUIApplication {
         let fm = FileManager.default
         // XDG_CONFIG_HOME points at <base>; the loader reads <base>/xtty/config.
         let base = (NSTemporaryDirectory() as NSString)
@@ -60,6 +60,7 @@ extension XCTestCase {
         let app = XCUIApplication()
         var args = ["-UITestGridDump"]
         if let n = scrollbackOverride { args += ["-UITestScrollback", String(n)] }
+        args += extraArgs
         app.launchArguments = args
         app.launchEnvironment["XDG_CONFIG_HOME"] = base
         for (k, v) in extraEnv { app.launchEnvironment[k] = v }

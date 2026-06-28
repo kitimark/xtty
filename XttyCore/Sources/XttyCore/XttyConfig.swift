@@ -104,14 +104,18 @@ public struct XttyConfig: Equatable, Sendable {
     /// `${column}` tokens). `nil` means "infer from `$VISUAL`/`$EDITOR`, else
     /// macOS `open`" (see `LinkRouter`).
     public var linkOpener: String?
+    /// Number of unified-diff context lines shown in the git-review panel
+    /// (`git diff --unified=N`). Non-negative; default 3 (git's own default).
+    public var diffContext: Int
 
-    public init(fontFamily: String?, fontSize: Double, themeName: String, scrollback: Int, optionAsMeta: Bool, linkOpener: String? = nil) {
+    public init(fontFamily: String?, fontSize: Double, themeName: String, scrollback: Int, optionAsMeta: Bool, linkOpener: String? = nil, diffContext: Int = 3) {
         self.fontFamily = fontFamily
         self.fontSize = fontSize
         self.themeName = themeName
         self.scrollback = scrollback
         self.optionAsMeta = optionAsMeta
         self.linkOpener = linkOpener
+        self.diffContext = diffContext
     }
 
     /// The built-in defaults used for a missing file or any invalid value.

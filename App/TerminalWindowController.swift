@@ -64,6 +64,18 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
     private var sidebarWidthConstraint: NSLayoutConstraint?
     private(set) var sidebarVisible = true
 
+    // MARK: Git-review panel (P6a)
+    /// The default git-review panel width when shown.
+    private static let gitPanelWidth: CGFloat = 280
+    /// The SwiftUI git-review panel (`NSHostingView`), trailing panel.
+    private var gitPanelHost: NSView?
+    /// Width constraint toggled to collapse/expand the git-review panel.
+    private var gitPanelWidthConstraint: NSLayoutConstraint?
+    /// Starts collapsed (the panel is only useful in a repo and costs width).
+    private(set) var gitReviewVisible = false
+    /// Owns the window's git-review store + lean refresh policy (focused-pane-driven).
+    let gitReview = GitReviewController()
+
     init(profile: XttyProfile, registry: SessionRegistry, confirmClose: Bool = true,
          contentSize: NSSize = NSSize(width: 900, height: 560)) {
         self.registry = registry
@@ -90,9 +102,21 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         // or AppKit's deferred touch-bar/display-cycle update can touch freed views
         // (EXC_BAD_ACCESS in objc_release). It's freed when the controller is.
         window.isReleasedWhenClosed = false
-        // The window content is [ sidebar | terminalContainer ]; the pane-tree
-        // (single leaf now, NSSplitViews after a split) lives in terminalContainer.
+        // The window content is [ sidebar | terminalContainer | git-review ]; the
+        // pane-tree (single leaf now, NSSplitViews after a split) lives in
+        // terminalContainer.
         buildLayout(terminalRoot: root.view)
+
+        // Git-review panel (P6a): focused-pane-driven, only works when visible.
+        gitReview.isVisible = { [weak self] in self?.gitReviewVisible ?? false }
+        gitReview.targetProvider = { [weak self] in self?.currentGitReviewTarget() }
+        #if DEBUG
+        // Harness: start with the panel open so the e2e can drive it without a
+        // (flaky) menu click; the file-poll trigger then drives selection.
+        if ProcessInfo.processInfo.arguments.contains("-UITestGitReview") {
+            setGitReviewVisible(true)
+        }
+        #endif
         // Native macOS window tabbing: a tab IS a window (Ghostty model). Shared
         // identifier groups xtty windows; macOS provides the tab bar, Cmd+Shift+[/],
         // drag-tab-out, and Merge All for free.
@@ -142,6 +166,8 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         guard let pane = panes[activePaneID] else { return }
         window.makeFirstResponder(pane.view)
         registry.setFocus(activePaneID)
+        // The git-review panel follows the focused pane (no-op when collapsed).
+        gitReview.refreshNow()
     }
 
     private func setActivePane(_ id: PaneID) {
@@ -161,10 +187,21 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         host.translatesAutoresizingMaskIntoConstraints = false
         terminalContainer.translatesAutoresizingMaskIntoConstraints = false
         sidebarHost = host
+        // Trailing git-review panel (P6a), starts collapsed (width 0, hidden).
+        let gitHost = NSHostingView(rootView: makeGitReviewRootView())
+        gitHost.translatesAutoresizingMaskIntoConstraints = false
+        gitHost.isHidden = true
+        gitPanelHost = gitHost
         container.addSubview(host)
         container.addSubview(terminalContainer)
+        container.addSubview(gitHost)
         let widthC = host.widthAnchor.constraint(equalToConstant: Self.sidebarWidth)
         sidebarWidthConstraint = widthC
+        let gitWidthC = gitHost.widthAnchor.constraint(equalToConstant: 0)
+        gitPanelWidthConstraint = gitWidthC
+        // Window content is [ sidebar | terminalContainer | git-review ]; the
+        // terminal's trailing now pins to the git panel's leading (not the
+        // container), so a collapsed (0-width) panel leaves the terminal full-width.
         NSLayoutConstraint.activate([
             host.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             host.topAnchor.constraint(equalTo: container.topAnchor),
@@ -173,7 +210,11 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             terminalContainer.leadingAnchor.constraint(equalTo: host.trailingAnchor),
             terminalContainer.topAnchor.constraint(equalTo: container.topAnchor),
             terminalContainer.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            terminalContainer.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            terminalContainer.trailingAnchor.constraint(equalTo: gitHost.leadingAnchor),
+            gitHost.topAnchor.constraint(equalTo: container.topAnchor),
+            gitHost.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            gitHost.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            gitWidthC,
         ])
         window.contentView = container
         setTerminalRoot(terminalRoot)
@@ -212,6 +253,43 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         sidebarVisible.toggle()
         sidebarWidthConstraint?.constant = sidebarVisible ? Self.sidebarWidth : 0
         sidebarHost?.isHidden = !sidebarVisible
+    }
+
+    /// The SwiftUI git-review panel root, wired to the window's controller.
+    private func makeGitReviewRootView() -> GitReviewView {
+        GitReviewView(
+            store: gitReview.store,
+            onSelect: { [weak self] path in self?.gitReview.select(path: path) },
+            onOpen: { [weak self] path in self?.gitReview.open(path: path) },
+            onRefresh: { [weak self] in self?.gitReview.refreshNow() }
+        )
+    }
+
+    /// Toggle the git-review panel (View ▸ Toggle Git Review, ⌃⌘G).
+    func toggleGitReview() { setGitReviewVisible(!gitReviewVisible) }
+
+    /// Show/hide the git-review panel, starting/stopping its refresh policy.
+    private func setGitReviewVisible(_ visible: Bool) {
+        gitReviewVisible = visible
+        gitPanelWidthConstraint?.constant = visible ? Self.gitPanelWidth : 0
+        gitPanelHost?.isHidden = !visible
+        gitReview.setPolling(visible)
+        if visible { gitReview.refreshNow() }   // refresh-on-open
+    }
+
+    /// The focused pane's git-review target (cwd + diff-context + editor opener);
+    /// `nil` when no pane is focused. A remote cwd surfaces as `isRemote`.
+    private func currentGitReviewTarget() -> GitReviewTarget? {
+        guard let pane = panes[activePaneID] else { return nil }
+        let session = pane.pane.session
+        let remote = session.currentWorkingDirectory?.isRemote ?? false
+        let dir = remote ? nil : (session.liveLocalDirectory ?? session.launchConfig.cwd)
+        return GitReviewTarget(
+            localDirectory: dir,
+            isRemote: remote,
+            diffContext: pane.profile.config.diffContext,
+            openFile: { [weak pane] absolutePath in pane?.openLink(absolutePath) }
+        )
     }
 
     /// This tab's title (the window title), shown as the sidebar section header.
@@ -334,6 +412,12 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
 
     func paneRequestsNewWindow(_ pane: PaneController) {
         coordinator?.openNewWindow()
+    }
+
+    func paneDidFinishCommand(_ pane: PaneController) {
+        // Only the focused pane drives the panel; debounced + gated downstream.
+        guard pane.pane.id == activePaneID else { return }
+        gitReview.scheduleRefresh()
     }
 
     // MARK: Split / close
@@ -560,6 +644,9 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             // without reading scroll chrome or the real clipboard.
             "lastJumpTargetRow": active.lastJumpTargetRow.map { NSNumber(value: $0) } ?? NSNull(),
             "lastCopiedOutput": active.lastCopiedOutput ?? NSNull(),
+            // Git review (P6a): the cached store snapshot — NEVER exec git here
+            // (this runs on the 0.15s dump timer). Counts/paths/statuses only.
+            "gitReview": Self.gitReviewDump(gitReview.store),
         ]
         if let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]) {
             try? data.write(to: URL(fileURLWithPath: UITestDump.stateDumpPath))
@@ -595,6 +682,56 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         case "copy": pane.copyCommandOutputForTest()
         default: break
         }
+    }
+
+    /// XCUITest hook: select a file in the git-review panel (loads its diff through
+    /// the real runner), so the harness asserts the resolved diff summary via the
+    /// gitReview state dump (P6a).
+    func routeTestGitSelectOnActivePane(_ path: String) {
+        gitReview.select(path: path)
+    }
+
+    /// XCUITest hook: route a git-review "open in editor" through the real
+    /// resolve+record pipeline (the repo-root-relative path → absolute → the pane's
+    /// `routeTestLink`, which records `lastLinkOpen` WITHOUT launching an editor).
+    func routeTestGitOpenOnActivePane(_ path: String) {
+        guard let root = gitReview.store.snapshot.repoRoot else { return }
+        let absolute = (root as NSString).appendingPathComponent(path)
+        panes[activePaneID]?.routeTestLink(absolute)
+    }
+
+    /// Serialize the cached git-review snapshot for the harness state dump. Reads
+    /// the store only — it MUST NOT trigger a git exec (the dump runs on a timer).
+    private static func gitReviewDump(_ store: GitReviewStore) -> [String: Any] {
+        let snap = store.snapshot
+        let files: [[String: Any]] = snap.files.map { f in
+            [
+                "path": f.path,
+                "status": f.status.rawValue,
+                "added": f.added.map { NSNumber(value: $0) } ?? NSNull(),
+                "removed": f.removed.map { NSNumber(value: $0) } ?? NSNull(),
+            ]
+        }
+        var dict: [String: Any] = [
+            "isRepo": snap.isRepo,
+            "isRemote": snap.isRemote,
+            "gitUnavailable": snap.gitUnavailable,
+            "repoRoot": snap.repoRoot ?? "",
+            "branch": snap.branch ?? "",
+            "changedFiles": files,
+            "refreshCount": store.refreshCount,
+        ]
+        if let path = snap.selectedPath {
+            var sel: [String: Any] = ["path": path]
+            if let d = snap.selectedDiff {
+                sel["added"] = d.addedCount
+                sel["removed"] = d.removedCount
+                sel["isBinary"] = d.isBinary
+                sel["truncated"] = d.truncated
+            }
+            dict["selectedDiff"] = sel
+        }
+        return dict
     }
 
     /// Serialize the last resolved link-open action for the harness state dump.

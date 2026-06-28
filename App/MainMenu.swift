@@ -230,6 +230,14 @@ enum XttyMainMenu {
         sidebar.target = nil
         menu.addItem(sidebar)
 
+        // Git-review panel (P6a). target: nil → responder chain → AppDelegate.
+        let gitReview = NSMenuItem(title: "Toggle Git Review",
+                                   action: #selector(AppDelegate.toggleGitReview(_:)),
+                                   keyEquivalent: "g")
+        gitReview.keyEquivalentModifierMask = [.command, .control]
+        gitReview.target = nil
+        menu.addItem(gitReview)
+
         item.submenu = menu
         return item
     }

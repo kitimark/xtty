@@ -146,6 +146,7 @@ final class QuickTerminalController: NSObject, PaneControllerDelegate {
     func paneRequestsFocusMove(_ pane: PaneController, direction: FocusDirection) {}
     func paneRequestsNewTab(_ pane: PaneController) {}
     func paneRequestsNewWindow(_ pane: PaneController) {}
+    func paneDidFinishCommand(_ pane: PaneController) {}  // no git-review panel here
 
     #if DEBUG
     /// Write the quake pane's grid for the harness (paired with a main window's

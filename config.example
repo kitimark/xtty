@@ -49,6 +49,13 @@
 # line). Set `link-opener` explicitly to control it.
 # link-opener =
 
+# --- Git review (View ▸ Toggle Git Review, ⌃⌘G) ---
+#
+# The git-review panel shows the focused pane's changed files and a read-only
+# diff (it shells out to `git`; no extra setup). `diff-context` sets how many
+# unified-diff context lines are shown. Non-negative integer; default 3.
+# diff-context = 3
+
 # --- Keybindings ---
 #
 # Pick a preset, then override individual actions as needed. Default: iterm.

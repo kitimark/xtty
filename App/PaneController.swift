@@ -19,6 +19,9 @@ protocol PaneControllerDelegate: AnyObject {
     /// The pane requests a new tab / new window.
     func paneRequestsNewTab(_ pane: PaneController)
     func paneRequestsNewWindow(_ pane: PaneController)
+    /// A foreground command finished in the pane (OSC 133 `D`) — drives the
+    /// git-review panel's command-finish refresh (P6a).
+    func paneDidFinishCommand(_ pane: PaneController)
 }
 
 /// Owns one terminal pane: a single `XttyTerminalView` (its own PTY + shell +
@@ -139,6 +142,9 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
                 // A command boundary (running ↔ finished) changes the activity;
                 // signal the observable registry so the sidebar re-renders.
                 self.registry.noteActivityChange()
+                // A finished command may have changed files — refresh git review
+                // (debounced + gated downstream, so this stays cheap).
+                if case .commandEnd = mark.action { self.delegate?.paneDidFinishCommand(self) }
             }
         }
 

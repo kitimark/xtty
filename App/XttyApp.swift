@@ -125,12 +125,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
             .routeTestSpatialOpOnActivePane(op)
     }
 
+    /// XCUITest hook: if the test wrote a git-select file (a changed-file path),
+    /// select it in the key window's git-review panel (loads + records its diff in
+    /// the state dump), then consume the file. Same file-poll rationale as the link
+    /// and spatial hooks.
+    private func routePendingTestGitSelect() {
+        guard let path = ProcessInfo.processInfo.environment["XTTY_TEST_GIT_SELECT"], !path.isEmpty,
+              let sel = try? String(contentsOfFile: path, encoding: .utf8)
+                  .trimmingCharacters(in: .whitespacesAndNewlines), !sel.isEmpty else { return }
+        try? FileManager.default.removeItem(atPath: path)
+        let key = NSApp.keyWindow
+        (windowControllers.first { $0.window === key } ?? windowControllers.last)?
+            .routeTestGitSelectOnActivePane(sel)
+    }
+
+    /// XCUITest hook: if the test wrote a git-open file (a changed-file path), route
+    /// it through the git-review open pipeline (records `lastLinkOpen` without
+    /// launching an editor), then consume the file.
+    private func routePendingTestGitOpen() {
+        guard let path = ProcessInfo.processInfo.environment["XTTY_TEST_GIT_OPEN"], !path.isEmpty,
+              let target = try? String(contentsOfFile: path, encoding: .utf8)
+                  .trimmingCharacters(in: .whitespacesAndNewlines), !target.isEmpty else { return }
+        try? FileManager.default.removeItem(atPath: path)
+        let key = NSApp.keyWindow
+        (windowControllers.first { $0.window === key } ?? windowControllers.last)?
+            .routeTestGitOpenOnActivePane(target)
+    }
+
     private func startUITestDump() {
         dumpTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.routePendingTestLink()
                 self.routePendingTestSpatialOp()
+                self.routePendingTestGitSelect()
+                self.routePendingTestGitOpen()
                 let key = NSApp.keyWindow
                 // When the quake panel is key, its pane is the content under test,
                 // but the inventory must still come from a main window so the quake
@@ -235,6 +264,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
     @objc func toggleSidebar(_ sender: Any?) {
         let key = NSApp.keyWindow
         (windowControllers.first { $0.window === key } ?? windowControllers.last)?.toggleSidebar()
+    }
+
+    /// View ▸ Toggle Git Review — toggles the key window's git-review panel (P6a).
+    @objc func toggleGitReview(_ sender: Any?) {
+        let key = NSApp.keyWindow
+        (windowControllers.first { $0.window === key } ?? windowControllers.last)?.toggleGitReview()
     }
 
     func windowControllerDidClose(_ controller: TerminalWindowController) {

@@ -160,6 +160,14 @@ public enum XttyConfigLoader {
             config.linkOpener = trimmed.isEmpty ? nil : trimmed
         }
 
+        if let raw = pairs["diff-context"] {
+            if let value = Int(raw), value >= 0 {
+                config.diffContext = value
+            } else {
+                warn("diff-context: '\(raw)' is not a non-negative integer; using \(config.diffContext)")
+            }
+        }
+
         return config
     }
 
