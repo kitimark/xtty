@@ -64,6 +64,12 @@ Apply the audit's 4 confirmed-stale edits (`UPSTREAM_CONFIG.sh:5`, `AGENTS.md:23
 ### D8: Does this warrant a new established spec? Yes — `build-workflow`
 The spec-driven schema requires a spec delta, and the build/setup contract currently lives only in drift-prone prose. A small `build-workflow` capability gives that contract a source of truth — parallel to the existing meta `verification-harness` spec — so the next drift has something authoritative to fail against. The spec stays mechanism-neutral (the *what*: reproducible reconstitution, untracked generated project, one-command entry points, prereq check); the Makefile and its targets (the *how*) live here in design.
 
+### D9: Tighten the `terminal-spatial-blocks` spec too (residual the audit missed)
+Verification's residual grep caught "add-only **drop-in** patch/file" still in the established `terminal-spatial-blocks` spec — the audit had reported "no stale refs in specs/", but its specs-region pass missed these. The phrasing sits inside the deliberately mechanism-neutral "means of injecting the addition … is NOT fixed by this requirement" clause (with fork/vendored listed as alternatives), so by the audit verifier's own standard (applied to the identical *archived* copy) it is the least-stale instance — not a current-truth misrepresentation. We tighten it anyway for zero-"drop-in"-on-current-truth consistency, the explicit goal of this change.
+- **Mechanism:** a `MODIFIED` requirement delta (the convention forbids hand-editing established specs; they change only via `openspec archive`). The block is pasted whole with only "drop-in file" → "applied add-only patch"; neutrality is preserved (still "an implementation choice … NOT fixed by this requirement", still lists fork/vendored). No behavioral change, so no scenario edits.
+- **The Purpose line:** the spec's `## Purpose` also carries "drop-in patch", but deltas don't carry Purpose. Per the "finish the merge by hand" lifecycle step, the Purpose is hand-fixed when this change archives — tracked as an explicit task so it isn't forgotten.
+- *Alternative considered:* leave it (defensible — neutral phrasing, verifier-ruled not-stale). Rejected by the user in favor of full consistency; the cost is one wording-only modified capability.
+
 ## Risks / Trade-offs
 
 - **[Makefile drifts from `project.yml`/`AGENTS.md` over time]** → Keep the Makefile thin (it only invokes documented commands), reference `AGENTS.md → Building` in a header comment, and have `doctor` be the one place prerequisites are encoded.
