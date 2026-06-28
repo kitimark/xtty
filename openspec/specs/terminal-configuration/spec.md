@@ -2,7 +2,6 @@
 
 ## Purpose
 How xtty is configured: a single user file, read once at startup, that sets the terminal's appearance and a few input behaviors without recompiling. Discovery, parsing, and resolution live in a view-free `XttyCore` component that yields a typed, toolkit-independent configuration (font family + size, an RGB palette named by theme, scrollback retention, option-as-meta); the app layer maps that onto the live SwiftTerm view. The format is line-oriented `key = value` (Ghostty-style), forward-compatible (unknown keys ignored) and fail-soft (a missing file or any invalid value falls back to defaults rather than blocking launch). Also covers ephemeral runtime font-size adjustment (Cmd +/−/0), which is not persisted to the file.
-
 ## Requirements
 ### Requirement: Config file discovery and parsing
 xtty SHALL read a single user configuration file at startup, located at `$XDG_CONFIG_HOME/xtty/config` when `XDG_CONFIG_HOME` is set, otherwise `~/.config/xtty/config`. The file format SHALL be line-oriented `key = value` pairs, where lines beginning with `#` are comments, blank lines are ignored, and surrounding whitespace around keys and values is trimmed. A missing or unreadable file SHALL be treated as "all defaults" and MUST NOT prevent the app from launching.
@@ -34,7 +33,7 @@ The file MAY additionally contain profile **section headers** of the form `[prof
 - **THEN** that header is logged and skipped, and the rest of the file (base plus any valid profile blocks) still loads
 
 ### Requirement: Configuration schema with defaults and per-key fallback
-xtty SHALL recognize the following appearance keys, each with a built-in default: `font-family`, `font-size`, `theme`, `scrollback`, and `option-as-meta`. It SHALL additionally recognize the launch keys `command`, `cwd`, and repeated `env-<NAME>` keys (valid in the base profile and in any profile block), and the global keys `default-profile` and `confirm-close` (honored only in the base profile). Unrecognized keys SHALL be ignored so older/newer configs remain loadable (forward-compatible). A recognized key whose value is invalid (e.g. a non-numeric `font-size`) SHALL fall back to that key's default and SHALL be logged, without aborting startup.
+xtty SHALL recognize the following appearance keys, each with a built-in default: `font-family`, `font-size`, `theme`, `scrollback`, and `option-as-meta`. It SHALL additionally recognize the launch keys `command`, `cwd`, and repeated `env-<NAME>` keys (valid in the base profile and in any profile block), the global keys `default-profile` and `confirm-close` (honored only in the base profile), and the git-review key `diff-context` — the number of unified-diff context lines shown in the git-review panel, a non-negative integer defaulting to `3`. Unrecognized keys SHALL be ignored so older/newer configs remain loadable (forward-compatible). A recognized key whose value is invalid (e.g. a non-numeric `font-size`, or a non-integer `diff-context`) SHALL fall back to that key's default and SHALL be logged, without aborting startup.
 
 #### Scenario: Recognized values are applied
 - **WHEN** the config sets `font-family`, `font-size`, `theme`, `scrollback`, and `option-as-meta` to valid values
@@ -51,6 +50,11 @@ xtty SHALL recognize the following appearance keys, each with a built-in default
 #### Scenario: Launch and global keys are recognized
 - **WHEN** the config sets `command`, `cwd`, an `env-<NAME>`, `default-profile`, and `confirm-close` to valid values
 - **THEN** each is parsed into the resolved configuration (launch keys per profile; `default-profile`/`confirm-close` globally) rather than being ignored as unknown
+
+#### Scenario: diff-context is recognized with a default and fallback
+- **WHEN** the config sets `diff-context` to a valid non-negative integer
+- **THEN** the resolved configuration uses that value for git-review diff context
+- **AND WHEN** `diff-context` is absent or unparseable, the resolved value is the default (`3`), the issue (if any) is logged, and the app still launches
 
 ### Requirement: View-free configuration component in XttyCore
 The discovery, parsing, and resolution of configuration SHALL live in a view-free `XttyCore` component, exercisable by unit tests without launching the app or creating a terminal view. The component SHALL produce a typed, toolkit-independent **configuration set**: a base profile plus zero or more named profiles (each with a resolved appearance configuration and a launch override) and an optional default-profile selection. Each profile's resolved appearance SHALL express font family + size, RGB color values, and a named/standard palette, and SHALL NOT depend on AppKit view types.
