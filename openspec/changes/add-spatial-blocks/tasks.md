@@ -1,44 +1,44 @@
 ## 1. Injectable accessor seam (build now, no SwiftTerm mechanism)
 
-- [ ] 1.1 Define the accessor seam in the App layer — a protocol/closure `ScrollCoordinateReading { scrollInvariantRow() -> Int?; scrollbackBase() -> Int? }` (or equivalent), with a **production implementation that returns `nil`** (so the feature no-ops gracefully); wire `PaneController` to read through it
-- [ ] 1.2 Add a **fake** seam for tests returning synthetic rows, so the full happy path (capture → invalidate → reverse-map → prev/next → jump/copy range) is exercisable without any SwiftTerm change; `SwiftTerm` pin stays `from: "1.13.0"` unchanged
-- [ ] 1.3 Author the eventual `XttyAccessors.swift` content as a committed artifact in xtty (the drop-in file: `public extension Terminal` with `getScrollInvariantCursorLocation()` = `Position(col: buffer.x, row: buffer.yBase + buffer.y + buffer.linesTop)`, doc-noting the `getCursorLocation` yBase-relative trap, + `var scrollbackBase: Int { buffer.linesTop }`) — not yet compiled, ready for Phase 2
+- [x] 1.1 Define the accessor seam in the App layer — a protocol/closure `ScrollCoordinateReading { scrollInvariantRow() -> Int?; scrollbackBase() -> Int? }` (or equivalent), with a **production implementation that returns `nil`** (so the feature no-ops gracefully); wire `PaneController` to read through it
+- [x] 1.2 Add a **fake** seam for tests returning synthetic rows, so the full happy path (capture → invalidate → reverse-map → prev/next → jump/copy range) is exercisable without any SwiftTerm change; `SwiftTerm` pin stays `from: "1.13.0"` unchanged
+- [x] 1.3 Author the eventual `XttyAccessors.swift` content as a committed artifact in xtty (the drop-in file: `public extension Terminal` with `getScrollInvariantCursorLocation()` = `Position(col: buffer.x, row: buffer.yBase + buffer.y + buffer.linesTop)`, doc-noting the `getCursorLocation` yBase-relative trap, + `var scrollbackBase: Int { buffer.linesTop }`) — not yet compiled, ready for Phase 2
 
 ## 2. XttyCore — anchor model + invalidation (view-free, unit-tested)
 
-- [ ] 2.1 Add `BlockAnchor { epoch; promptRow?; outputStart?; outputEnd? }` (Sendable) and an optional anchor on `Block`; expose the running block's `outputStart`; keep all existing coordinate-free `Block` fields/initializers and invariants unchanged
-- [ ] 2.2 Extend `BlockTracker` to accept a captured absolute row at each of `A`/`C`/`D` and stamp it with the current epoch onto the block's anchor; skip capture while the alternate screen is active; keep capture optional (nil row → no anchor)
-- [ ] 2.3 Add the epoch + invalidation API to the per-session model: `bumpEpoch()` (dead-stamps all prior anchors), a `liveTop` high-water tracker that bumps the epoch on a drop, and an `anchorIsValid(_:)` check; all pure/view-free
-- [ ] 2.4 Add the reverse-map (`displayRow = absoluteRow − scrollbackBase`, with a "trimmed out" result when below the floor) and the previous/next-block target selection over the session block list, as pure functions
-- [ ] 2.5 Unit tests: anchor capture/skip-on-alt, epoch invalidation (resize bump + liveTop drop), reverse-map incl. trimmed-out, prev/next selection incl. ends and all-invalid; confirm the existing 134 XttyCore tests still pass
+- [x] 2.1 Add `BlockAnchor { epoch; promptRow?; outputStart?; outputEnd? }` (Sendable) and an optional anchor on `Block`; expose the running block's `outputStart`; keep all existing coordinate-free `Block` fields/initializers and invariants unchanged
+- [x] 2.2 Extend `BlockTracker` to accept a captured absolute row at each of `A`/`C`/`D` and stamp it with the current epoch onto the block's anchor; skip capture while the alternate screen is active; keep capture optional (nil row → no anchor)
+- [x] 2.3 Add the epoch + invalidation API to the per-session model: `bumpEpoch()` (dead-stamps all prior anchors), a `liveTop` high-water tracker that bumps the epoch on a drop, and an `anchorIsValid(_:)` check; all pure/view-free
+- [x] 2.4 Add the reverse-map (`displayRow = absoluteRow − scrollbackBase`, with a "trimmed out" result when below the floor) and the previous/next-block target selection over the session block list, as pure functions
+- [x] 2.5 Unit tests: anchor capture/skip-on-alt, epoch invalidation (resize bump + liveTop drop), reverse-map incl. trimmed-out, prev/next selection incl. ends and all-invalid; confirm the existing 134 XttyCore tests still pass
 
 ## 3. XttyCore — keybinding actions
 
-- [ ] 3.1 Add `jumpPrevPrompt` / `jumpNextPrompt` / `copyCommandOutput` to the `KeyAction` enum (raw values `jump-prev-prompt` / `jump-next-prompt` / `copy-command-output`)
-- [ ] 3.2 Add default chords to both presets: `jump-prev-prompt = Cmd+Shift+Up`, `jump-next-prompt = Cmd+Shift+Down`, and a copy chord; add the `cmdShift(_:KeyToken)` arrow helper as needed; unit-test that the new actions resolve in both presets and honor `keybind-<action>` overrides
+- [x] 3.1 Add `jumpPrevPrompt` / `jumpNextPrompt` / `copyCommandOutput` to the `KeyAction` enum (raw values `jump-prev-prompt` / `jump-next-prompt` / `copy-command-output`)
+- [x] 3.2 Add default chords to both presets: `jump-prev-prompt = Cmd+Shift+Up`, `jump-next-prompt = Cmd+Shift+Down`, and a copy chord; add the `cmdShift(_:KeyToken)` arrow helper as needed; unit-test that the new actions resolve in both presets and honor `keybind-<action>` overrides
 
 ## 4. App — anchor capture + invalidation wiring
 
-- [ ] 4.1 In the OSC-133 handler in `PaneController`/`TerminalSession`, capture the scroll-invariant cursor row **through the seam** (`scrollInvariantRow()`) synchronously at `A`/`C`/`D` and pass the `Int?` to `BlockTracker` (main-actor); `nil` → no anchor (production today)
-- [ ] 4.2 Fill the empty `PaneController.sizeChanged(source:newCols:newRows:)` stub to hop to the main actor and `bumpEpoch()` for that session; sample `liveTop` (derived from the seam) on the `scrolled` delegate and bump on a high-water drop
-- [ ] 4.3 Confirm the `LinkRoutingTerminalDelegate` proxy still forwards `sizeChanged`/`scrolled` unchanged (no regression to P4b-1)
+- [x] 4.1 In the OSC-133 handler in `PaneController`/`TerminalSession`, capture the scroll-invariant cursor row **through the seam** (`scrollInvariantRow()`) synchronously at `A`/`C`/`D` and pass the `Int?` to `BlockTracker` (main-actor); `nil` → no anchor (production today)
+- [x] 4.2 Fill the empty `PaneController.sizeChanged(source:newCols:newRows:)` stub to hop to the main actor and `bumpEpoch()` for that session; sample `liveTop` (derived from the seam) on the `scrolled` delegate and bump on a high-water drop
+- [x] 4.3 Confirm the `LinkRoutingTerminalDelegate` proxy still forwards `sizeChanged`/`scrolled` unchanged (no regression to P4b-1)
 
 ## 5. App — jump-to-prompt
 
-- [ ] 5.1 Add `jumpToPrompt(previous:)` on `PaneController`: pick the prev/next target (group 2.4), validate the anchor, reverse-map, and call the public `view.scrollTo(row:)`; no-op gracefully when no valid target; never move cursor/selection
-- [ ] 5.2 Wire menu items + `@objc` selectors + validate-whitelist for the two jump actions through the existing keybind→menu pipeline; route to the active pane
+- [x] 5.1 Add `jumpToPrompt(previous:)` on `PaneController`: pick the prev/next target (group 2.4), validate the anchor, reverse-map, and call the public `view.scrollTo(row:)`; no-op gracefully when no valid target; never move cursor/selection
+- [x] 5.2 Wire menu items + `@objc` selectors + validate-whitelist for the two jump actions through the existing keybind→menu pipeline; route to the active pane
 
 ## 6. App — copy-command-output + toast
 
-- [ ] 6.1 Add `copyCommandOutput()` on `PaneController`: resolve the target block (focused/last completed, or running), validate the anchor, reverse-map `[outputStart … outputEnd]` (running → `… currentCursorRow`) to `Position`s, `getText(start:end:)` → `NSPasteboard`; exclude the trailing prompt; no-op on invalid/trimmed anchor
-- [ ] 6.2 Add a transient non-modal confirmation (flash/toast) shown on copy success and on a no-op indication; ensure it never blocks input
-- [ ] 6.3 Wire the copy menu item + `@objc` selector + validate-whitelist + active-pane routing
+- [x] 6.1 Add `copyCommandOutput()` on `PaneController`: resolve the target block (focused/last completed, or running), validate the anchor, reverse-map `[outputStart … outputEnd]` (running → `… currentCursorRow`) to `Position`s, `getText(start:end:)` → `NSPasteboard`; exclude the trailing prompt; no-op on invalid/trimmed anchor
+- [x] 6.2 Add a transient non-modal confirmation (flash/toast) shown on copy success and on a no-op indication; ensure it never blocks input
+- [x] 6.3 Wire the copy menu item + `@objc` selector + validate-whitelist + active-pane routing
 
 ## 7. Harness — DEBUG dump + Phase-1 e2e (degradation)
 
-- [ ] 7.1 Add `lastJumpTargetRow` and `lastCopiedOutput` to the DEBUG state dump (`#if DEBUG` + `-UITestGridDump`), set on jump/copy (no-op recorded as such); add the in-process DEBUG trigger to drive jump/copy (mirroring the P4b-1 link trigger)
-- [ ] 7.2 Phase-1 e2e (seam returns `nil`): assert jump/copy via the trigger record a **graceful no-op** in the dump (no jump target / no copied output), and the post-resize case stays a no-op; run the full `xcodebuild test` UI suite green
-- [ ] 7.3 Confirm the happy path is covered now at the unit/integration level via the fake seam (group 2.5 / 5 / 6), since the real-zsh happy-path e2e is gated on Phase 2 light-up
+- [x] 7.1 Add `lastJumpTargetRow` and `lastCopiedOutput` to the DEBUG state dump (`#if DEBUG` + `-UITestGridDump`), set on jump/copy (no-op recorded as such); add the in-process DEBUG trigger to drive jump/copy (mirroring the P4b-1 link trigger)
+- [x] 7.2 Phase-1 e2e (seam returns `nil`): assert jump/copy via the trigger record a **graceful no-op** in the dump (no jump target / no copied output), and the post-resize case stays a no-op; run the full `xcodebuild test` UI suite green
+- [x] 7.3 Confirm the happy path is covered now at the unit/integration level via the fake seam (group 2.5 / 5 / 6), since the real-zsh happy-path e2e is gated on Phase 2 light-up
 
 ## 8. Phase 2 — light up (deferred; the chosen mechanism)
 

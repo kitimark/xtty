@@ -555,6 +555,11 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             "runningCommand": session.runningCommand ?? "",
             // File-link opening (P4b-1): the last resolved link-open action.
             "lastLinkOpen": Self.linkOpenDump(active.lastLinkOpen),
+            // Spatial blocks (P4b-2): last jump target row + last copied output
+            // (NSNull = no-op / nothing yet), so the harness asserts jump/copy
+            // without reading scroll chrome or the real clipboard.
+            "lastJumpTargetRow": active.lastJumpTargetRow.map { NSNumber(value: $0) } ?? NSNull(),
+            "lastCopiedOutput": active.lastCopiedOutput ?? NSNull(),
         ]
         if let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]) {
             try? data.write(to: URL(fileURLWithPath: UITestDump.stateDumpPath))
@@ -577,6 +582,19 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
     /// launch). Paired with the Debug ▸ "Route Test Link" menu item.
     func routeTestLinkOnActivePane(_ link: String) {
         panes[activePaneID]?.routeTestLink(link)
+    }
+
+    /// XCUITest hook: drive a spatial op (`jump-prev` / `jump-next` / `copy`) on the
+    /// focused pane through the real pipeline, recording the resolved jump target /
+    /// copied output in the state dump (P4b-2).
+    func routeTestSpatialOpOnActivePane(_ op: String) {
+        guard let pane = panes[activePaneID] else { return }
+        switch op {
+        case "jump-prev": pane.jumpToPromptForTest(previous: true)
+        case "jump-next": pane.jumpToPromptForTest(previous: false)
+        case "copy": pane.copyCommandOutputForTest()
+        default: break
+        }
     }
 
     /// Serialize the last resolved link-open action for the harness state dump.

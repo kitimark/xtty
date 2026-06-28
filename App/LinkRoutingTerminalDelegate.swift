@@ -24,6 +24,12 @@ final class LinkRoutingTerminalDelegate: NSObject, TerminalViewDelegate {
     private weak var inner: TerminalViewDelegate?
     private let onOpenLink: (String, [String: String]) -> Void
 
+    /// Optional hook fired on every scroll (P4b-2): xtty samples the engine's
+    /// `liveTop` here to detect a clear/reset between OSC marks. `scrolled` is
+    /// forwarded to `processDelegate`, but only to its `LocalProcessTerminalViewDelegate`
+    /// subset (which has no `scrolled`), so this proxy is where xtty observes it.
+    var onScrolled: ((Double) -> Void)?
+
     init(forwardingTo inner: TerminalViewDelegate,
          onOpenLink: @escaping (String, [String: String]) -> Void) {
         self.inner = inner
@@ -50,6 +56,7 @@ final class LinkRoutingTerminalDelegate: NSObject, TerminalViewDelegate {
     }
     func scrolled(source: TerminalView, position: Double) {
         inner?.scrolled(source: source, position: position)
+        onScrolled?(position)
     }
     func rangeChanged(source: TerminalView, startY: Int, endY: Int) {
         inner?.rangeChanged(source: source, startY: startY, endY: endY)

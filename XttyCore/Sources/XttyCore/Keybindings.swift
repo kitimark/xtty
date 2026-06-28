@@ -19,9 +19,14 @@ public struct Keybindings: Sendable {
 
     private static func cmd(_ c: Character) -> KeyChord { KeyChord(key: .character(c), modifiers: [.command]) }
     private static func cmdShift(_ c: Character) -> KeyChord { KeyChord(key: .character(c), modifiers: [.command, .shift]) }
+    private static func cmdShift(_ token: KeyToken) -> KeyChord { KeyChord(key: token, modifiers: [.command, .shift]) }
     private static func cmdOpt(_ token: KeyToken) -> KeyChord { KeyChord(key: token, modifiers: [.command, .option]) }
 
-    /// Bindings shared by every preset (splits, tabs/windows, close, font, find).
+    /// Bindings shared by every preset (splits, tabs/windows, close, font, find,
+    /// and the spatial-block actions). Jump-to-prompt uses Cmd+Shift+Up/Down — the
+    /// iTerm2/Ghostty macOS convention, verified free against the focus bindings
+    /// (which use Cmd+Opt+arrows). Copy-output uses Cmd+Shift+C (the literal copy
+    /// stays SwiftTerm's Cmd+C).
     private static var common: [KeyAction: KeyChord] {
         [
             .splitRight: cmd("d"),
@@ -33,6 +38,9 @@ public struct Keybindings: Sendable {
             .fontDecrease: cmd("-"),
             .fontReset: cmd("0"),
             .find: cmd("f"),
+            .jumpPrevPrompt: cmdShift(.arrowUp),
+            .jumpNextPrompt: cmdShift(.arrowDown),
+            .copyCommandOutput: cmdShift("c"),
         ]
     }
 

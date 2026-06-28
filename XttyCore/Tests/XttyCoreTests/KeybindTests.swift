@@ -99,4 +99,29 @@ final class KeybindTests: XCTestCase {
         XCTAssertEqual(kb.chord(for: .close), KeyChord(key: .character("w"), modifiers: [.command]))
         XCTAssertFalse(warnings.isEmpty)
     }
+
+    // MARK: Spatial-block actions (P4b-2)
+
+    func testSpatialActionDefaultsInBothPresets() {
+        for style in KeybindStyle.allCases {
+            let map = Keybindings.preset(style)
+            XCTAssertEqual(map[.jumpPrevPrompt], KeyChord(key: .arrowUp, modifiers: [.command, .shift]),
+                           "\(style): jump-prev-prompt = Cmd+Shift+Up")
+            XCTAssertEqual(map[.jumpNextPrompt], KeyChord(key: .arrowDown, modifiers: [.command, .shift]),
+                           "\(style): jump-next-prompt = Cmd+Shift+Down")
+            XCTAssertEqual(map[.copyCommandOutput], KeyChord(key: .character("c"), modifiers: [.command, .shift]),
+                           "\(style): copy-command-output = Cmd+Shift+C")
+        }
+    }
+
+    func testSpatialActionsAreRebindable() {
+        let kb = KeybindResolver.resolve(from: [
+            "keybind-jump-prev-prompt": "cmd+ctrl+k",
+            "keybind-copy-command-output": "cmd+opt+c",
+        ])
+        XCTAssertEqual(kb.chord(for: .jumpPrevPrompt), KeyChord(key: .character("k"), modifiers: [.command, .control]))
+        XCTAssertEqual(kb.chord(for: .copyCommandOutput), KeyChord(key: .character("c"), modifiers: [.command, .option]))
+        // Untouched spatial action keeps its preset chord.
+        XCTAssertEqual(kb.chord(for: .jumpNextPrompt), KeyChord(key: .arrowDown, modifiers: [.command, .shift]))
+    }
 }

@@ -15,6 +15,10 @@ protocol XttyTerminalViewCommands: AnyObject {
     func moveFocus(_ direction: FocusDirection)
     func newTab()
     func newWindow()
+    /// Spatial-block ops (P4b-2): scroll to the previous/next command prompt, and
+    /// copy the focused/last command's output. No-op gracefully without anchors.
+    func jumpToPrompt(_ direction: BlockNavigation.JumpDirection)
+    func copyCommandOutput()
 }
 
 /// xtty's terminal view: SwiftTerm's `LocalProcessTerminalView` plus the
@@ -77,6 +81,12 @@ final class XttyTerminalView: LocalProcessTerminalView {
     @objc func newTerminalTab(_ sender: Any?) { commands?.newTab() }
     @objc func newTerminalWindow(_ sender: Any?) { commands?.newWindow() }
 
+    // MARK: Spatial-block commands (P4b-2; responder-chain routed → commands owner)
+
+    @objc func jumpToPreviousPrompt(_ sender: Any?) { commands?.jumpToPrompt(.previous) }
+    @objc func jumpToNextPrompt(_ sender: Any?) { commands?.jumpToPrompt(.next) }
+    @objc func copyCommandOutput(_ sender: Any?) { commands?.copyCommandOutput() }
+
     // MARK: Alternate-screen detection
 
     /// SwiftTerm calls this (an `open` `TerminalDelegate` method on the view) on
@@ -102,7 +112,10 @@ final class XttyTerminalView: LocalProcessTerminalView {
              #selector(focusPaneUp(_:)),
              #selector(focusPaneDown(_:)),
              #selector(newTerminalTab(_:)),
-             #selector(newTerminalWindow(_:)):
+             #selector(newTerminalWindow(_:)),
+             #selector(jumpToPreviousPrompt(_:)),
+             #selector(jumpToNextPrompt(_:)),
+             #selector(copyCommandOutput(_:)):
             return true
         default:
             return super.validateUserInterfaceItem(item)

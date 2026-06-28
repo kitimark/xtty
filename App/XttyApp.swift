@@ -111,11 +111,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
             .routeTestLinkOnActivePane(link)
     }
 
+    /// XCUITest hook: if the test wrote a spatial-op file (`jump-prev` / `jump-next`
+    /// / `copy`), drive it on the key window's focused pane (records the resolved
+    /// jump target / copied output in the state dump, no real clipboard/scroll
+    /// dependency), then consume the file. Same file-poll rationale as the link hook.
+    private func routePendingTestSpatialOp() {
+        guard let path = ProcessInfo.processInfo.environment["XTTY_TEST_SPATIAL_PATH"], !path.isEmpty,
+              let op = try? String(contentsOfFile: path, encoding: .utf8)
+                  .trimmingCharacters(in: .whitespacesAndNewlines), !op.isEmpty else { return }
+        try? FileManager.default.removeItem(atPath: path)
+        let key = NSApp.keyWindow
+        (windowControllers.first { $0.window === key } ?? windowControllers.last)?
+            .routeTestSpatialOpOnActivePane(op)
+    }
+
     private func startUITestDump() {
         dumpTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.routePendingTestLink()
+                self.routePendingTestSpatialOp()
                 let key = NSApp.keyWindow
                 // When the quake panel is key, its pane is the content under test,
                 // but the inventory must still come from a main window so the quake

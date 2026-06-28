@@ -87,6 +87,11 @@ enum XttyMainMenu {
         menu.addItem(make("Select Pane on Right", #selector(XttyTerminalView.focusPaneRight(_:)), .focusRight))
         menu.addItem(make("Select Pane Above", #selector(XttyTerminalView.focusPaneUp(_:)), .focusUp))
         menu.addItem(make("Select Pane Below", #selector(XttyTerminalView.focusPaneDown(_:)), .focusDown))
+        menu.addItem(.separator())
+        // Spatial blocks (P4b-2): jump between command prompts + copy output.
+        menu.addItem(make("Jump to Previous Prompt", #selector(XttyTerminalView.jumpToPreviousPrompt(_:)), .jumpPrevPrompt))
+        menu.addItem(make("Jump to Next Prompt", #selector(XttyTerminalView.jumpToNextPrompt(_:)), .jumpNextPrompt))
+        menu.addItem(make("Copy Command Output", #selector(XttyTerminalView.copyCommandOutput(_:)), .copyCommandOutput))
 
         item.submenu = menu
         return item

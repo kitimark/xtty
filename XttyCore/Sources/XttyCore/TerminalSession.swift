@@ -56,9 +56,11 @@ public final class TerminalSession {
     }
 
     /// Feed a parsed OSC 133 mark into the block tracker, tagging it with the
-    /// session's current working directory.
-    public func handleSemanticMark(_ mark: SemanticMark) {
-        blocks.handle(mark, cwd: liveLocalDirectory ?? launchConfig.cwd)
+    /// session's current working directory and the engine's trim-invariant absolute
+    /// cursor row at this mark (`row` is `nil` when the coordinate provider is
+    /// unavailable — the Phase-1 seam — so the block simply gets no anchor).
+    public func handleSemanticMark(_ mark: SemanticMark, row: Int? = nil) {
+        blocks.handle(mark, cwd: liveLocalDirectory ?? launchConfig.cwd, row: row)
     }
 
     /// Record an alternate-screen transition (drives block suppression).

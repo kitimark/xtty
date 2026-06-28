@@ -51,6 +51,14 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
     /// The last resolved link-open action, surfaced in the DEBUG state dump.
     private(set) var lastLinkOpen: LinkOpenResolution?
 
+    /// The last jump-to-prompt target display row (P4b-2), or `nil` when the last
+    /// jump was a no-op (no anchored target / provider unavailable). DEBUG dump.
+    private(set) var lastJumpTargetRow: Int?
+
+    /// The last copy-command-output text (P4b-2), or `nil` when the last copy was a
+    /// no-op. DEBUG dump (so the harness asserts without reading the real clipboard).
+    private(set) var lastCopiedOutput: String?
+
     /// A safe fallback profile (base appearance + plain login shell), used only
     /// when a focused pane can't be found for split inheritance.
     static let baseProfile = XttyProfile(name: nil, config: .default, launch: .none)
@@ -101,6 +109,11 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
         let linkDelegate = LinkRoutingTerminalDelegate(forwardingTo: view) { [weak self] link, _ in
             MainActor.assumeIsolated { self?.openLink(link) }
         }
+        // Sample liveTop on scroll (P4b-2): catches a clear/reset between OSC marks
+        // for anchor invalidation. No-op in Phase 1 (the seam returns nil).
+        linkDelegate.onScrolled = { [weak self] _ in
+            MainActor.assumeIsolated { self?.sampleLiveTop() }
+        }
         view.terminalDelegate = linkDelegate
         self.linkDelegate = linkDelegate
 
@@ -118,7 +131,11 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
             guard let mark = OSC133.parse(String(decoding: data, as: UTF8.self)) else { return }
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.session.handleSemanticMark(mark)
+                // Reset detection before capture, so the new anchor (P4b-2) is
+                // stamped with the post-bump epoch. Then capture the trim-invariant
+                // cursor row through the seam (nil in Phase 1 → no anchor).
+                self.session.blocks.noteLiveTop(self.engineLiveTop())
+                self.session.handleSemanticMark(mark, row: self.engineScrollRow())
                 // A command boundary (running ↔ finished) changes the activity;
                 // signal the observable registry so the sidebar re-renders.
                 self.registry.noteActivityChange()
@@ -172,7 +189,12 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
         }
     }
 
-    nonisolated func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
+    nonisolated func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {
+        // Resize/reflow shifts buffer line indices without dropping linesTop, so
+        // every stored anchor would silently mis-resolve — invalidate them all
+        // (P4b-2, design D3). Fires after the reflow, before any later keypress.
+        MainActor.assumeIsolated { session.blocks.bumpEpoch() }
+    }
 
     nonisolated func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
         MainActor.assumeIsolated { delegate?.paneDidUpdateTitle(self, title: title) }
@@ -220,6 +242,93 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
     func routeTestLink(_ link: String) {
         lastLinkOpen = resolveLink(link)
     }
+    #endif
+
+    // MARK: Spatial blocks (P4b-2) — scroll-coordinate seam + jump + copy
+
+    // The trim-invariant absolute cursor row and scrollback base come from a
+    // SwiftTerm engine addition that is DEFERRED (design D1). Until it lands
+    // (Phase 2), these return nil, so anchors are never captured and jump/copy
+    // no-op gracefully. PHASE-2 LIGHT-UP swaps exactly these two bodies to:
+    //   row  -> engine.getScrollInvariantCursorLocation().row
+    //   base -> engine.scrollbackBase
+    private func engineScrollRow() -> Int? { nil }
+    private func engineScrollbackBase() -> Int? { nil }
+
+    /// liveTop = yBase + linesTop = (scroll-invariant cursor row) − (yBase-relative
+    /// cursor y, public). `nil` when the provider is unavailable (Phase 1).
+    private func engineLiveTop() -> Int? {
+        engineScrollRow().map { $0 - engine.getCursorLocation().y }
+    }
+
+    /// Sample liveTop for reset detection (called from the scroll hook).
+    private func sampleLiveTop() {
+        session.blocks.noteLiveTop(engineLiveTop())
+    }
+
+    /// The absolute prompt rows of anchored, still-valid blocks (jump targets).
+    private var validPromptRows: [Int] {
+        let tracker = session.blocks
+        return tracker.blocks.compactMap { block in
+            guard let anchor = block.anchor, tracker.anchorIsValid(anchor) else { return nil }
+            return anchor.promptRow
+        }
+    }
+
+    /// Scroll the viewport to the previous/next command prompt (P4b-2). Viewport
+    /// only — never moves the cursor or a selection. No-op (recorded) when the
+    /// coordinate provider is unavailable or there is no anchored target.
+    func jumpToPrompt(_ direction: BlockNavigation.JumpDirection) {
+        lastJumpTargetRow = nil
+        guard let base = engineScrollbackBase() else { return }  // provider unavailable
+        let currentTop = engine.getTopVisibleRow() + base
+        guard let targetAbs = BlockNavigation.jumpTargetRow(
+            promptRows: validPromptRows, currentTopAbsolute: currentTop, direction: direction
+        ) else { return }  // no prompt in that direction
+        let row: Int
+        switch BlockNavigation.displayRow(forAbsolute: targetAbs, scrollbackBase: base) {
+        case .row(let r): row = r
+        case .trimmedOut: row = 0  // clamp to top
+        }
+        view.scrollTo(row: row)
+        lastJumpTargetRow = row
+    }
+
+    /// Copy the focused/last command's output (or the running command's output so
+    /// far) to the clipboard, excluding the trailing prompt (P4b-2). Engine-only
+    /// (`getText` → pasteboard, no on-screen selection). No-op (recorded) on an
+    /// invalid/trimmed anchor or an unavailable provider.
+    func copyCommandOutput() {
+        lastCopiedOutput = nil
+        let tracker = session.blocks
+        guard let block = tracker.runningBlock ?? tracker.blocks.last,
+              let anchor = block.anchor, tracker.anchorIsValid(anchor),
+              let base = engineScrollbackBase(),
+              let range = BlockNavigation.outputRowRange(anchor: anchor, liveEnd: engineScrollRow()),
+              case let .row(startRow) = BlockNavigation.displayRow(forAbsolute: range.start, scrollbackBase: base),
+              case let .row(endRow) = BlockNavigation.displayRow(forAbsolute: range.end, scrollbackBase: base)
+        else { return }
+        let lastCol = max(engine.cols - 1, 0)
+        let text = engine.getText(start: Position(col: 0, row: startRow), end: Position(col: lastCol, row: endRow))
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        lastCopiedOutput = text
+        showToast("Copied output")
+    }
+
+    /// A transient, non-modal confirmation overlaid on the pane (never blocks
+    /// input). Used to confirm what copy-command-output grabbed (the fork-free
+    /// substitute for a visual selection — design D7).
+    private func showToast(_ message: String) {
+        SpatialToast.show(message, over: view)
+    }
+
+    #if DEBUG
+    /// XCUITest hooks: drive jump/copy through the real pipeline so the harness can
+    /// assert the resolved target / copied text from the state dump.
+    func jumpToPromptForTest(previous: Bool) { jumpToPrompt(previous ? .previous : .next) }
+    func copyCommandOutputForTest() { copyCommandOutput() }
     #endif
 
     // MARK: XttyTerminalViewCommands (forward the focused view's intent to the owner)

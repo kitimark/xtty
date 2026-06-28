@@ -16,6 +16,9 @@ public enum KeyAction: String, CaseIterable, Sendable {
     case fontDecrease = "font-decrease"
     case fontReset = "font-reset"
     case find = "find"
+    case jumpPrevPrompt = "jump-prev-prompt"
+    case jumpNextPrompt = "jump-next-prompt"
+    case copyCommandOutput = "copy-command-output"
 }
 
 /// Toolkit-independent modifier keys. The app layer maps these to
