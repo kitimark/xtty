@@ -21,9 +21,10 @@ let package = Package(
     ],
     dependencies: [
         // SwiftTerm is a GITIGNORED upstream clone (external/SwiftTerm, pinned via
-        // patches/swiftterm/UPSTREAM_CONFIG.sh) with our add-only accessor file dropped
-        // in — the no-fork "patch in repo" mechanism (P4b-2, Playwright-style). Run
-        // scripts/bootstrap-swiftterm.sh once after cloning (it reconstitutes this path).
+        // patches/swiftterm/UPSTREAM_CONFIG.sh) with our add-only accessor patch
+        // (xtty-accessors.diff) applied via git apply — the no-fork "patch in repo"
+        // mechanism (P4b-2, Playwright-style). Run scripts/bootstrap-swiftterm.sh once
+        // after cloning (it reconstitutes this path).
         // See research/03-analysis/swiftterm-fork-vs-patch-strategy.md.
         .package(path: "../external/SwiftTerm"),
     ],

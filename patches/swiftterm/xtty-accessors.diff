@@ -1,15 +1,15 @@
 diff --git a/Sources/SwiftTerm/XttyAccessors.swift b/Sources/SwiftTerm/XttyAccessors.swift
 new file mode 100644
-index 0000000..99886d2
+index 0000000..4f902ba
 --- /dev/null
 +++ b/Sources/SwiftTerm/XttyAccessors.swift
 @@ -0,0 +1,38 @@
-+// XttyAccessors.swift — the P4b-2 SwiftTerm engine addition (DROP-IN, Phase 2).
++// XttyAccessors.swift — the P4b-2 SwiftTerm engine addition (Phase 2).
 +//
 +// THIS FILE IS NOT COMPILED BY xtty. It is the committed artifact that the
 +// Phase-2 light-up drops into the SwiftTerm package's `Sources/SwiftTerm/`
-+// directory (via the chosen mechanism — a pinned submodule + drop-in, vendored
-+// source, or a fork; see research/03-analysis/swiftterm-fork-vs-patch-strategy.md
++// directory (via the chosen mechanism — a gitignored clone + git-apply'd patch,
++// or vendored source, or a fork; see research/03-analysis/swiftterm-fork-vs-patch-strategy.md
 +// and openspec change add-spatial-blocks design D1). It is add-only: it modifies
 +// no existing SwiftTerm file, mirrors the already-public `getScrollInvariantLine`
 +// idiom, and is the basis for the upstream PR that would retire the local copy.
