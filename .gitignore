@@ -10,6 +10,9 @@ XttyCore/.build/
 .swiftpm/
 XttyCore/.swiftpm/
 
+# xcodebuild DerivedData — the Makefile builds into ./build (-derivedDataPath build)
+/build/
+
 # SwiftTerm patched checkout — gitignored build infra, reconstituted by
 # scripts/bootstrap-swiftterm.sh from patches/swiftterm/UPSTREAM_CONFIG.sh.
 # (Playwright-style: track the patch + pin + script, not the upstream tree.)
