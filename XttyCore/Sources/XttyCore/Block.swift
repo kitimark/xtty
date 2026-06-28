@@ -48,6 +48,20 @@ public final class BlockTracker {
     /// The most recent semantic action seen (for the DEBUG harness dump).
     public private(set) var lastAction: SemanticAction?
 
+    /// The in-flight command, exposed as a `.running` block while a command is
+    /// executing — between its output-start (`C`) and command-end (`D`), and not
+    /// while suppressed by the alternate screen. `nil` when nothing is running.
+    /// Carries the open command's text, cwd, and start time; no end timestamp and
+    /// no screen coordinates (the jump anchor is a deferred P4b concern). The
+    /// session-progress sidebar reads this to show "running" + a live duration.
+    public var runningBlock: Block? {
+        guard phase == .running, !isAlternate, let started = openStartedAt else { return nil }
+        return Block(
+            command: openCommand, exitCode: nil, cwd: openCwd,
+            startedAt: started, endedAt: nil, state: .running
+        )
+    }
+
     private enum Phase { case idle, atPrompt, running }
     private var phase: Phase = .idle
     private var openCommand: String?

@@ -95,6 +95,33 @@ final class BlockTrackerTests: XCTestCase {
         XCTAssertEqual(t.lastAction, .commandEnd(exitCode: 2))
     }
 
+    func testRunningBlockExposedBetweenCAndD() {
+        let t = tracker()
+        XCTAssertNil(t.runningBlock, "nothing running before any command")
+        t.handle(mark(.promptStart), cwd: "/home")
+        XCTAssertNil(t.runningBlock, "at a prompt, nothing is running yet")
+        t.handle(mark(.commandStart, command: "sleep 5"), cwd: "/home")
+        let running = t.runningBlock
+        XCTAssertNotNil(running, "an in-flight command is exposed as a running block")
+        XCTAssertEqual(running?.command, "sleep 5")
+        XCTAssertEqual(running?.cwd, "/home")
+        XCTAssertEqual(running?.state, .running)
+        XCTAssertNil(running?.endedAt, "a running block has no end timestamp")
+        t.handle(mark(.commandEnd(exitCode: 0)), cwd: "/home")
+        XCTAssertNil(t.runningBlock, "the running block clears once the command ends")
+        XCTAssertEqual(t.blocks.count, 1)
+    }
+
+    func testRunningBlockSuppressedOnAlternateScreen() {
+        let t = tracker()
+        t.handle(mark(.commandStart, command: "vim"), cwd: "/x")
+        XCTAssertNotNil(t.runningBlock)
+        t.setAlternateScreen(true)  // vim takes the alternate screen
+        XCTAssertNil(t.runningBlock, "no running block is exposed while on the alternate screen")
+        t.setAlternateScreen(false)
+        XCTAssertNotNil(t.runningBlock, "the running block reappears back on the primary screen")
+    }
+
     func testParsePipelineFeedsTracker() {
         // End-to-end: OSC 133 payloads → parse → tracker.
         let t = tracker()

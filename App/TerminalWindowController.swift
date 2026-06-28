@@ -1,5 +1,6 @@
 import AppKit
 import CoreGraphics
+import SwiftUI
 import SwiftTerm
 import XttyCore
 
@@ -13,6 +14,12 @@ protocol WindowCoordinator: AnyObject {
     /// Open a new tab using a specific profile ("New Tab with Profile ▸").
     func openNewTab(relativeTo controller: TerminalWindowController, profile: XttyProfile)
     func windowControllerDidClose(_ controller: TerminalWindowController)
+
+    /// Build the `Tab ▸ Pane` sidebar snapshot for the tab group `controller`
+    /// belongs to (the session-progress sidebar, P5). View-free value snapshot.
+    func sidebarTabs(forTabGroupOf controller: TerminalWindowController) -> [SidebarTabItem]
+    /// Focus a pane by id from the sidebar — bringing its tab/window forward.
+    func focusPane(_ id: PaneID)
 }
 
 /// Owns one xtty window/tab and the **tree of panes** inside it.
@@ -46,6 +53,17 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
     private var clickMonitor: Any?
     private var isTerminated = false
 
+    // MARK: Sidebar layout
+    /// The default sidebar width when shown.
+    private static let sidebarWidth: CGFloat = 220
+    /// Hosts the pane-tree `NSSplitView`s; the trailing panel beside the sidebar.
+    private let terminalContainer = NSView()
+    /// The SwiftUI session-progress sidebar (`NSHostingView`), leading panel.
+    private var sidebarHost: NSView?
+    /// Width constraint toggled to collapse/expand the sidebar.
+    private var sidebarWidthConstraint: NSLayoutConstraint?
+    private(set) var sidebarVisible = true
+
     init(profile: XttyProfile, registry: SessionRegistry, confirmClose: Bool = true,
          contentSize: NSSize = NSSize(width: 900, height: 560)) {
         self.registry = registry
@@ -72,7 +90,9 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         // or AppKit's deferred touch-bar/display-cycle update can touch freed views
         // (EXC_BAD_ACCESS in objc_release). It's freed when the controller is.
         window.isReleasedWhenClosed = false
-        window.contentView = root.view  // single leaf; splits build NSSplitViews
+        // The window content is [ sidebar | terminalContainer ]; the pane-tree
+        // (single leaf now, NSSplitViews after a split) lives in terminalContainer.
+        buildLayout(terminalRoot: root.view)
         // Native macOS window tabbing: a tab IS a window (Ghostty model). Shared
         // identifier groups xtty windows; macOS provides the tab bar, Cmd+Shift+[/],
         // drag-tab-out, and Merge All for free.
@@ -128,6 +148,100 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         guard panes[id] != nil else { return }
         activePaneID = id
         focusActivePane()
+    }
+
+    // MARK: Sidebar layout + public surface
+
+    /// Build `window.contentView` as [ sidebar | terminalContainer ] using Auto
+    /// Layout (a fixed-width, collapsible leading sidebar), then place the initial
+    /// pane-tree root inside the terminal container.
+    private func buildLayout(terminalRoot: NSView) {
+        let container = NSView()
+        let host = NSHostingView(rootView: makeSidebarRootView())
+        host.translatesAutoresizingMaskIntoConstraints = false
+        terminalContainer.translatesAutoresizingMaskIntoConstraints = false
+        sidebarHost = host
+        container.addSubview(host)
+        container.addSubview(terminalContainer)
+        let widthC = host.widthAnchor.constraint(equalToConstant: Self.sidebarWidth)
+        sidebarWidthConstraint = widthC
+        NSLayoutConstraint.activate([
+            host.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            host.topAnchor.constraint(equalTo: container.topAnchor),
+            host.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            widthC,
+            terminalContainer.leadingAnchor.constraint(equalTo: host.trailingAnchor),
+            terminalContainer.topAnchor.constraint(equalTo: container.topAnchor),
+            terminalContainer.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            terminalContainer.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+        ])
+        window.contentView = container
+        setTerminalRoot(terminalRoot)
+    }
+
+    /// Place a pane-tree root view inside the terminal container (autoresizing to
+    /// fill it), replacing any previous tree.
+    private func setTerminalRoot(_ view: NSView) {
+        terminalContainer.subviews.forEach { $0.removeFromSuperview() }
+        view.translatesAutoresizingMaskIntoConstraints = true
+        view.frame = terminalContainer.bounds
+        view.autoresizingMask = [.width, .height]
+        terminalContainer.addSubview(view)
+    }
+
+    /// The SwiftUI sidebar root, wired to the coordinator for the tab-group
+    /// snapshot and pane focus. Before the coordinator is attached (initial render),
+    /// it falls back to just this tab so the first pane shows immediately.
+    private func makeSidebarRootView() -> SessionSidebarView {
+        SessionSidebarView(
+            registry: registry,
+            tabsProvider: { [weak self] in
+                guard let self else { return [] }
+                if let coordinator = self.coordinator {
+                    return coordinator.sidebarTabs(forTabGroupOf: self)
+                }
+                return [SidebarTabItem(id: self.window.windowNumber, title: self.tabTitle,
+                                       isCurrent: true, panes: self.paneItems())]
+            },
+            onActivate: { [weak self] id in self?.coordinator?.focusPane(id) }
+        )
+    }
+
+    /// Toggle the sidebar's visibility (View ▸ Toggle Sidebar).
+    func toggleSidebar() {
+        sidebarVisible.toggle()
+        sidebarWidthConstraint?.constant = sidebarVisible ? Self.sidebarWidth : 0
+        sidebarHost?.isHidden = !sidebarVisible
+    }
+
+    /// This tab's title (the window title), shown as the sidebar section header.
+    var tabTitle: String { window.title }
+
+    /// Whether this tab's pane tree contains `id` (the coordinator routes focus).
+    func owns(_ id: PaneID) -> Bool { tree.contains(id) }
+
+    /// Focus a pane in this tab by id and bring its window/tab forward (the
+    /// sidebar's click target — focus only, never scroll-to-row).
+    func focusPane(_ id: PaneID) {
+        guard tree.contains(id) else { return }
+        setActivePane(id)
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    /// Snapshot this tab's panes for the sidebar (in tree order).
+    func paneItems() -> [SidebarPaneItem] {
+        tree.leaves().map { pane in
+            let session = pane.session
+            return SidebarPaneItem(
+                id: pane.id,
+                label: pane.profileName ?? "shell",
+                activity: session.activity,
+                lastCommand: session.blocks.blocks.last?.command,
+                runningSince: session.blocks.runningBlock?.startedAt,
+                runningCommand: session.runningCommand,
+                isActive: pane.id == activePaneID
+            )
+        }
     }
 
     /// Terminate every pane in this window and remove observers. Idempotent
@@ -299,11 +413,11 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
     /// Divider positions reset to even on each rebuild (ratios are not persisted
     /// in this milestone — design D4).
     private func rebuildContentView() {
-        let size = window.contentView?.bounds.size ?? window.frame.size
+        let size = terminalContainer.bounds.size
         let root = makeView(for: tree, size: size)
         root.frame = NSRect(origin: .zero, size: size)
         root.autoresizingMask = [.width, .height]
-        window.contentView = root
+        setTerminalRoot(root)
         if let split = root as? NSSplitView { distributeEvenly(split) }
         focusActivePane()
     }
@@ -436,6 +550,9 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             "isAlternateScreen": session.isAlternateScreen,
             "lastSemanticAction": Self.actionName(session.blocks.lastAction),
             "blocks": blocks,
+            // Session-progress sidebar (P5): the derived activity + running command.
+            "sessionActivity": session.activity.rawValue,
+            "runningCommand": session.runningCommand ?? "",
         ]
         if let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]) {
             try? data.write(to: URL(fileURLWithPath: UITestDump.stateDumpPath))

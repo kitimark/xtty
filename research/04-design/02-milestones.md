@@ -57,7 +57,7 @@ Requirement tags reference [xtty-requirements](../03-analysis/xtty-requirements.
 **Refs:** [08-modern-innovations](../02-internals/08-modern-innovations.md), [agents-and-xtty](../03-analysis/agents-and-xtty.md), [p4 decisions](../03-analysis/p4-semantic-capture-decisions.md)
 **Risks (handled in P4a):** fragile prompt hooks (Starship/p10k) → additive `add-zsh-hook`; tmux/ssh passthrough → best-effort degrade to no-blocks; alt-screen apps NOT chopped into blocks → `bufferActivated` gating.
 
-## Phase 5 — Session-progress sidebar  ·  H1 *(the favorite feature — old P8)*  *(📋 next change: `add-session-sidebar`, fork-free)*
+## Phase 5 — Session-progress sidebar  ·  H1 *(the favorite feature — old P8)*  *(✅ `add-session-sidebar` implemented — pending archive)*
 **Goal:** at-a-glance per-session state — what you liked most in Warp. **Fully fork-free on P4a's block model.** Scope settled in [`p5-sidebar-and-p4b-sequencing`](../03-analysis/p5-sidebar-and-p4b-sequencing.md).
 - **Prerequisite (one small `XttyCore` change):** close the `BlockTracker` in-flight gap — emit `BlockState.running`, expose the running block + `startedAt` (today blocks are appended only at the closing OSC 133 `D`). Capture `rowAtC` here too (the future jump anchor — same write).
 - SwiftUI sidebar as a **`Tab ▸ Pane` tree** (key window), with a session-level state enum `idle / running / succeeded / failed / fullScreen`, from OSC 133 boundaries + exit codes + `isAlternateScreen`.

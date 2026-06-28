@@ -91,11 +91,21 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
         // the OSC 133 handler feeds the per-session block tracker. Both fire on the
         // engine's main feed path (assumeIsolated is safe — see design D1).
         view.onBufferActivated = { [weak self] isAlternate in
-            self?.session.setAlternateScreen(isAlternate)
+            guard let self else { return }
+            self.session.setAlternateScreen(isAlternate)
+            // Alt-screen flips the session activity (→ fullScreen / back); refresh
+            // the sidebar (event-driven, on the main feed thread — see design D5).
+            self.registry.noteActivityChange()
         }
         view.getTerminal().registerOscHandler(code: 133) { [weak self] data in
             guard let mark = OSC133.parse(String(decoding: data, as: UTF8.self)) else { return }
-            MainActor.assumeIsolated { self?.session.handleSemanticMark(mark) }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.session.handleSemanticMark(mark)
+                // A command boundary (running ↔ finished) changes the activity;
+                // signal the observable registry so the sidebar re-renders.
+                self.registry.noteActivityChange()
+            }
         }
 
         // Apply config (font / theme palette / bounded scrollback / option-as-meta)

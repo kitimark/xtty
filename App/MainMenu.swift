@@ -216,6 +216,15 @@ enum XttyMainMenu {
             menu.addItem(entry)
         }
 
+        menu.addItem(.separator())
+        // Session-progress sidebar (P5). target: nil → responder chain → AppDelegate.
+        let sidebar = NSMenuItem(title: "Toggle Sidebar",
+                                 action: #selector(AppDelegate.toggleSidebar(_:)),
+                                 keyEquivalent: "s")
+        sidebar.keyEquivalentModifierMask = [.command, .control]
+        sidebar.target = nil
+        menu.addItem(sidebar)
+
         item.submenu = menu
         return item
     }

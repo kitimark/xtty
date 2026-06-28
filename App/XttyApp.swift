@@ -174,6 +174,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
         }
     }
 
+    /// Build the `Tab ▸ Pane` sidebar snapshot for `controller`'s native tab group
+    /// (the session-progress sidebar, P5). Each tab window in the group maps to its
+    /// controller; quick-terminal (a separate private registry) is never a
+    /// controller, so it stays excluded.
+    func sidebarTabs(forTabGroupOf controller: TerminalWindowController) -> [SidebarTabItem] {
+        let group = controller.window.tabbedWindows ?? [controller.window]
+        return group.compactMap { window -> SidebarTabItem? in
+            guard let c = windowControllers.first(where: { $0.window === window }) else { return nil }
+            return SidebarTabItem(
+                id: window.windowNumber,
+                title: c.tabTitle,
+                isCurrent: c === controller,
+                panes: c.paneItems()
+            )
+        }
+    }
+
+    /// Focus a pane by id from the sidebar — route to its owning tab/window.
+    func focusPane(_ id: PaneID) {
+        windowControllers.first { $0.owns(id) }?.focusPane(id)
+    }
+
+    /// View ▸ Toggle Sidebar — routed via the responder chain to the app delegate;
+    /// toggles the key window's sidebar.
+    @objc func toggleSidebar(_ sender: Any?) {
+        let key = NSApp.keyWindow
+        (windowControllers.first { $0.window === key } ?? windowControllers.last)?.toggleSidebar()
+    }
+
     func windowControllerDidClose(_ controller: TerminalWindowController) {
         // Defer releasing the controller (and thus its window/views) to the next
         // runloop, so they outlive the in-progress close display cycle.

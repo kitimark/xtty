@@ -67,6 +67,22 @@ public final class TerminalSession {
         blocks.setAlternateScreen(isAlt)
     }
 
+    /// The session's at-a-glance activity for the progress sidebar (H1), derived
+    /// from the block tracker (running / last finished) and the alternate-screen
+    /// flag. Pure read of existing state — no engine calls.
+    public var activity: SessionActivity {
+        SessionActivity.derive(
+            isAlternateScreen: isAlternateScreen,
+            isRunning: blocks.runningBlock != nil,
+            lastFinished: blocks.blocks.last?.state
+        )
+    }
+
+    /// The text of the command currently running (when known), else `nil`.
+    public var runningCommand: String? {
+        blocks.runningBlock?.command
+    }
+
     /// The best-known *local* directory to start a new pane in: the live cwd when
     /// it is on the local machine, else `nil` (so callers fall back to the
     /// inherited profile's launch directory). A remote cwd (e.g. over ssh) yields

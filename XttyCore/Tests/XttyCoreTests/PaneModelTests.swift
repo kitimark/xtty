@@ -148,6 +148,23 @@ final class PaneModelTests: XCTestCase {
     }
 
     @MainActor
+    func testRevisionBumpsOnEveryObservableChange() {
+        let r = SessionRegistry()
+        let start = r.revision
+        let a = makePane(r)                       // register
+        XCTAssertGreaterThan(r.revision, start, "registering a pane bumps the revision")
+        var last = r.revision
+        r.setFocus(a.id)                          // focus
+        XCTAssertGreaterThan(r.revision, last, "focusing bumps the revision")
+        last = r.revision
+        r.noteActivityChange()                    // a block/state transition
+        XCTAssertGreaterThan(r.revision, last, "a noted activity change bumps the revision")
+        last = r.revision
+        r.unregister(a.id)                        // unregister
+        XCTAssertGreaterThan(r.revision, last, "unregistering a pane bumps the revision")
+    }
+
+    @MainActor
     func testFocusTrackingAndClearOnUnregister() {
         let r = SessionRegistry()
         let a = makePane(r), b = makePane(r)
