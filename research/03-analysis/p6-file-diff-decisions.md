@@ -199,7 +199,7 @@ Follow the DEBUG state-dump convention, **not** AX (the P5 sidebar is SwiftUI ye
 
 **Deferred increments:**
 - **P6b** — full file-tree browser (lazy-load, expand/collapse, flat-vs-tree toggle).
-- **P6a+** — gated word-level diff overlay (zed/delta gates) and syntax highlighting (forces the tree-sitter-vs-Highlightr dep choice); ahead/behind via `rev-list --count`.
+- **P6a+** — gated word-level diff overlay (zed/delta gates) — **now decided as token-level emphasis; see the "P6a+ addendum" below** (`add-git-review-polish`) — and syntax highlighting (forces the tree-sitter-vs-Highlightr dep choice); ahead/behind via `rev-list --count`.
 - **P6a+** — FSEvents auto-refresh (only if the 5 s poll proves too slow mid-agent-session; scoped to worktree root + VS Code ignore-set).
 - **Indefinite** — staging/commit (pair with lazygit; model kept forward-compatible).
 
@@ -255,13 +255,98 @@ Follow the DEBUG state-dump convention, **not** AX (the P5 sidebar is SwiftUI ye
 
 ---
 
+## P6a+ addendum — intra-line diff emphasis decided (`add-git-review-polish`)
+
+> **Provenance.** Authored 2026-06-29, a third research pass on top of the P6a doc above. Method: a 6-reader source-grounded multi-agent workflow (zed, gitui + the Rust `similar` crate, Google diff-match-patch, SwiftUI/Apple-docs rendering, lazygit pause-refresh; **delta dropped out on a tool error**) → 4 adversarial refutations of the decision-driving claims → synthesis, **cross-checked against a hand-read of delta** (`src/edits.rs`, `src/align.rs`, `src/cli.rs`), zed (`crates/buffer_diff/src/buffer_diff.rs`, `crates/language/src/text_diff.rs`, `crates/editor/src/element.rs`), and diff-match-patch (`diff_main`). Confidence legend unchanged (✅ confirmed · ❌ corrected · ❓ open).
+
+P6a (above) **deferred** word-level intra-line diff to "P6a+". This addendum **decides** it — as the headline of a small follow-on change, `add-git-review-polish`, bundled with one refresh-policy guard.
+
+### Headline
+
+Ship **token-level intra-line emphasis**: tokenize each changed line (word / punctuation / whitespace classes), run a small **LCS/Wagner–Fischer DP over the tokens**, and highlight the changed-token spans with `Text(AttributedString)` per-run `.backgroundColor`. Gated, pure-`XttyCore` algorithm + one render swap, **zero new deps**. Bundle a **one-line poll-skip-during-own-git** guard (also reconciles an over-claimed P6a task checkbox). **Defer** syntax highlighting, FSEvents, and unbalanced-run emphasis.
+
+### Resolved forks
+
+| Fork | Decision | Confidence |
+|---|---|---|
+| **Algorithm** | Real diff on the changed middle — **token-level DP** (delta/zed shape). *Not* trim-only; *not* char-level. | ✅ High |
+| **Gate** | Replacement-run; line cap ≤5; **byte cap 512**; 1:1 positional pairing (v1); **ratio-gate** ~60% (skip near-total rewrites); both-sides-non-empty | ✅ High |
+| **Rendering** | `Text(AttributedString)` + per-run `.backgroundColor`; **macOS 12+ → no availability guard, no `NSViewRepresentable` fallback** | ✅ High |
+| **pause-own-git** | **Drop** lazygit's mechanism; add **one poll-skip guard** via existing OSC-133 `runningCommand` | ✅ High |
+
+The adversarial pass returned **MIXED on all four** claims — but reading the reasoning, each "mixed" was an *overstatement of a true core*, not a wrong core; every verdict confirmed the direction and tightened one guardrail.
+
+### The token-vs-char correction (why the divergence matters)
+
+- ❌ **Trim-only is insufficient.** Every reference uses common-prefix/suffix trim as a *speedup preamble*, then a **real diff on the residue** — diff-match-patch `diff_main` trims, then runs full Myers (`diff_bisect`) on the middle, then `cleanupSemantic`. Trim-only over-highlights any multi-edit line (`foo(a,b,c)` → `foo(x,b,y)` lights up the whole `,b,` interior) — exactly the agent-review case the panel exists for.
+- ❌ **Char-level (the workflow synthesis's pick) needs a word-snap pass** — the synthesis itself ranked snap-raggedness its #1 risk. That pick **skewed char-level because delta dropped out of the workflow**, leaving general-*text* diff-match-patch as the dominant single-line source. Hand-reading delta corrected it.
+- ✅ **Token-level wins for code.** The two *code-focused* tools both tokenize (delta on `\w+`, `src/edits.rs:140-165`; zed via `CharClassifier`, `text_diff.rs:391-419`). Tokenizing **is** the word-boundary handling, so it is word-aligned by construction — no snap pass, fewer moving parts, leaner. **The lever that makes a real diff cheap is tokenization** (DP over ~tens of tokens ≈ hundreds of cells), *not* trimming: char-level DP over the 3000-char cap is ~9M cells; token-level is ~400. Char-level stays a clean upgrade (same DP, swap the unit) if sub-token precision is ever wanted.
+
+### Gate (source-grounded)
+
+Operate on a **replacement run** = a maximal block of consecutive `.deletion` lines immediately followed by consecutive `.addition` lines *within one hunk* (context lines split runs — the detector must handle that; it is the part most likely to mis-pair, unit-test it directly).
+
+- **Line cap ≤5** (zed `MAX_WORD_DIFF_LINE_COUNT`, `buffer_diff.rs:20`) and **byte cap 512** (zed `MAX_WORD_DIFF_LEN`, `text_diff.rs:10`) are the **real cost bounds**.
+- **1:1 positional pairing** (`del[i] ↔ add[i]`, requires `delCount == addCount`) is the **v1 mechanism** — line-local ranges, simplest to test. The equal-count requirement is a *pairing-mechanism precondition*, **not** a cost gate.
+- **Ratio-gate** (`similar`'s `min_ratio` idea): if the emphasized fraction > ~60 %, drop to whole-line tint (an unrelated rewrite, not an edit). **Both-sides-non-empty:** skip pure-add/pure-del runs.
+- Source nuance worth recording: zed has **two** gates — the live `buffer_diff` path (**GATE A**: equal-count AND ≤5 lines, *no* byte cap, `buffer_diff.rs:1210-1214`) and the standalone `text_diff` path (**GATE B**: ≤512 bytes, ≤8 lines, *no* equal-count, `text_diff.rs:329-342`). We take **A's equal-count** (for the simple positional pairing) **+ B's byte cap** (belt-and-suspenders against one pathological long line inside an otherwise small hunk — the gap the adversarial verdict flagged in GATE A).
+- **Named upgrade (deferred):** unbalanced runs (e.g. 2→3 lines) → diff the run's *concatenated* deletion-text vs addition-text in one pass (GATE B shape — no pairing, handles unequal counts), behind the same caps.
+
+### Rendering (source-grounded)
+
+`Text(AttributedString)` with per-run `.backgroundColor` over the changed spans — native, dependency-free, **macOS 12.0+** (`AttributeScopes.SwiftUIAttributes.backgroundColor`), so the 14–26 target needs **no availability guard and no fallback**. The widely-cited "SwiftUI AttributedString is not there yet" critique explicitly **exempts** `backgroundColor` as one of the few attributes `Text` honors. Two-layer model (zed's): the existing lighter whole-line tint (`green/red .opacity(0.18)`) as the row background **+** a **darker** changed-span `.backgroundColor` run on top — maps cleanly to a cell-background highlight, no glyph reshaping, no underline/strikethrough.
+
+Guardrails (all granularity-independent; adopt regardless of algorithm):
+- **Marker offset.** `DiffLine.text` keeps the leading `+`/`-`/space. Compute emphasis on the **marker-stripped content** (offset 0 = first content char); render the marker as a **separate fixed-width leading `Text`** in an `HStack` so it is *structurally never tinted* (also fixes column alignment in the ~240–300 pt panel).
+- **Grapheme unit-match end-to-end.** Diff and render in the **same** grapheme/`Character` unit; map offsets via `index(_:offsetByCharacters:)`. Unit mismatch is the documented cause of torn runs on emoji/CJK — and xtty already round-trips CJK + non-BMP emoji in its grid dump.
+- **Memoize.** Build the styled `AttributedString` once in the `XttyCore` model (carry emphasis spans on `DiffLine`), never in `body` — construction is the real per-row cost, not the CoreText pass.
+- **Container.** Keep the existing `LazyVStack` in the 2-axis `ScrollView` (horizontal scroll for long lines; `List` doesn't give that cleanly); the no-recycle memory hazard is already bounded by the `maxLines: 5000` per-file cap + lazy-per-file load. Pin a **fixed monospaced row height**. `NSViewRepresentable`/`List`/`HStack`-of-segments are rejected (the last breaks monospaced alignment + inflates view count).
+
+### pause-during-own-git (drop the mechanism, add one guard)
+
+lazygit's `pauseRefreshesCount` does **not** transfer: grepping its machinery for `lock`/`GIT_OPTIONAL_LOCKS` finds nothing — its rationale is bracketing lazygit's **own** multi-step git operations (rebase/reword) so a background read never lands on intermediate state. xtty **orchestrates no git** — the poller is a passive read-only observer with `GIT_OPTIONAL_LOCKS=0`, so there is no lock contention and no write race. The premise is absent; the only residual value is cosmetic (suppress a transient file-list **flash** if the 5 s poll fires mid-operation — and the OSC-133 `commandEnd` refresh self-corrects it the instant the command finishes).
+
+**Minimal correct rule (bundle this, not the mechanism):** in `GitReviewController.performRefresh`, skip **only the poll-timer tick** (never `commandEnd`, never focus/manual) when the focused session's OSC-133 `runningCommand` is a git invocation. One guard, one existing signal. Do **not** port `pauseRefreshesCount`/`WithWaitingStatusImpl`.
+
+It stays *in* the change only because it is ≈free **and** it reconciles an over-claim: P6a `tasks.md` 5.3 is checked but the shipped `GitReviewController` has **no** min-spacing, dedup-by-toplevel, or pause-own-git. Honest reconciliation — min-spacing is **subsumed by the existing serialize** (in-flight + pending), dedup-by-toplevel is **moot** (the controller only ever refreshes the single *focused* target), and pause-own-git is **now actually built**.
+
+### Best-benefit ranking / scope of `add-git-review-polish`
+
+| Item | Call | Note |
+|---|---|---|
+| **Intra-line emphasis** (token-DP) | **IN — core** | highest agent-review value; bounded cost; the reason for the change |
+| **pause-own-git** (poll-skip guard) | **IN — minimal** | ≈free; reuses `runningCommand`; reconciles the 5.3 checkbox |
+| next/prev-hunk nav | **OPTIONAL (lean: defer)** | nav is cheap, but drags in keybinding-config surface (presets + per-action overrides + a `terminal-keybindings` delta) — fast-follow, not core |
+| ahead/behind counts | **OPTIONAL (marginal)** | one `rev-list --count` + a header label; lowest priority |
+| syntax highlighting · FSEvents · unbalanced-run emphasis | **DEFER (P6a+)** | dep cost / dogfood-gated / named upgrade |
+
+### Spike + harness (do before committing the algorithm)
+
+- ❓ **~1–2 h spike:** run tokenize→DP on ~10 representative pairs — single edit, multi-edit-with-shared-interior, near-total rewrite, CJK, non-BMP emoji, combining marks — eyeball emphasis quality **and** confirm grapheme offsets render aligned through a real `Text(AttributedString)`. Validates algorithm + render unit-match together.
+- **Harness:** emphasis is new observable behavior → `gitReview` dump gains the selected diff's emphasis spans (counts/ranges, never text) + an e2e, plus `XttyCore` unit tests on the tokenizer, the DP, and replacement-run detection.
+
+### Spec surface (mechanism-neutral)
+
+- **`git-review`** (MODIFIED) — the read-only-diff requirement gains *optional, gated, bounded* intra-line emphasis; the lean-gated-refresh requirement gains the poll-skip-during-own-git refinement.
+- **`verification-harness`** (MODIFIED) — `gitReview` dump emphasis field + e2e scenario.
+- **`terminal-keybindings`** (MODIFIED) — **only if** next/prev-hunk nav is folded in.
+
+---
+
 ## Sources
 
 - **xtty codebase** (re-verified `main`@`902f41a`): `App/TerminalWindowController.swift`, `App/PaneController.swift`, `App/FileOpener.swift`, `App/XttyApp.swift`, `XttyCore/Sources/XttyCore/{OSC133,TerminalSession,XttyConfigLoader}.swift`, `XttyCore/Package.swift`.
 - **lazygit** (Go): `pkg/commands/patch/{patch_line,parse}.go`, `pkg/commands/git_commands/{file_loader,diff,working_tree}.go`, `pkg/gui/background.go`, `pkg/gui/controllers/helpers/diff_helper.go`, `go.mod`.
 - **gitui** (Rust): `asyncgit/src/sync/diff.rs`, `src/components/diff.rs`, `src/main.rs`, `src/watcher.rs`.
-- **delta** (Rust): `src/align.rs`, `src/edits.rs`, `src/delta.rs`, `src/cli.rs`, `src/handlers/{hunk,hunk_header}.rs`, `src/paint.rs`.
-- **zed** (Rust): `crates/git/src/{repository,status}.rs`, `crates/git_ui/src/{git_panel,git_panel_settings,project_diff}.rs`, `crates/buffer_diff/src/buffer_diff.rs`, `crates/project_panel/src/project_panel.rs`.
+- **delta** (Rust): `src/align.rs`, `src/edits.rs`, `src/delta.rs`, `src/cli.rs`, `src/handlers/{hunk,hunk_header}.rs`, `src/paint.rs`. *(P6a+ addendum: re-read `edits.rs` token-DP + `align.rs` Needleman–Wunsch/Wagner–Fischer + `cli.rs:594` `max-line-distance` default 0.6.)*
+- **zed** (Rust): `crates/git/src/{repository,status}.rs`, `crates/git_ui/src/{git_panel,git_panel_settings,project_diff}.rs`, `crates/buffer_diff/src/buffer_diff.rs`, `crates/project_panel/src/project_panel.rs`. *(P6a+ addendum: `buffer_diff.rs:20,1210-1238` GATE A + `crates/language/src/text_diff.rs:10-11,185-220,329-419` word tokenizer/GATE B + `crates/editor/src/element.rs:4547-4607` word-diff highlight render.)*
 - **VS Code** (TS): `extensions/git/src/{git,repository,decorators}.ts`.
 - **waveterm** (TS): `frontend/app/view/codeeditor/{diffviewer,aifilediff}.tsx`, `frontend/app/view/term/termsticker.tsx`.
 - **SwiftGit2**: no `Package.swift` (vendors libgit2 submodule + Carthage/Xcode-project) → confirms libgit2 is heavy for Swift.
+
+**P6a+ addendum, additional sources** (2026-06-29 intra-line-emphasis pass):
+- **Google diff-match-patch** (`python3/diff_match_patch.py`): `diff_main` (prefix/suffix trim → `diff_compute`/`diff_bisect` Myers on the residue → `diff_cleanupMerge`), `diff_cleanupSemantic`/`diff_cleanupSemanticLossless` (word-boundary scoring) — the reference that **trim is a preamble, not the algorithm**.
+- **Rust `similar` crate** (mitsuhiko/similar): `TextDiff`/`ChangeTag`, Myers/Patience/LCS, grapheme/word/char granularities, `min_ratio` — borrowed the ratio-gate idea, rejected the crate (dep).
+- **Apple Developer docs**: `AttributeScopes.SwiftUIAttributes.backgroundColor` (macOS 12.0+); the "AttributedString is not there yet" survey exempting `backgroundColor`; `AttributedString.index(_:offsetByCharacters:)`.
+- **lazygit** (Go): `pkg/gui/background.go` `pauseRefreshesCount` — confirmed *not* lock-related (brackets lazygit's own multi-step ops), so it does not transfer to xtty's read-only poller.
+- **Method:** 6-reader source-grounded workflow (`wf_11d118f8-14c`) → 4 adversarial verifications → synthesis, cross-checked against hand-reads of delta/zed/diff-match-patch (delta dropped from the workflow on a tool error and was supplied by hand-read).
