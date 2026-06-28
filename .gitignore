@@ -10,5 +10,10 @@ XttyCore/.build/
 .swiftpm/
 XttyCore/.swiftpm/
 
+# SwiftTerm patched checkout — gitignored build infra, reconstituted by
+# scripts/bootstrap-swiftterm.sh from patches/swiftterm/UPSTREAM_CONFIG.sh.
+# (Playwright-style: track the patch + pin + script, not the upstream tree.)
+external/SwiftTerm/
+
 # macOS
 .DS_Store

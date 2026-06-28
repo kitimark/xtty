@@ -1,7 +1,0 @@
-[submodule "external/SwiftTerm"]
-	path = external/SwiftTerm
-	url = https://github.com/migueldeicaza/SwiftTerm.git
-	# Pinned to v1.13.0; scripts/bootstrap-swiftterm.sh drops in our add-only
-	# XttyAccessors.swift (untracked in the submodule) — ignore it so the parent
-	# tree isn't perpetually "dirty". See research/.../swiftterm-fork-vs-patch-strategy.md
-	ignore = untracked
