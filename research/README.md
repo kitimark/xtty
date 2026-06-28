@@ -40,6 +40,7 @@ Research library on terminal emulators — competitive landscape, internals, and
 - [Native-app testing tooling](03-analysis/native-app-testing-tooling.md) — how an agent drives/inspects a native macOS app (Peekaboo + XCUITest), and the AX-content ceiling that forces engine-grid assertions
 - [SwiftTerm Metal renderer spike](03-analysis/swiftterm-metal-renderer-spike.md) — P2 finding: SwiftTerm's GPU path works in xtty's AppKit host; adoption deferred to the P7 latency gate
 - [P3b shell-UX decisions](03-analysis/p3b-shell-ux-decisions.md) — explore-phase decisions for the deferred half of P3 (Quick-Terminal + Profiles); error-matching moved to P4
+- [P4 semantic-capture decisions](03-analysis/p4-semantic-capture-decisions.md) — explore-phase decisions for the keystone (OSC 7 cwd + OSC 133 blocks): ship P4a (data model, fork-free) and defer P4b (jump/select/marks — needs a SwiftTerm fork); auto-inject zsh via `ZDOTDIR`; protocol grammar
 - [xtty requirements](03-analysis/xtty-requirements.md) — the opinionated product target: must-haves, features, non-goals
 
 ### 04 — Design
