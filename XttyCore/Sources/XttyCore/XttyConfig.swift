@@ -100,13 +100,18 @@ public struct XttyConfig: Equatable, Sendable {
     public var scrollback: Int
     /// Whether the Option key sends Meta (vs. typing composed characters).
     public var optionAsMeta: Bool
+    /// Command template for opening clicked file links (`${file}`/`${line}`/
+    /// `${column}` tokens). `nil` means "infer from `$VISUAL`/`$EDITOR`, else
+    /// macOS `open`" (see `LinkRouter`).
+    public var linkOpener: String?
 
-    public init(fontFamily: String?, fontSize: Double, themeName: String, scrollback: Int, optionAsMeta: Bool) {
+    public init(fontFamily: String?, fontSize: Double, themeName: String, scrollback: Int, optionAsMeta: Bool, linkOpener: String? = nil) {
         self.fontFamily = fontFamily
         self.fontSize = fontSize
         self.themeName = themeName
         self.scrollback = scrollback
         self.optionAsMeta = optionAsMeta
+        self.linkOpener = linkOpener
     }
 
     /// The built-in defaults used for a missing file or any invalid value.

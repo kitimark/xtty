@@ -29,6 +29,26 @@
 # Accepts true/false, yes/no, on/off, 1/0.
 # option-as-meta = true
 
+# --- Opening file links ---
+#
+# Cmd-click a file path in output (e.g. a compiler error like src/x.swift:42:7,
+# or a path your agent prints) to open it in your editor at that line. Relative
+# paths resolve against the pane's current directory. URLs open in your browser;
+# non-http(s) schemes are not auto-opened (a safety guard).
+#
+# `link-opener` is the command to run, with ${file}/${line}/${column} tokens
+# (missing line/column collapse away). The path is passed as a literal argument,
+# never through a shell. Examples:
+#   link-opener = code --goto ${file}:${line}:${column}     # VS Code / Cursor
+#   link-opener = subl ${file}:${line}:${column}            # Sublime Text
+#   link-opener = idea --line ${line} --column ${column} ${file}   # JetBrains
+#
+# When unset (the default), xtty infers the command from $VISUAL then $EDITOR for
+# known GUI editors (VS Code/Cursor, Sublime, JetBrains, TextMate, Emacs); a
+# terminal editor (vim/nvim/…) or an unknown one falls back to macOS `open` (no
+# line). Set `link-opener` explicitly to control it.
+# link-opener =
+
 # --- Keybindings ---
 #
 # Pick a preset, then override individual actions as needed. Default: iterm.

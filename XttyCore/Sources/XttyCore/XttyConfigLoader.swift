@@ -155,6 +155,11 @@ public enum XttyConfigLoader {
             }
         }
 
+        if let raw = pairs["link-opener"] {
+            let trimmed = raw.trimmingCharacters(in: .whitespaces)
+            config.linkOpener = trimmed.isEmpty ? nil : trimmed
+        }
+
         return config
     }
 

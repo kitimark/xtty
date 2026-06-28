@@ -44,7 +44,8 @@ extension XCTestCase {
     /// config was read and applied. `scrollbackOverride` adds `-UITestScrollback`
     /// to shrink the cap for a fast, exact bounded-scrollback flood. The temp dir
     /// is removed via a teardown block.
-    func launchConfigured(config configText: String, scrollbackOverride: Int? = nil) -> XCUIApplication {
+    func launchConfigured(config configText: String, scrollbackOverride: Int? = nil,
+                          extraEnv: [String: String] = [:]) -> XCUIApplication {
         let fm = FileManager.default
         // XDG_CONFIG_HOME points at <base>; the loader reads <base>/xtty/config.
         let base = (NSTemporaryDirectory() as NSString)
@@ -61,6 +62,7 @@ extension XCTestCase {
         if let n = scrollbackOverride { args += ["-UITestScrollback", String(n)] }
         app.launchArguments = args
         app.launchEnvironment["XDG_CONFIG_HOME"] = base
+        for (k, v) in extraEnv { app.launchEnvironment[k] = v }
         app.launch()
         // Terminate at teardown so a still-running instance can't overwrite the
         // shared /tmp dump for the next test (state like pane count is sticky).

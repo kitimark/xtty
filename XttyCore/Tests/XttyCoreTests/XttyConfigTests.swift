@@ -105,6 +105,21 @@ final class XttyConfigTests: XCTestCase {
         }
     }
 
+    func testLinkOpenerSetEmptyAbsent() {
+        XCTAssertEqual(XttyConfigLoader.resolve(from: ["link-opener": "code --goto ${file}:${line}"]).linkOpener,
+                       "code --goto ${file}:${line}")
+        XCTAssertNil(XttyConfigLoader.resolve(from: ["link-opener": "   "]).linkOpener)
+        XCTAssertNil(XttyConfigLoader.resolve(from: [:]).linkOpener)
+    }
+
+    func testLinkOpenerInheritedByProfileOverBase() {
+        // A profile inherits the base link-opener and can override it.
+        let base = XttyConfigLoader.resolve(from: ["link-opener": "code ${file}"])
+        XCTAssertEqual(XttyConfigLoader.resolve(from: [:], base: base).linkOpener, "code ${file}")
+        XCTAssertEqual(XttyConfigLoader.resolve(from: ["link-opener": "subl ${file}"], base: base).linkOpener,
+                       "subl ${file}")
+    }
+
     // MARK: Theme lookup
 
     func testThemeLookupIsCaseInsensitive() {

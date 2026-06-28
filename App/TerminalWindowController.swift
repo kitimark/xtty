@@ -553,6 +553,8 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             // Session-progress sidebar (P5): the derived activity + running command.
             "sessionActivity": session.activity.rawValue,
             "runningCommand": session.runningCommand ?? "",
+            // File-link opening (P4b-1): the last resolved link-open action.
+            "lastLinkOpen": Self.linkOpenDump(active.lastLinkOpen),
         ]
         if let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]) {
             try? data.write(to: URL(fileURLWithPath: UITestDump.stateDumpPath))
@@ -567,6 +569,35 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         case .commandStart: return "C"
         case .commandEnd: return "D"
         case nil: return ""
+        }
+    }
+
+    /// XCUITest hook: resolve a synthetic link on the focused pane through the real
+    /// pipeline + live cwd, recording the action for the state dump (no editor
+    /// launch). Paired with the Debug ▸ "Route Test Link" menu item.
+    func routeTestLinkOnActivePane(_ link: String) {
+        panes[activePaneID]?.routeTestLink(link)
+    }
+
+    /// Serialize the last resolved link-open action for the harness state dump.
+    private static func linkOpenDump(_ resolution: LinkOpenResolution?) -> [String: Any] {
+        guard let resolution else { return ["action": "none"] }
+        switch resolution {
+        case let .open(target, _):
+            switch target {
+            case let .file(path, line, column):
+                return [
+                    "action": "opened", "kind": "file", "path": path,
+                    "line": line.map { NSNumber(value: $0) } ?? NSNull(),
+                    "column": column.map { NSNumber(value: $0) } ?? NSNull(),
+                ]
+            case let .url(scheme, raw):
+                return ["action": "opened", "kind": "url", "scheme": scheme, "path": raw]
+            }
+        case let .blocked(scheme):
+            return ["action": "blocked", "scheme": scheme]
+        case let .unresolved(reason):
+            return ["action": "noop", "reason": reason]
         }
     }
     #endif

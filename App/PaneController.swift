@@ -43,6 +43,14 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
     weak var delegate: PaneControllerDelegate?
     private var processEnded = false
 
+    /// Intercepts `requestOpenLink` so clicked file/URL links route through xtty
+    /// (file:line → editor, scheme guard) instead of SwiftTerm's default opener.
+    /// Retained here because the view holds `terminalDelegate` weakly (design D1).
+    private var linkDelegate: LinkRoutingTerminalDelegate?
+
+    /// The last resolved link-open action, surfaced in the DEBUG state dump.
+    private(set) var lastLinkOpen: LinkOpenResolution?
+
     /// A safe fallback profile (base appearance + plain login shell), used only
     /// when a focused pane can't be found for split inheritance.
     static let baseProfile = XttyProfile(name: nil, config: .default, launch: .none)
@@ -86,6 +94,15 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
         view.processDelegate = self
         view.commands = self
         view.configuredFontSize = CGFloat(profile.config.fontSize)
+
+        // Route clicked links through xtty: replace the view's `terminalDelegate`
+        // (the view itself) with a proxy that forwards everything back except
+        // `requestOpenLink`, which we handle (file:line → editor + scheme guard).
+        let linkDelegate = LinkRoutingTerminalDelegate(forwardingTo: view) { [weak self] link, _ in
+            MainActor.assumeIsolated { self?.openLink(link) }
+        }
+        view.terminalDelegate = linkDelegate
+        self.linkDelegate = linkDelegate
 
         // Semantic capture (P4a). Alternate-screen transitions gate block-building;
         // the OSC 133 handler feeds the per-session block tracker. Both fire on the
@@ -175,6 +192,35 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
 
     /// This pane's headless engine (read by the window controller's DEBUG dump).
     var engine: Terminal { view.getTerminal() }
+
+    // MARK: File/URL link opening (P4b-1)
+
+    /// Resolve a clicked link against this session's live local cwd + the profile's
+    /// `link-opener` template (all view-free in `XttyCore.LinkRouter`). Pure.
+    func resolveLink(_ link: String) -> LinkOpenResolution {
+        LinkRouter.resolve(
+            link: link,
+            localCwd: session.liveLocalDirectory,
+            opener: profile.config.linkOpener,
+            environment: ProcessInfo.processInfo.environment
+        )
+    }
+
+    /// Route a clicked link: resolve, record (for the DEBUG dump), then perform
+    /// the side effect (editor / system opener), or log a blocked/unresolved one.
+    func openLink(_ link: String) {
+        let resolution = resolveLink(link)
+        lastLinkOpen = resolution
+        FileOpener.perform(resolution)
+    }
+
+    #if DEBUG
+    /// XCUITest hook: resolve a synthetic link through the real pipeline + the live
+    /// cwd and record it for the state dump, WITHOUT launching an editor.
+    func routeTestLink(_ link: String) {
+        lastLinkOpen = resolveLink(link)
+    }
+    #endif
 
     // MARK: XttyTerminalViewCommands (forward the focused view's intent to the owner)
 

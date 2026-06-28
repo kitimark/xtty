@@ -93,10 +93,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
         quickTerminal?.toggle()
     }
 
+    /// XCUITest hook: if the test wrote a synthetic link file, route it through the
+    /// key window's focused pane (records the resolved action in the state dump
+    /// without launching an editor), then consume the file. Polled by the dump
+    /// timer — a real Cmd-click over a detected link in the custom-drawn view can't
+    /// be reliably synthesized, and a file poll avoids menu-interaction flakiness.
+    private func routePendingTestLink() {
+        // The sandboxed UI-test runner can't write to /tmp, so it writes the link
+        // to its own (writable) temp dir and passes that path here; the non-sandboxed
+        // app reads it. Unset for every test except the file-link suite → no-op.
+        guard let path = ProcessInfo.processInfo.environment["XTTY_TEST_LINK_PATH"], !path.isEmpty,
+              let link = try? String(contentsOfFile: path, encoding: .utf8)
+                  .trimmingCharacters(in: .whitespacesAndNewlines), !link.isEmpty else { return }
+        try? FileManager.default.removeItem(atPath: path)
+        let key = NSApp.keyWindow
+        (windowControllers.first { $0.window === key } ?? windowControllers.last)?
+            .routeTestLinkOnActivePane(link)
+    }
+
     private func startUITestDump() {
         dumpTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
+                self.routePendingTestLink()
                 let key = NSApp.keyWindow
                 // When the quake panel is key, its pane is the content under test,
                 // but the inventory must still come from a main window so the quake
