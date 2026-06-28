@@ -5,7 +5,7 @@
 Running multiple terminal sessions arranged within and across native macOS windows and tabs: custom splits/panes (a recursive split tree rendered with `NSSplitView`), native window tabbing (a tab is a window, Ghostty-style), multiple top-level windows, directional pane focus, commands acting on the focused pane via the responder chain, and a unified close/exit-escalation lifecycle (pane → tab/window → quit, with confirm-on-close for a running foreground job). The arrangement is backed by a view-free model in `XttyCore` (pane identity, the split-tree structure, and which pane is focused) that non-view features — the P5 session sidebar, a future agent API — enumerate, keeping the render layer swappable.
 ## Requirements
 ### Requirement: Split a pane into multiple panes
-The terminal SHALL let the user split the focused pane horizontally or vertically into multiple panes within a single window, where each pane is an independent terminal session running its own shell. A split SHALL inherit the focused pane's profile, so the new pane launches with the same profile (appearance plus launch overrides) as the pane it was split from. Dragging a split divider SHALL resize the adjacent panes and reflow their shells to the new size without display corruption.
+The terminal SHALL let the user split the focused pane horizontally or vertically into multiple panes within a single window, where each pane is an independent terminal session running its own shell. A split SHALL inherit the focused pane's profile, so the new pane launches with the same profile (appearance plus launch overrides) as the pane it was split from. A split SHALL also start in the focused pane's **current (live) working directory** when one is known, falling back to the inherited profile's launch directory and then the default. Dragging a split divider SHALL resize the adjacent panes and reflow their shells to the new size without display corruption.
 
 #### Scenario: Splitting creates a new independent session
 - **WHEN** the user splits the focused pane (horizontally or vertically)
@@ -20,6 +20,11 @@ The terminal SHALL let the user split the focused pane horizontally or verticall
 #### Scenario: A split inherits the focused pane's profile
 - **WHEN** the focused pane was launched with a non-base profile and the user splits it
 - **THEN** the new pane launches with the same profile (same appearance and launch overrides)
+
+#### Scenario: A split opens in the focused pane's current directory
+- **WHEN** the focused pane has changed directory (its live working directory differs from its launch directory) and the user splits it
+- **THEN** the new pane starts in the focused pane's current working directory
+- **AND** when no live working directory is known, the new pane falls back to the inherited profile's launch directory
 
 ### Requirement: Close a pane and collapse the layout
 The terminal SHALL let the user close the focused pane; the remaining panes SHALL reflow to fill the freed space. When a split is left with a single child, that split level SHALL collapse so its surviving child is promoted, leaving no empty regions.

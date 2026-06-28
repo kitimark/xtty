@@ -30,7 +30,7 @@ The project SHALL include a macOS XCUITest target that launches the real xtty ap
 
 ### Requirement: Deterministic content assertion channel
 
-Because SwiftTerm's terminal view exposes no per-cell text to accessibility, the harness SHALL assert terminal content via a DEBUG-only hook that writes the **focused pane's** headless engine grid to a temp file, plus `XCTAttachment` screenshots for human/vision review. When multiple panes, tabs, or windows exist, the hook SHALL additionally emit a DEBUG state dump describing the multiplexing inventory — at minimum the pane count, the focused pane, the tab count, and (for the focused pane) the name of the profile it was launched with and its working directory — so multiplexing and profile behaviors are deterministically assertable. The hook MUST be gated by `#if DEBUG` and the `-UITestGridDump` launch argument so it never runs in shipping or non-test builds. Accessibility identifiers SHALL be used only to locate the view/window and route input, never to read cell contents.
+Because SwiftTerm's terminal view exposes no per-cell text to accessibility, the harness SHALL assert terminal content via a DEBUG-only hook that writes the **focused pane's** headless engine grid to a temp file, plus `XCTAttachment` screenshots for human/vision review. When multiple panes, tabs, or windows exist, the hook SHALL additionally emit a DEBUG state dump describing the multiplexing inventory — at minimum the pane count, the focused pane, the tab count, and (for the focused pane) the name of the profile it was launched with and its working directory — so multiplexing and profile behaviors are deterministically assertable. The state dump SHALL also expose, for the focused pane, the **live working directory** (from OSC 7), whether the pane is on the **alternate screen**, and the captured **command-block list** (each with its command text, exit code, and state) — so semantic-capture behavior is deterministically assertable. The hook MUST be gated by `#if DEBUG` and the `-UITestGridDump` launch argument so it never runs in shipping or non-test builds. Accessibility identifiers SHALL be used only to locate the view/window and route input, never to read cell contents.
 
 #### Scenario: Grid dump enables substring assertions on the focused pane
 
@@ -47,6 +47,11 @@ Because SwiftTerm's terminal view exposes no per-cell text to accessibility, the
 - **WHEN** a pane launched with a named profile is focused in a `-UITestGridDump` DEBUG build
 - **THEN** the state dump reports that pane's profile name and working directory so the test can assert the profile-driven launch
 
+#### Scenario: Semantic capture state is observable
+
+- **WHEN** commands run, the directory changes, or a full-screen app runs in the focused pane in a `-UITestGridDump` DEBUG build
+- **THEN** the state dump reports the live working directory, the alternate-screen flag, and the command-block list (with exit codes and state) so the test can assert semantic capture
+
 #### Scenario: Graceful degradation without the hook
 
 - **WHEN** the tests run against a build where the grid-dump hook is absent (e.g. Release)
@@ -60,4 +65,23 @@ The change SHALL document Peekaboo as local, uncommitted tooling for manual/agen
 
 - **WHEN** Claude Code (or a developer) needs to inspect xtty interactively outside the committed tests
 - **THEN** Peekaboo can screenshot the window, route input, and resize/move it via its CLI, with terminal content verified by screenshot/vision (not by the accessibility tree)
+
+### Requirement: Semantic-capture end-to-end coverage
+
+The harness SHALL cover semantic capture end-to-end by driving a real shell with shell-integration injection active and asserting, via the DEBUG state dump, that command blocks form with their exit codes, that the live working directory updates when the shell changes directory, and that a full-screen (alternate-screen) program does not produce a command block.
+
+#### Scenario: Running commands produces blocks with exit codes
+
+- **WHEN** the tests run a succeeding command and a failing command in an injected shell in a `-UITestGridDump` DEBUG build
+- **THEN** the state dump shows a block for each with the correct command-end exit code and a succeeded/failed state
+
+#### Scenario: Changing directory updates the live working directory
+
+- **WHEN** the tests run `cd` to a known directory in an injected shell
+- **THEN** the state dump's live working directory updates to that directory
+
+#### Scenario: A full-screen program is not a normal command block
+
+- **WHEN** the tests start a program that switches to the alternate screen (e.g. `vim` or `tput smcup`)
+- **THEN** the state dump shows the alternate-screen flag set and the full-screen program is not recorded as a normal (succeeded/failed) command block — at most a single opaque block
 
