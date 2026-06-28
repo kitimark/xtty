@@ -16,7 +16,6 @@ This is a **build-mechanism change only** — no app/engine code, no behavior, n
 **Non-Goals:**
 - No change to the accessors, the `XttyCore`/App code, or any test.
 - Not switching to a fork repo (still avoiding an external repo) and not vendoring in-tree.
-- Not converting the add-only file to a `git apply` `.diff` (only needed when modifying existing source).
 
 ## Decisions
 
@@ -29,13 +28,16 @@ Deinit and remove the `external/SwiftTerm` submodule (drop the gitlink + the `.g
 Add `patches/swiftterm/UPSTREAM_REF` holding the pinned ref (`v1.13.0`) and the upstream URL (a tiny `UPSTREAM_CONFIG`-style file, mirroring Playwright). `scripts/bootstrap-swiftterm.sh`:
 1. read `UPSTREAM_REF` (+ URL);
 2. `git clone <url> external/SwiftTerm` if absent;
-3. **idempotently** `git -C external/SwiftTerm fetch --tags && git checkout <ref>` — so the pin cannot drift without re-running bootstrap (parity with the submodule gitlink);
-4. `cp patches/swiftterm/XttyAccessors.swift external/SwiftTerm/Sources/SwiftTerm/`.
-One command does clone + pin + drop-in (no separate `git submodule update --init`).
+3. **idempotently** `git -C external/SwiftTerm fetch --tags && git checkout <ref> && git clean -fd` — so the pin cannot drift without re-running bootstrap (parity with the submodule gitlink) and the tree is pristine before each apply;
+4. `git -C external/SwiftTerm apply patches/swiftterm/xtty-accessors.diff`.
+One command does clone + pin + apply (no separate `git submodule update --init`).
 - **Why a pin file, not a script constant:** keeps the pin a small, reviewable, single-purpose tracked artifact (the only "what version" source of truth), matching Playwright's `UPSTREAM_CONFIG.sh`.
 
 ### D3 — `XttyCore/Package.swift` unchanged (path dep), comment tidied
-The dependency stays `.package(path: "../external/SwiftTerm")`; SwiftPM doesn't care that the path is gitignored (it only needs a valid package on disk). Only the explanatory comment changes (submodule → gitignored clone). The add-only `cp` is unchanged.
+The dependency stays `.package(path: "../external/SwiftTerm")`; SwiftPM doesn't care that the path is gitignored (it only needs a valid package on disk). Only the explanatory comment changes (submodule → gitignored clone).
+
+### D3a — Patch as a tracked `.diff` applied via `git apply` (review preference)
+The accessor is tracked as `patches/swiftterm/xtty-accessors.diff` (a new-file diff) and applied with `git apply` onto the pristine checkout, rather than a raw `.swift` + `cp`. For a pure-add either works; the `.diff` was chosen on review as the canonical patch artifact (it reads as a patch and is Playwright's exact form — `bootstrap.diff`). **Idempotency:** `git apply` refuses if the target already exists, so the bootstrap restores a pristine tree (`checkout <ref>` + `git clean -fd`) before each apply — re-runs are safe. The `.diff` is regenerated from a pristine checkout via `git add -N <file> && git diff` (a tiny "export" step; the accessor is stable, so this is rare).
 
 ### D4 — Spec accuracy, not a behavior change
 Update only the mechanism *example* in `terminal-spatial-blocks`'s coordinate-provider requirement ("a pinned submodule with a drop-in file" → "a gitignored upstream clone reconstituted from a pinned ref with an add-only drop-in file"). No SHALL clause changes.
