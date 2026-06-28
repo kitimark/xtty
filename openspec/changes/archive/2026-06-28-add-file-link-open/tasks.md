@@ -41,5 +41,5 @@
 
 ## 8. Archive prep (at `/opsx:archive`, not now)
 
-- [ ] 8.1 At archive: correct the `terminal-links` spec **Purpose** (drop the stale "non-overridable protocol-extension default … needs the own-renderer or a vetted delegate proxy" note — the vetted proxy is exactly what shipped, fork-free) and confirm the merged requirement text matches what shipped.
-- [ ] 8.2 Update trackers: tick these tasks, refresh AGENTS.md "Current status" (P4b-1 implemented) + "Next:" (→ P4b-2), and advance Phase 4 in `research/04-design/02-milestones.md`.
+- [x] 8.1 At archive: correct the `terminal-links` spec **Purpose** (drop the stale "non-overridable protocol-extension default … needs the own-renderer or a vetted delegate proxy" note — the vetted proxy is exactly what shipped, fork-free) and confirm the merged requirement text matches what shipped.
+- [x] 8.2 Update trackers: tick these tasks, refresh AGENTS.md "Current status" (P4b-1 implemented) + "Next:" (→ P4b-2), and advance Phase 4 in `research/04-design/02-milestones.md`.
