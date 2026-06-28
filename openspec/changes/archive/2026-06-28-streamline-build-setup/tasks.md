@@ -46,4 +46,4 @@
 - [x] 7.2 Reflect the new capability in `proposal.md` (Modified Capabilities + What Changes + Impact).
 - [x] 7.3 Record decision D9 in `design.md` (why tighten, MODIFIED-not-hand-edit, Purpose-at-archive).
 - [x] 7.4 `openspec validate streamline-build-setup` still passes with the second delta.
-- [ ] 7.5 **At archive only:** hand-fix the merged `openspec/specs/terminal-spatial-blocks/spec.md` **Purpose** line ("add-only drop-in patch" → "add-only applied patch") — deltas don't carry Purpose; this is the "finish the merge by hand" step.
+- [x] 7.5 **At archive only:** hand-fix the merged `openspec/specs/terminal-spatial-blocks/spec.md` **Purpose** line ("add-only drop-in patch" → "add-only applied patch") — deltas don't carry Purpose; this is the "finish the merge by hand" step.
