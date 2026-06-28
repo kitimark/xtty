@@ -25,18 +25,27 @@ The decisions and the load-bearing facts are recorded in `research/03-analysis/p
 
 ## Decisions
 
-### D1 — A minimal 2-accessor, engine-only SwiftTerm fork
-Add one new in-module file `Sources/SwiftTerm/XttyAccessors.swift` with a `public extension Terminal`:
+### D1 — Two engine accessors, behind an injectable seam; mechanism deferred
+The feature needs two read-only accessors compiled **inside** SwiftTerm's module (they read `internal` `buffer.yBase`/`linesTop`):
 ```swift
 public func getScrollInvariantCursorLocation() -> Position {
     Position(col: buffer.x, row: buffer.yBase + buffer.y + buffer.linesTop)   // pinned to the normal buffer
 }
 public var scrollbackBase: Int { buffer.linesTop }
 ```
-Accessor #1 is the trim-invariant absolute cursor row; #2 reverse-maps an absolute row to a display row (`displayRow = absoluteRow − scrollbackBase`) and feeds reset detection. **No existing SwiftTerm file is edited** (zero rebase-conflict surface; a compile-break only if upstream renames `yBase`/`linesTop`, loud and stable-for-years). Pin `XttyCore/Package.swift:23` to a revision of `kitimark/SwiftTerm` forked from the `v1.13.0` tag; file an upstream PR mirroring `getScrollInvariantLine` and retire the fork if it lands.
+Accessor #1 is the trim-invariant absolute cursor row; #2 reverse-maps an absolute row to a display row (`displayRow = absoluteRow − scrollbackBase`) and feeds reset detection. The addition is **add-only** (one new file, no edits to existing SwiftTerm files).
 
-- **Alternatives rejected:** fork-free Tier-0 copy (adversarially **refuted** — silently wrong when scrolled up or after trim, since `getText` clamps rather than throws); `@testable import` (needs `-enable-testing` on the dep — not viable for release); reflection (brittle, breaks on the `linesTop=0` reset); waiting for the P8 own-renderer (far off; the fork is 3 lines and is itself the bus-factor-1 hedge).
+**The mechanism that makes these symbols exist is DEFERRED** (decision: build now against the seam in D1a, light up later). When lit up, the leading mechanism is a **git submodule pinned to `v1.13.0` + the drop-in accessor file + a local-path SPM dependency** (`XttyCore/Package.swift` → `.package(path: …)`) — the Playwright-style patch-in-repo that needs **no fork repo**; vendoring-in-tree or a `kitimark/SwiftTerm` fork remain reversible alternatives. Rationale + tradeoffs: `research/03-analysis/swiftterm-fork-vs-patch-strategy.md`. An upstream PR (mirroring the public `getScrollInvariantLine`) is filed in parallel to retire whatever local mechanism is chosen.
+
+- **Alternatives rejected:** fork-free Tier-0 copy (adversarially **refuted** — silently wrong when scrolled up or after trim, since `getText` clamps rather than throws); `@testable import` (needs `-enable-testing` on the dep — not viable for release); reflection (brittle, breaks on the `linesTop=0` reset); waiting for the P8 own-renderer (far off).
 - **Document the trap** on accessor #1: `getCursorLocation().y` is `yBase`-relative despite its "relative to visible display" doc comment (`Terminal.swift:5076`), so future implementers don't reintroduce a scroll-dependent off-by-`(yBase − yDisp)` bug.
+
+### D1a — Injectable accessor seam (build + test now without the mechanism)
+All SwiftTerm-internal access funnels through **two reads of plain `Int`s** behind an injectable seam (a closure/protocol owned by the App layer, e.g. `ScrollCoordinateReading { scrollInvariantRow() -> Int?; scrollbackBase() -> Int? }`). XttyCore is **fork-agnostic** — it receives captured `Int` rows and returns `Int` targets; `scrollTo`/`getText`/`getScrollInvariantLine` are already public.
+- **Production today:** the seam returns `nil` → anchors absent → jump/copy **no-op gracefully** (exactly the spec's degradation scenarios). The feature ships and passes its degradation tests with **no SwiftTerm change**.
+- **Tests today:** inject a **fake** seam returning synthetic rows → the **full happy path** (capture → invalidate → reverse-map → prev/next → jump/copy range) is unit/integration-tested **now**, before any mechanism exists.
+- **Light-up later:** swap the production seam body to the real engine reads (~2 lines in one bridging file in `PaneController`) once D1's mechanism is in place, then run a real-zsh e2e + the empirical masking check. `liveTop` rides on accessor #1 (`= accessor#1.row − getCursorLocation().y`, the latter public).
+- **Confidence (per the research doc):** the xtty-side swap is ~2 lines/one file (~95%); the injectable seam + fake-engine tests put "no rework at light-up" at ~90% (vs ~70% for a bare-`nil` shim that never exercises the happy path). Budget a short integration + real-zsh validation pass at light-up — that is the honestly-remaining work, not zero.
 
 ### D2 — Best-effort anchors captured at OSC-133 marks, epoch-stamped
 `Block` (and the in-flight `runningBlock`) gain an **optional** anchor:
@@ -72,22 +81,28 @@ Add `lastJumpTargetRow` and `lastCopiedOutput` to the DEBUG state dump (gated by
 
 ## Risks / Trade-offs
 
-- **First forked dependency** → ownership of upstream merges. *Mitigation:* fork from the tag (not `main`), accessors in a new file (no merge conflicts, only loud compile-breaks), revision pin, upstream PR to retire it; the fork is itself the bus-factor-1 hedge.
+- **Deferred light-up risk** (the seam returns `nil` until the mechanism lands) → the production happy path is unexercised until then. *Mitigation:* the injectable seam (D1a) is fake-tested for the full happy path now; light-up is a ~2-line swap + a bounded real-zsh validation pass.
+- **Local-mechanism (submodule/vendor) is non-hermetic** → a fresh clone/CI must init the submodule + run the prepare step + regen the xcodeproj before building. *Mitigation:* a documented one-shot prepare script; the feature still builds (no-op) if skipped, since the seam returns `nil`. (A fork, if chosen instead, is hermetic but needs the external repo.)
 - **Reset-detection masking corner** (`clear; <flood>` in one feed chunk) → a stale anchor could be used. *Mitigation:* validate-at-use + `scrolled`-delegate sampling shrink the window to near-nothing; documented best-effort; escalate to an in-engine counter only if observed.
-- **DerivedData caches resolved packages** after a repoint → app target may keep the old SwiftTerm. *Mitigation:* reset package caches / re-resolve and regenerate the xcodeproj after repointing.
 - **`changeScrollback` skips `sizeChanged`** (`Terminal.changeScrollback` → no delegate). *Mitigation:* xtty calls it only at config-application time (`TerminalConfigurator.swift:36`), before any anchors exist → moot; if a live scrollback-change feature is ever added, invalidate at that call site too.
 - **Anchor capture on the wrong actor/timing** would record a too-low row. *Mitigation:* capture synchronously inside the OSC-133 handler (main-actor), never deferred.
 - **Memory:** copy is **on-demand** `getText` (no eager per-block output retention), honoring lean-memory; anchors are three optional `Int`s + an epoch per block.
 
 ## Migration Plan
-1. Create `kitimark/SwiftTerm` from `v1.13.0`; add `XttyAccessors.swift`; push; note the SHA.
-2. Repoint `XttyCore/Package.swift:23` to `.package(url: "https://github.com/kitimark/SwiftTerm.git", revision: "<sha>")`; `swift package resolve`; `xcodegen generate`; reset stale DerivedData package caches. `project.yml` untouched.
-3. Implement `XttyCore` (anchors, invalidation, reverse-map, prev/next) → app (fill `sizeChanged`, capture in OSC handler, keybinds, jump/copy + toast) → harness.
-4. File the upstream PR in parallel; if/when merged + tagged, repoint to the upstream release and delete the fork.
-- **Rollback:** repoint `Package.swift` back to `from: "1.13.0"`; the spatial features no-op without the accessors (they are behind optional anchors).
+**Phase 1 — build now (no mechanism):**
+1. Define the injectable accessor seam (D1a) in the App layer with a production impl returning `nil`.
+2. Implement `XttyCore` (anchors, invalidation, reverse-map, prev/next) + a **fake seam** exercising the full happy path in tests → app (fill `sizeChanged`, capture in OSC handler, keybinds, jump/copy + toast) → harness (degradation scenarios + the in-process trigger).
+3. Ship: the feature compiles and no-ops gracefully; `SwiftTerm` pin stays `from: "1.13.0"` (unchanged).
+
+**Phase 2 — light up (chosen mechanism, leading = submodule + drop-in):**
+4. Add `migueldeicaza/SwiftTerm` as a submodule pinned to `v1.13.0`; add a prepare step that drops `XttyAccessors.swift` into its `Sources/SwiftTerm/`; switch `XttyCore/Package.swift:23` to `.package(path: "../external/SwiftTerm")`; `swift package resolve`; reset DerivedData package caches; `xcodegen generate`. (`project.yml` untouched; or vendor-in-tree / fork as reversible alternatives.)
+5. Swap the production seam body to the real engine reads (~2 lines); run the real-zsh e2e + the empirical masking check.
+6. File the upstream PR mirroring `getScrollInvariantLine`; if merged + tagged, drop the local mechanism and repoint to the upstream release.
+- **Rollback:** the production seam returns `nil` → spatial features no-op; revert the `Package.swift` path change. Nothing else depends on the mechanism.
 
 ## Open Questions
 - **Copy default chord** — `Cmd+Shift+C` (mnemonic) vs iTerm2's `Cmd+Shift+A` ("select output of last command"). Both verified free; pick during apply.
 - **Default copy scope** — last completed block vs the jump-selected block. Lean: last/running by default; the jump-selected target becomes copyable once P4b-3's sidebar designates arbitrary blocks.
-- **Masking empirical check** — once running, confirm whether `clear; <flood>` masking is observable in practice; if so, fold the in-engine `resetGeneration` counter into the fork.
-- **Upstream PR latency** — bus-factor-1; do not block on it (ship on the fork, repoint later).
+- **Masking empirical check** — once running, confirm whether `clear; <flood>` masking is observable in practice; if so, fold the in-engine `resetGeneration` counter into the local mechanism.
+- **Light-up mechanism** — confirm the leading submodule + drop-in + local-path approach at Phase 2 (vs vendor-in-tree / fork); resolved in `research/03-analysis/swiftterm-fork-vs-patch-strategy.md`, finalize when lighting up.
+- **Upstream PR latency** — bus-factor-1; do not block on it (the local mechanism is the hedge; repoint later).
