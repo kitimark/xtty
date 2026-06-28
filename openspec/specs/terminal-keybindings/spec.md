@@ -3,7 +3,6 @@
 ## Purpose
 
 How xtty's commands are bound to keys: a keybinding preset (`iterm` default or `ghostty`) selected by `keybind-style`, overlaid with per-action `keybind-<action>` overrides, so users migrating from those terminals get a familiar base and can still rebind individual actions. Chord parsing, the presets, and preset-plus-override resolution live in a view-free `XttyCore` component (a toolkit-independent `KeyChord`); the app maps the resolved bindings to AppKit menu key equivalents that drive the multiplexing and pane-scoped commands. Read once at startup and fail-soft (unknown preset → `iterm`, unparseable chord → keep the preset binding). These keys live in this capability, leaving the `terminal-configuration` schema untouched.
-
 ## Requirements
 ### Requirement: Keybinding preset selection
 xtty SHALL support selecting a keybinding preset via the `keybind-style` config key, with built-in presets `iterm` (the default) and `ghostty`. The chosen preset SHALL establish the default chord for every bindable action. An unrecognized `keybind-style` value SHALL fall back to `iterm` and SHALL be logged, without aborting startup.
@@ -36,7 +35,7 @@ A `keybind-<action>` value that cannot be parsed into a valid chord SHALL fall b
 - **THEN** the action retains its preset chord, the issue is logged, and the app still launches
 
 ### Requirement: Keybindings applied to menu commands
-The resolved keybindings SHALL drive the key equivalents of xtty's menu commands for the multiplexing actions (split, focus, new tab, new window, close) and the existing pane-scoped actions (font size, find). Activating a command's configured chord SHALL invoke that command.
+The resolved keybindings SHALL drive the key equivalents of xtty's menu commands for the multiplexing actions (split, focus, new tab, new window, close) and the pane-scoped actions (font size, find, and the spatial-block actions: jump-to-previous-prompt, jump-to-next-prompt, copy-command-output). Activating a command's configured chord SHALL invoke that command. The default chords for the jump actions SHALL be **Cmd+Shift+Up** (previous prompt) and **Cmd+Shift+Down** (next prompt) in both presets — the iTerm2/Ghostty macOS convention — and copy-command-output SHALL have a default chord; each remains overridable via its `keybind-<action>` key. Because these chords are bound as menu key equivalents, the menu SHALL intercept them ahead of the terminal view (so a system text-editing default for the same chord does not shadow the action).
 
 #### Scenario: Configured chord triggers its command
 - **WHEN** the user presses the chord configured for the new-tab action
@@ -45,6 +44,14 @@ The resolved keybindings SHALL drive the key equivalents of xtty's menu commands
 #### Scenario: Menu reflects the configured chords
 - **WHEN** the application builds its menu at launch
 - **THEN** each command's displayed key equivalent matches the resolved keybinding for that action
+
+#### Scenario: Jump-to-prompt is bound by default
+- **WHEN** the user presses Cmd+Shift+Up (or Cmd+Shift+Down) with no override configured
+- **THEN** the focused pane jumps to the previous (or next) command prompt
+
+#### Scenario: A spatial action can be rebound
+- **WHEN** the config sets `keybind-copy-command-output` (or `keybind-jump-prev-prompt` / `keybind-jump-next-prompt`) to a custom chord
+- **THEN** that action uses the custom chord and the other actions keep their preset chords
 
 ### Requirement: View-free keybinding model in XttyCore
 The keybinding chord parsing, the built-in presets, and the preset-plus-override resolution SHALL live in a view-free `XttyCore` component that does not import the app/UI target, produces toolkit-independent chords (no AppKit key/modifier types), and is exercisable by unit tests without launching the app.
