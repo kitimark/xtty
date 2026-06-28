@@ -3,7 +3,6 @@
 ## Purpose
 
 A global-hotkey "quake" drop-down terminal: a borderless, non-activating panel summoned and dismissed from anywhere — even when xtty is unfocused — by a user-configured hotkey (Carbon `RegisterEventHotKey`, no Accessibility/TCC prompt), hosting one persistent single scratch shell. It is an **accessory** session: created lazily on first summon, persisting across hide/show, and owning a private session registry so it is excluded from the main multiplexing inventory (and the future session sidebar) and never keeps the app alive or blocks quit. Its two config keys (`quick-terminal`, `quick-terminal-hotkey`) and its view-free hotkey parsing (a toolkit-independent `HotKeySpec` carrying a positional virtual keycode, parsed in `XttyCore` and sharing the modifier grammar with the keybindings) live in this capability, leaving the `terminal-configuration` schema untouched. Read once at startup and fail-soft: an unparseable or system-rejected hotkey disables the feature and is logged, without aborting launch.
-
 ## Requirements
 ### Requirement: Configurable global-hotkey activation
 xtty SHALL provide a quick terminal that is summoned and dismissed by a user-configured global hotkey which functions even when xtty is not the frontmost application. The feature SHALL be off by default and enabled by the `quick-terminal` config key; the chord SHALL be set by the `quick-terminal-hotkey` config key. Registering the hotkey SHALL NOT require any Accessibility/TCC permission. An unparseable chord, or an OS registration failure (e.g. a system-reserved combo), SHALL disable the feature and be logged, without aborting startup. These keys SHALL be read once at startup from the existing config file and SHALL NOT alter the `terminal-configuration` schema.
@@ -38,7 +37,7 @@ The quick terminal SHALL be hosted in a borderless, non-activating panel that fl
 - **THEN** the panel is positioned from the current screen geometry on the next summon
 
 ### Requirement: Persistent single scratch shell
-The quick terminal SHALL host exactly one terminal pane running the user's shell. The shell SHALL be created lazily on the first summon and SHALL persist across hide/show cycles, so toggling only orders the panel in and out while the shell and its scrollback are retained. The quick terminal SHALL NOT support splitting into multiple panes in this version.
+The quick terminal SHALL host exactly one terminal pane running the user's shell. The shell SHALL be created lazily on the first summon and SHALL persist across hide/show cycles, so toggling only orders the panel in and out while the shell and its scrollback are retained. The quick terminal SHALL NOT support splitting into multiple panes in this version. The quick terminal SHALL use the **base** profile's appearance and SHALL always launch a plain interactive login shell, ignoring any profile launch overrides (`command`/`cwd`) — including the base profile's — so the scratch terminal is never redirected into a command or directory.
 
 #### Scenario: Shell persists across hide and show
 - **WHEN** the user summons the quick terminal, runs a command, hides it, and summons it again
@@ -47,6 +46,10 @@ The quick terminal SHALL host exactly one terminal pane running the user's shell
 #### Scenario: Single pane only
 - **WHEN** the quick terminal is showing
 - **THEN** it contains exactly one pane and a split command does not divide it
+
+#### Scenario: Uses base appearance and a plain login shell
+- **WHEN** the config defines profiles and launch overrides (e.g. a base or default-profile `command`)
+- **THEN** the quick terminal still launches a plain interactive login shell using the base profile's appearance, not any profile command or cwd
 
 ### Requirement: Accessory session lifecycle
 The quick terminal SHALL be an accessory session: it SHALL be excluded from the main `SessionRegistry`, so it is not counted in the multiplexing inventory and does not appear in session enumeration (such as a future session sidebar). A hidden quick terminal panel SHALL NOT keep the application alive or block termination, and the application SHALL still terminate when its last main window closes even when the quick terminal is enabled.
