@@ -20,9 +20,14 @@ public struct PaneID: Hashable, Sendable {
 public final class Pane {
     public let id: PaneID
     public let session: TerminalSession
+    /// The name of the profile this pane launched with; `nil` for the base
+    /// profile. Part of the pane's identity so a split can inherit it and a
+    /// future session sidebar can show it.
+    public let profileName: String?
 
-    public init(id: PaneID, session: TerminalSession) {
+    public init(id: PaneID, session: TerminalSession, profileName: String? = nil) {
         self.id = id
         self.session = session
+        self.profileName = profileName
     }
 }

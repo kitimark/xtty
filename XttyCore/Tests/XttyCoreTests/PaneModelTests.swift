@@ -134,6 +134,20 @@ final class PaneModelTests: XCTestCase {
     }
 
     @MainActor
+    func testPaneRecordsProfileName() {
+        let r = SessionRegistry()
+        let engine = Terminal(delegate: delegate)
+        let config = ShellResolver.launchConfig(forShell: "/bin/zsh", environment: [:])
+        let session = TerminalSession(terminal: engine, launchConfig: config)
+        let profiled = r.makePane(for: session, profileName: "work")
+        XCTAssertEqual(profiled.profileName, "work")
+
+        // A base pane has no profile name.
+        let base = makePane(r)
+        XCTAssertNil(base.profileName)
+    }
+
+    @MainActor
     func testFocusTrackingAndClearOnUnregister() {
         let r = SessionRegistry()
         let a = makePane(r), b = makePane(r)

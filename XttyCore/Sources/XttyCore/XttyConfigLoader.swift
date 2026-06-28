@@ -30,15 +30,93 @@ public enum XttyConfigLoader {
         return result
     }
 
+    // MARK: Sectioned parsing (profiles)
+
+    /// Pre-compiled `[profile "name"]` header matcher (the only valid header form).
+    private static let profileHeader = try? NSRegularExpression(pattern: #"^\[profile\s+"([^"]+)"\]$"#)
+
+    /// Parse config text into a base section plus named profile sections.
+    ///
+    /// Lines before the first `[profile "name"]` header form the **base**; each
+    /// header begins a named block. Unlike `parse`, keys keep the original case of
+    /// the `<NAME>` in `env-<NAME>` (env-var names are case-sensitive); all other
+    /// keys are lowercased so recognized keys still match case-insensitively. A
+    /// malformed/unquoted/empty profile header (or any other bracketed section
+    /// type) is reported via `warn` and its lines are skipped, without aborting —
+    /// so a typo never silently lands keys in the wrong profile. A file with no
+    /// headers yields the base section only (and `profiles` empty).
+    public static func parseSections(
+        _ text: String,
+        warn: (String) -> Void = { _ in }
+    ) -> (base: [String: String], profiles: [(name: String, pairs: [String: String])]) {
+        var base: [String: String] = [:]
+        var profiles: [(name: String, pairs: [String: String])] = []
+        // Where the current line's key lands: base, a profile index, or skip
+        // (a malformed/unknown section whose keys are intentionally dropped).
+        enum Target { case base; case profile(Int); case skip }
+        var current: Target = .base
+
+        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty || line.hasPrefix("#") { continue }
+
+            if line.hasPrefix("[") {
+                if let profileHeader,
+                   let match = profileHeader.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+                   let nameRange = Range(match.range(at: 1), in: line) {
+                    let name = String(line[nameRange])
+                    if let idx = profiles.firstIndex(where: { $0.name == name }) {
+                        warn("profile '\(name)' is defined more than once; later keys win")
+                        current = .profile(idx)
+                    } else {
+                        profiles.append((name: name, pairs: [:]))
+                        current = .profile(profiles.count - 1)
+                    }
+                } else {
+                    if line.lowercased().hasPrefix("[profile") {
+                        warn("malformed profile header \(line); expected [profile \"name\"] — skipping")
+                    }
+                    current = .skip
+                }
+                continue
+            }
+
+            guard let eq = line.firstIndex(of: "=") else { continue }
+            let rawKey = line[..<eq].trimmingCharacters(in: .whitespaces)
+            let value = line[line.index(after: eq)...].trimmingCharacters(in: .whitespaces)
+            guard !rawKey.isEmpty else { continue }
+            let key = normalizedKey(rawKey)
+
+            switch current {
+            case .base: base[key] = value
+            case .profile(let i): profiles[i].pairs[key] = value
+            case .skip: break
+            }
+        }
+        return (base, profiles)
+    }
+
+    /// Lowercase a config key, preserving the original case of the `<NAME>` in an
+    /// `env-<NAME>` key (environment-variable names are case-sensitive).
+    static func normalizedKey(_ rawKey: String) -> String {
+        if rawKey.lowercased().hasPrefix("env-") {
+            // Keep everything after the `env-` prefix verbatim.
+            let nameStart = rawKey.index(rawKey.startIndex, offsetBy: 4)
+            return "env-" + rawKey[nameStart...]
+        }
+        return rawKey.lowercased()
+    }
+
     // MARK: Resolution
 
     /// Resolve a typed config from parsed key/value pairs, applying defaults and
     /// per-key fallback. `warn` receives a message for each invalid value.
     public static func resolve(
         from pairs: [String: String],
+        base: XttyConfig = .default,
         warn: (String) -> Void = { _ in }
     ) -> XttyConfig {
-        var config = XttyConfig.default
+        var config = base
 
         if let raw = pairs["font-family"] {
             let trimmed = raw.trimmingCharacters(in: .whitespaces)
@@ -78,6 +156,84 @@ public enum XttyConfigLoader {
         }
 
         return config
+    }
+
+    /// Resolve a full configuration **set** (base + named profiles + default
+    /// selection + `confirm-close`) from raw config text. The base profile feeds
+    /// the existing per-key resolution unchanged, so a file with no `[profile …]`
+    /// headers yields `base == resolve(from: parse(text))` and an empty
+    /// `profiles` map (backward-compatible by construction). Each named profile
+    /// inherits the base appearance (`resolve(from:base:)`) and carries its own
+    /// launch override. `default-profile`/`confirm-close` are honored base-only.
+    public static func resolveSet(
+        from text: String,
+        warn: (String) -> Void = { _ in }
+    ) -> XttyConfigSet {
+        let (basePairs, profilePairs) = parseSections(text, warn: warn)
+
+        let baseConfig = resolve(from: basePairs, warn: warn)
+        let base = XttyProfile(name: nil, config: baseConfig, launch: launchOverride(from: basePairs, warn: warn))
+
+        var profiles: [String: XttyProfile] = [:]
+        for (name, pairs) in profilePairs {
+            if pairs["default-profile"] != nil {
+                warn("default-profile is ignored inside profile '\(name)' (it is base-only)")
+            }
+            if pairs["confirm-close"] != nil {
+                warn("confirm-close is ignored inside profile '\(name)' (it is base-only)")
+            }
+            let config = resolve(from: pairs, base: baseConfig, warn: warn)
+            profiles[name] = XttyProfile(name: name, config: config, launch: launchOverride(from: pairs, warn: warn))
+        }
+
+        var defaultProfileName: String? = nil
+        if let raw = basePairs["default-profile"] {
+            if profiles[raw] != nil {
+                defaultProfileName = raw
+            } else {
+                warn("default-profile: '\(raw)' is not a defined profile; using base")
+            }
+        }
+
+        var confirmClose = true
+        if let raw = basePairs["confirm-close"] {
+            if let value = parseBool(raw) {
+                confirmClose = value
+            } else {
+                warn("confirm-close: '\(raw)' is not a boolean; using \(confirmClose)")
+            }
+        }
+
+        return XttyConfigSet(
+            base: base,
+            profiles: profiles,
+            defaultProfileName: defaultProfileName,
+            confirmClose: confirmClose
+        )
+    }
+
+    /// Extract the launch override (`command`, `cwd`, `env-<NAME>`) from a
+    /// profile's pairs. `env-PATH` is dropped with a warning (the login shell
+    /// builds PATH); empty env names are skipped.
+    static func launchOverride(
+        from pairs: [String: String],
+        warn: (String) -> Void = { _ in }
+    ) -> LaunchOverride {
+        let command = pairs["command"].flatMap { $0.isEmpty ? nil : $0 }
+        let cwd = pairs["cwd"].flatMap { $0.isEmpty ? nil : $0 }
+
+        var env: [String: String] = [:]
+        for (key, value) in pairs where key.hasPrefix("env-") {
+            let name = String(key.dropFirst(4))
+            if name.isEmpty { continue }
+            if name.uppercased() == "PATH" {
+                warn("env-PATH is ignored; the login shell builds PATH")
+                continue
+            }
+            env[name] = value
+        }
+
+        return LaunchOverride(command: command, cwd: cwd, env: env)
     }
 
     /// Parse a permissive boolean (`true/false`, `yes/no`, `1/0`, `on/off`).

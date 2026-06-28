@@ -20,12 +20,16 @@ public struct ShellLaunchConfig: Equatable, Sendable {
     /// the login shell build everything else (notably PATH) from the user's
     /// startup files. We deliberately do NOT reconstruct PATH here.
     public let environment: [String: String]
+    /// Working directory for the launched process; `nil` uses the shell's default
+    /// (handed to SwiftTerm's `startProcess(currentDirectory:)`).
+    public let cwd: String?
 
-    public init(executable: String, args: [String], execName: String, environment: [String: String]) {
+    public init(executable: String, args: [String], execName: String, environment: [String: String], cwd: String? = nil) {
         self.executable = executable
         self.args = args
         self.execName = execName
         self.environment = environment
+        self.cwd = cwd
     }
 }
 
@@ -63,40 +67,99 @@ public enum ShellResolver {
         return defaultShell
     }
 
-    /// Build a launch configuration for an already-resolved shell path: derive
-    /// the login argv[0] and the seed environment. Pure — no system access.
+    /// Build a launch configuration for an already-resolved shell path: a plain
+    /// interactive login shell, no overrides. Pure — no system access.
     public static func launchConfig(
         forShell shellPath: String,
         environment: [String: String]
     ) -> ShellLaunchConfig {
-        let base = (shellPath as NSString).lastPathComponent
-        let execName = "-" + base
+        launchConfig(override: .none, forShell: shellPath, environment: environment)
+    }
 
+    /// The minimal seed environment shared by every launch: `TERM`/`COLORTERM`/
+    /// `LANG` plus the user's identity vars (so the login shell finds
+    /// `~/.zprofile`/`~/.zshrc` — the M5 dotfiles guarantee). PATH is deliberately
+    /// not reconstructed; the login shell builds it. The child environment is
+    /// replaced wholesale, so anything not seeded here (or merged by a profile) is
+    /// dropped.
+    static func seedEnvironment(environment: [String: String]) -> [String: String] {
         var seed: [String: String] = [
             "TERM": "xterm-256color",
             "COLORTERM": "truecolor",
         ]
-        // Preserve the user's locale if present; otherwise provide a sane UTF-8
-        // default so the shell and programs behave. We never reconstruct PATH —
-        // the login shell builds it from the profile files.
         seed["LANG"] = environment["LANG"] ?? "en_US.UTF-8"
-
-        // Mirror the user's identity variables so the login shell can find the
-        // home directory (and thus `~/.zprofile`/`~/.zshrc` — the M5 dotfiles
-        // guarantee) and report the right user. Unlike PATH, these are not
-        // rebuilt by the shell, so they must be carried over. We replace the
-        // child environment wholesale, so anything not seeded here is dropped.
         for key in ["HOME", "USER", "LOGNAME"] {
             if let value = environment[key], !value.isEmpty {
                 seed[key] = value
             }
         }
+        return seed
+    }
+
+    /// Expand `~` / `$HOME` at the start of a configured working directory and
+    /// verify it exists. Returns `nil` (caller falls back to the default) when the
+    /// directory is missing. Pure — the existence check is injected.
+    public static func expandCwd(
+        _ raw: String,
+        home: String,
+        exists: (String) -> Bool
+    ) -> String? {
+        var path = raw
+        if path == "~" {
+            path = home
+        } else if path.hasPrefix("~/") {
+            path = home + path.dropFirst(1)
+        } else if path == "$HOME" {
+            path = home
+        } else if path.hasPrefix("$HOME/") {
+            path = home + path.dropFirst("$HOME".count)
+        }
+        return exists(path) ? path : nil
+    }
+
+    /// Build a launch configuration applying a profile's launch override. A
+    /// `command` runs through the user's login + interactive shell
+    /// (`<shell> -l -i -c '<command>'`, the command as a single argument) so it
+    /// resolves against the user's real PATH and dotfiles; with no command this is
+    /// a plain interactive login shell. `cwd` is expanded + validated (missing →
+    /// default + warn); `env` is merged additively onto the seed (PATH already
+    /// excluded by the config loader). Pure — cwd existence is injected.
+    public static func launchConfig(
+        override: LaunchOverride,
+        forShell shellPath: String,
+        environment: [String: String],
+        homeDirectory: String = NSHomeDirectory(),
+        cwdExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) },
+        warn: (String) -> Void = { _ in }
+    ) -> ShellLaunchConfig {
+        let base = (shellPath as NSString).lastPathComponent
+        let execName = "-" + base
+
+        var seed = seedEnvironment(environment: environment)
+        for (key, value) in override.env { seed[key] = value }
+
+        var cwd: String? = nil
+        if let rawCwd = override.cwd {
+            if let expanded = expandCwd(rawCwd, home: homeDirectory, exists: cwdExists) {
+                cwd = expanded
+            } else {
+                warn("cwd: '\(rawCwd)' does not exist; using the default directory")
+            }
+        }
+
+        let args: [String]
+        if let command = override.command, !command.isEmpty {
+            args = ["-l", "-i", "-c", command]
+        } else {
+            args = []
+        }
 
         return ShellLaunchConfig(
             executable: shellPath,
-            args: [],
+            args: args,
             execName: execName,
-            environment: seed
+            environment: seed,
+            cwd: cwd
         )
     }
 
@@ -111,6 +174,21 @@ public enum ShellResolver {
             accountShell: accountShellPath
         )
         return launchConfig(forShell: path, environment: environment)
+    }
+
+    /// Resolve a full launch configuration for a profile's launch override using
+    /// the real system (shell path + filesystem cwd check).
+    public static func resolve(
+        override: LaunchOverride,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        warn: (String) -> Void = { _ in }
+    ) -> ShellLaunchConfig {
+        let path = resolveShellPath(
+            shellEnv: environment["SHELL"],
+            isExecutable: { FileManager.default.isExecutableFile(atPath: $0) },
+            accountShell: accountShellPath
+        )
+        return launchConfig(override: override, forShell: path, environment: environment, warn: warn)
     }
 
     /// The current account's login shell from the password database, or `nil`.

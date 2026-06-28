@@ -34,32 +34,45 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
     let view: XttyTerminalView
     /// The model handle registered in the `SessionRegistry` (identity + session).
     let pane: Pane
+    /// The profile this pane launched with, retained so a split can inherit it
+    /// (the new pane relaunches with the same appearance + launch overrides).
+    let profile: XttyProfile
 
     private let session: TerminalSession
     private let registry: SessionRegistry
     weak var delegate: PaneControllerDelegate?
     private var processEnded = false
 
-    init(config: XttyConfig, registry: SessionRegistry, frame: NSRect) {
+    /// A safe fallback profile (base appearance + plain login shell), used only
+    /// when a focused pane can't be found for split inheritance.
+    static let baseProfile = XttyProfile(name: nil, config: .default, launch: .none)
+
+    init(profile: XttyProfile, registry: SessionRegistry, frame: NSRect) {
         // Build everything via locals first — `self` is unavailable before super.init.
         let view = XttyTerminalView(frame: frame)
-        let launch = ShellResolver.resolve()
+        // Resolve the launch from the profile's overrides: a `command` runs through
+        // the user's login+interactive shell (so PATH/dotfiles apply), else a plain
+        // login shell; `cwd`/`env` are applied here too (design D4/D5/D6).
+        let launch = ShellResolver.resolve(override: profile.launch) {
+            NSLog("[xtty] profile '%@': %@", profile.name ?? "base", $0)
+        }
         let session = TerminalSession(terminal: view.getTerminal(), launchConfig: launch)
-        let pane = registry.makePane(for: session)
+        let pane = registry.makePane(for: session, profileName: profile.name)
 
         self.view = view
         self.session = session
         self.pane = pane
+        self.profile = profile
         self.registry = registry
         super.init()
 
         view.processDelegate = self
         view.commands = self
-        view.configuredFontSize = CGFloat(config.fontSize)
+        view.configuredFontSize = CGFloat(profile.config.fontSize)
 
         // Apply config (font / theme palette / bounded scrollback / option-as-meta)
         // before the shell starts so the initial PTY size + appearance reflect it.
-        TerminalConfigurator.apply(config, to: view)
+        TerminalConfigurator.apply(profile.config, to: view)
 
         // Accessibility: locate-only. The custom-drawn view exposes no per-cell
         // text, so UI tests assert content via the DEBUG dump, not the AX tree.
@@ -75,7 +88,8 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
             executable: launch.executable,
             args: launch.args,
             environment: environment,
-            execName: launch.execName
+            execName: launch.execName,
+            currentDirectory: launch.cwd
         )
     }
 

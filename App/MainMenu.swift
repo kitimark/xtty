@@ -20,15 +20,16 @@ import XttyCore
 ///   responder chain, so "the active pane" is just the first responder).
 enum XttyMainMenu {
     /// Build the full main menu, with key equivalents from the resolved
-    /// `Keybindings` (the `terminal-keybindings` capability).
+    /// `Keybindings` (the `terminal-keybindings` capability) and a "New Tab with
+    /// Profile ▸" submenu built from the configured profile names.
     @MainActor
-    static func build(keybindings: Keybindings) -> NSMenu {
+    static func build(keybindings: Keybindings, profileNames: [String] = []) -> NSMenu {
         let main = NSMenu()
 
         main.addItem(appMenuItem())
         main.addItem(editMenuItem(keybindings: keybindings))
         main.addItem(viewMenuItem(keybindings: keybindings))
-        main.addItem(terminalMenuItem(keybindings: keybindings))
+        main.addItem(terminalMenuItem(keybindings: keybindings, profileNames: profileNames))
         main.addItem(windowMenuItem())
         #if DEBUG
         main.addItem(debugMenuItem())
@@ -60,7 +61,7 @@ enum XttyMainMenu {
     // MARK: Terminal menu (splits + pane focus; tabs/windows added in layer 3)
 
     @MainActor
-    private static func terminalMenuItem(keybindings: Keybindings) -> NSMenuItem {
+    private static func terminalMenuItem(keybindings: Keybindings, profileNames: [String]) -> NSMenuItem {
         let item = NSMenuItem()
         let menu = NSMenu(title: "Terminal")
 
@@ -72,6 +73,9 @@ enum XttyMainMenu {
         }
 
         menu.addItem(make("New Tab", #selector(XttyTerminalView.newTerminalTab(_:)), .newTab))
+        if !profileNames.isEmpty {
+            menu.addItem(newTabWithProfileItem(profileNames: profileNames))
+        }
         menu.addItem(make("New Window", #selector(XttyTerminalView.newTerminalWindow(_:)), .newWindow))
         menu.addItem(.separator())
         menu.addItem(make("Split Right", #selector(XttyTerminalView.splitPaneRight(_:)), .splitRight))
@@ -85,6 +89,27 @@ enum XttyMainMenu {
         menu.addItem(make("Select Pane Below", #selector(XttyTerminalView.focusPaneDown(_:)), .focusDown))
 
         item.submenu = menu
+        return item
+    }
+
+    /// A "New Tab with Profile ▸" submenu, one item per profile. Each item carries
+    /// the profile name as `representedObject` and routes through the responder
+    /// chain to `AppDelegate.newTabWithProfile(_:)` (design D8).
+    @MainActor
+    private static func newTabWithProfileItem(profileNames: [String]) -> NSMenuItem {
+        let item = NSMenuItem(title: "New Tab with Profile", action: nil, keyEquivalent: "")
+        let submenu = NSMenu(title: "New Tab with Profile")
+        for name in profileNames {
+            let entry = NSMenuItem(
+                title: name,
+                action: #selector(AppDelegate.newTabWithProfile(_:)),
+                keyEquivalent: ""
+            )
+            entry.representedObject = name
+            entry.target = nil  // responder chain → AppDelegate
+            submenu.addItem(entry)
+        }
+        item.submenu = submenu
         return item
     }
 

@@ -28,10 +28,11 @@ public final class SessionRegistry {
         return PaneID(nextID)
     }
 
-    /// Convenience: allocate an id and wrap `session` in a registered `Pane`.
+    /// Convenience: allocate an id and wrap `session` in a registered `Pane`,
+    /// tagged with the profile it launched with (`nil` = base).
     @discardableResult
-    public func makePane(for session: TerminalSession) -> Pane {
-        let pane = Pane(id: makePaneID(), session: session)
+    public func makePane(for session: TerminalSession, profileName: String? = nil) -> Pane {
+        let pane = Pane(id: makePaneID(), session: session, profileName: profileName)
         register(pane)
         return pane
     }

@@ -59,3 +59,42 @@
 # using a physical key by name — e.g. "grave" is the ` key regardless of layout.
 # The `fn` key is not supported. Example: toggle on Ctrl+Option+Backtick.
 # quick-terminal-hotkey = ctrl+opt+grave
+
+# --- Close confirmation ---
+#
+# Whether to confirm before closing a pane that has a running foreground job
+# (true/false, yes/no, on/off, 1/0). Default true.
+# confirm-close = true
+
+# --- Profiles (named setting bundles) ---
+#
+# Everything ABOVE this first section header is the "base" profile. A
+# `[profile "name"]` header starts a named profile that INHERITS the base and
+# overrides only the keys it sets. A config with no profile sections behaves
+# exactly as before (it is entirely the base profile) — profiles are opt-in.
+#
+# Appearance keys (font-family, font-size, theme, scrollback, option-as-meta)
+# work in any profile. Profiles add three LAUNCH keys:
+#   command    A command to run instead of a plain login shell. It runs THROUGH
+#              your login + interactive shell (`$SHELL -l -i -c '<command>'`), so
+#              bare names resolve against your real PATH and dotfiles, and shell
+#              syntax (pipes, globs, ~) works. Omit it for a normal login shell.
+#   cwd        Working directory to start in. `~` and `$HOME` are expanded; a
+#              missing directory is logged and falls back to the default.
+#   env-<NAME> Set an environment variable (repeatable; case-sensitive name).
+#              `env-PATH` is ignored — the login shell builds PATH.
+#
+# default-profile (base only) picks the profile new tabs/windows use; the menu
+# "Terminal ▸ New Tab with Profile" opens a chosen one. A split inherits the
+# focused pane's profile. The quick terminal always uses base appearance + a
+# plain login shell. Config is read once at launch (relaunch to apply edits).
+#
+# default-profile = work
+#
+# [profile "work"]
+# theme = light
+# cwd = ~/src/work
+# env-EDITOR = nvim
+#
+# [profile "ssh-box"]
+# command = ssh box

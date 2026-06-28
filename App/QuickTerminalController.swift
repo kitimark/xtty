@@ -64,7 +64,11 @@ final class QuickTerminalController: NSObject, PaneControllerDelegate {
     private func ensurePanel(on screen: NSScreen) {
         if panel != nil { return }
         let frame = Self.frame(on: screen)
-        let pane = PaneController(config: config, registry: registry,
+        // Base appearance, but always a plain login shell — ignore any profile
+        // launch overrides (command/cwd), so the scratch terminal is never
+        // redirected into a command/dir (design D9).
+        let profile = XttyProfile(name: nil, config: config, launch: .none)
+        let pane = PaneController(profile: profile, registry: registry,
                                   frame: NSRect(origin: .zero, size: frame.size))
         pane.delegate = self
         self.pane = pane

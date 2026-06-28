@@ -30,8 +30,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
     /// The view-free model of all live panes across windows (P5/agents enumerate it).
     private let registry = SessionRegistry()
     private var windowControllers: [TerminalWindowController] = []
-    /// Resolved once at launch; reused when opening new windows/tabs.
-    private var config = XttyConfig.default
+    /// Resolved once at launch (base + named profiles + default selection +
+    /// confirm-close); reused when opening new windows/tabs.
+    private var configSet = XttyConfigSet(base: XttyProfile(name: nil, config: .default))
     /// The optional quake drop-down terminal + its global hotkey (the
     /// `quick-terminal` capability). Both nil when the feature is off.
     private var quickTerminal: QuickTerminalController?
@@ -41,16 +42,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
     #endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let (config, keybindings, quickTerminalSettings) = AppDelegate.loadConfigAndKeybindings()
-        self.config = config
+        let (configSet, keybindings, quickTerminalSettings) = AppDelegate.loadConfigAndKeybindings()
+        self.configSet = configSet
 
-        let controller = TerminalWindowController(config: config, registry: registry)
+        let controller = TerminalWindowController(
+            profile: configSet.defaultProfile, registry: registry, confirmClose: configSet.confirmClose
+        )
         controller.coordinator = self
         windowControllers.append(controller)
 
         // Install xtty's AppKit main menu with key equivalents from config (Find/
-        // font/split/focus ride the responder chain to the focused pane).
-        NSApp.mainMenu = XttyMainMenu.build(keybindings: keybindings)
+        // font/split/focus ride the responder chain to the focused pane) plus the
+        // "New Tab with Profile ▸" submenu built from the configured profiles.
+        NSApp.mainMenu = XttyMainMenu.build(keybindings: keybindings, profileNames: configSet.profileNames)
         NSApp.activate(ignoringOtherApps: true)
 
         setUpQuickTerminal(quickTerminalSettings)
@@ -71,7 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
     /// (in DEBUG the harness's toggle action still drives it). Design D11.
     private func setUpQuickTerminal(_ settings: QuickTerminalSettings) {
         guard settings.enabled, let spec = settings.hotKey else { return }
-        let controller = QuickTerminalController(config: config)
+        let controller = QuickTerminalController(config: configSet.base.config)
         quickTerminal = controller
         quickTerminalHotKey = GlobalHotKey(spec: spec) { [weak controller] in
             controller?.toggle()
@@ -131,17 +135,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
 
     @discardableResult
     func openNewWindow() -> TerminalWindowController {
-        let controller = TerminalWindowController(config: config, registry: registry)
+        makeWindow(profile: configSet.defaultProfile)
+    }
+
+    /// Create a window/tab controller for a specific profile, wired to this
+    /// coordinator. The app-level dump timer covers every window.
+    @discardableResult
+    private func makeWindow(profile: XttyProfile) -> TerminalWindowController {
+        let controller = TerminalWindowController(
+            profile: profile, registry: registry, confirmClose: configSet.confirmClose
+        )
         controller.coordinator = self
         windowControllers.append(controller)
-        return controller  // the app-level dump timer covers every window
+        return controller
     }
 
     func openNewTab(relativeTo controller: TerminalWindowController) {
-        let newController = openNewWindow()
+        openNewTab(relativeTo: controller, profile: configSet.defaultProfile)
+    }
+
+    func openNewTab(relativeTo controller: TerminalWindowController, profile: XttyProfile) {
+        let newController = makeWindow(profile: profile)
         // Group it as a native tab of the originating window.
         controller.window.addTabbedWindow(newController.window, ordered: .above)
         newController.window.makeKeyAndOrderFront(nil)
+    }
+
+    /// "New Tab with Profile ▸ <name>" — open a tab using the chosen profile,
+    /// relative to the key window (or a fresh window if none). Routed here via the
+    /// responder chain from the menu item (its `representedObject` is the name).
+    @objc func newTabWithProfile(_ sender: NSMenuItem) {
+        let profile = configSet.profile(named: sender.representedObject as? String)
+        if let key = NSApp.keyWindow,
+           let controller = windowControllers.first(where: { $0.window == key }) {
+            openNewTab(relativeTo: controller, profile: profile)
+        } else {
+            makeWindow(profile: profile).window.makeKeyAndOrderFront(nil)
+        }
     }
 
     func windowControllerDidClose(_ controller: TerminalWindowController) {
@@ -176,36 +206,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
     /// Load + resolve the user config and keybindings once at launch from a single
     /// file read (P2 read-once policy). Keybindings live in the
     /// `terminal-keybindings` capability; config in `terminal-configuration`.
-    private static func loadConfigAndKeybindings() -> (XttyConfig, Keybindings, QuickTerminalSettings) {
+    private static func loadConfigAndKeybindings() -> (XttyConfigSet, Keybindings, QuickTerminalSettings) {
         let environment = ProcessInfo.processInfo.environment
         let path = XttyConfigLoader.configPath(environment: environment, homeDirectory: NSHomeDirectory())
         let text = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
-        let pairs = XttyConfigLoader.parse(text)
         let warn: (String) -> Void = { NSLog("[xtty] config: %@", $0) }
 
-        var config = XttyConfigLoader.resolve(from: pairs, warn: warn)
-        let keybindings = KeybindResolver.resolve(from: pairs, warn: warn)
+        // Profiles add `[profile "name"]` sections; the base (pre-header) pairs
+        // carry the global keybinding + quick-terminal keys, which stay base-only.
+        let (basePairs, _) = XttyConfigLoader.parseSections(text, warn: warn)
+        var configSet = XttyConfigLoader.resolveSet(from: text, warn: warn)
+        let keybindings = KeybindResolver.resolve(from: basePairs, warn: warn)
         // Quick-terminal keys live in their own capability (parsed from the same
         // single read), so the terminal-configuration schema stays untouched.
-        let quickTerminal = HotKeyResolver.resolve(from: pairs, warn: warn)
+        let quickTerminal = HotKeyResolver.resolve(from: basePairs, warn: warn)
         #if DEBUG
-        config = applyUITestOverrides(to: config)
+        configSet = applyUITestOverrides(to: configSet)
         #endif
-        return (config, keybindings, quickTerminal)
+        return (configSet, keybindings, quickTerminal)
     }
 
     #if DEBUG
     /// XCUITest determinism: `-UITestScrollback <n>` shrinks the scrollback cap so
     /// the bounded-scrollback flood test runs fast with an exact saturation point.
-    private static func applyUITestOverrides(to config: XttyConfig) -> XttyConfig {
+    private static func applyUITestOverrides(to set: XttyConfigSet) -> XttyConfigSet {
         let args = ProcessInfo.processInfo.arguments
         guard let i = args.firstIndex(of: "-UITestScrollback"),
               i + 1 < args.count, let n = Int(args[i + 1]), n >= 0 else {
-            return config
+            return set
         }
-        var overridden = config
-        overridden.scrollback = n
-        return overridden
+        var base = set.base.config
+        base.scrollback = n
+        let newBase = XttyProfile(name: set.base.name, config: base, launch: set.base.launch)
+        return XttyConfigSet(
+            base: newBase, profiles: set.profiles,
+            defaultProfileName: set.defaultProfileName, confirmClose: set.confirmClose
+        )
     }
     #endif
 }

@@ -145,6 +145,168 @@ final class XttyConfigTests: XCTestCase {
         XCTAssertEqual(path, "/Users/test/.config/xtty/config")
     }
 
+    // MARK: Sectioned parsing (profiles)
+
+    func testParseSectionsSplitsBaseAndNamedBlocks() {
+        let text = """
+        theme = dark
+        [profile "work"]
+        theme = light
+        """
+        let (base, profiles) = XttyConfigLoader.parseSections(text)
+        XCTAssertEqual(base["theme"], "dark")
+        XCTAssertEqual(profiles.count, 1)
+        XCTAssertEqual(profiles.first?.name, "work")
+        XCTAssertEqual(profiles.first?.pairs["theme"], "light")
+    }
+
+    func testParseSectionsPreservesEnvKeyCase() {
+        let (_, profiles) = XttyConfigLoader.parseSections("""
+        [profile "work"]
+        env-EDITOR = nvim
+        """)
+        XCTAssertEqual(profiles.first?.pairs["env-EDITOR"], "nvim")
+        XCTAssertNil(profiles.first?.pairs["env-editor"], "env var name case must be preserved")
+    }
+
+    func testParseSectionsLowercasesNonEnvKeys() {
+        let (base, _) = XttyConfigLoader.parseSections("Font-Size = 18")
+        XCTAssertEqual(base["font-size"], "18")
+    }
+
+    func testParseSectionsSkipsMalformedHeaderButKeepsLoading() {
+        var warnings: [String] = []
+        let text = """
+        theme = dark
+        [profile work]
+        theme = light
+        [profile "ok"]
+        font-size = 20
+        """
+        let (base, profiles) = XttyConfigLoader.parseSections(text) { warnings.append($0) }
+        // Base keeps its keys; the malformed block's keys are dropped (not merged
+        // into base or a phantom profile), and the later valid block still loads.
+        XCTAssertEqual(base["theme"], "dark")
+        XCTAssertEqual(profiles.map(\.name), ["ok"])
+        XCTAssertEqual(profiles.first?.pairs["font-size"], "20")
+        XCTAssertFalse(warnings.isEmpty, "a malformed header should warn")
+    }
+
+    func testParseSectionsEmptyNameHeaderIsSkipped() {
+        var warnings: [String] = []
+        let (_, profiles) = XttyConfigLoader.parseSections("""
+        [profile ""]
+        theme = light
+        """) { warnings.append($0) }
+        XCTAssertTrue(profiles.isEmpty)
+        XCTAssertFalse(warnings.isEmpty)
+    }
+
+    func testParseSectionsMergesDuplicateNames() {
+        var warnings: [String] = []
+        let (_, profiles) = XttyConfigLoader.parseSections("""
+        [profile "work"]
+        theme = light
+        font-size = 12
+        [profile "work"]
+        font-size = 16
+        """) { warnings.append($0) }
+        XCTAssertEqual(profiles.count, 1)
+        XCTAssertEqual(profiles.first?.pairs["theme"], "light")
+        XCTAssertEqual(profiles.first?.pairs["font-size"], "16", "later duplicate key wins")
+        XCTAssertFalse(warnings.isEmpty)
+    }
+
+    func testParseSectionsFlatFileHasNoProfiles() {
+        let (base, profiles) = XttyConfigLoader.parseSections("theme = dark\nfont-size = 14")
+        XCTAssertTrue(profiles.isEmpty)
+        XCTAssertEqual(base["theme"], "dark")
+        XCTAssertEqual(base["font-size"], "14")
+    }
+
+    // MARK: Profile set resolution
+
+    func testResolveSetInheritsBaseAndOverrides() {
+        let set = XttyConfigLoader.resolveSet(from: """
+        font-family = JetBrains Mono
+        theme = dark
+        [profile "work"]
+        theme = light
+        """)
+        let work = set.profiles["work"]
+        XCTAssertEqual(work?.config.fontFamily, "JetBrains Mono", "inherited from base")
+        XCTAssertEqual(work?.config.themeName, "light", "overridden")
+        XCTAssertEqual(set.base.config.themeName, "dark")
+    }
+
+    func testResolveSetFlatEqualsOldResolve() {
+        let text = "theme = light\nfont-size = 15\nscrollback = 2000\noption-as-meta = false"
+        let set = XttyConfigLoader.resolveSet(from: text)
+        XCTAssertEqual(set.base.config, XttyConfigLoader.resolve(from: XttyConfigLoader.parse(text)))
+        XCTAssertTrue(set.profiles.isEmpty)
+        XCTAssertNil(set.defaultProfileName)
+        XCTAssertEqual(set.confirmClose, true)
+    }
+
+    func testResolveSetDefaultProfileSelection() {
+        let set = XttyConfigLoader.resolveSet(from: """
+        default-profile = work
+        [profile "work"]
+        theme = light
+        """)
+        XCTAssertEqual(set.defaultProfileName, "work")
+        XCTAssertEqual(set.defaultProfile.name, "work")
+    }
+
+    func testResolveSetUnknownDefaultProfileFallsBackToBase() {
+        var warnings: [String] = []
+        let set = XttyConfigLoader.resolveSet(from: "default-profile = nope") { warnings.append($0) }
+        XCTAssertNil(set.defaultProfileName)
+        XCTAssertEqual(set.defaultProfile.name, nil, "falls back to base")
+        XCTAssertFalse(warnings.isEmpty)
+    }
+
+    func testResolveSetParsesLaunchOverrides() {
+        let set = XttyConfigLoader.resolveSet(from: """
+        [profile "ssh"]
+        command = ssh box
+        cwd = ~/src/work
+        env-EDITOR = nvim
+        """)
+        let launch = set.profiles["ssh"]?.launch
+        XCTAssertEqual(launch?.command, "ssh box")
+        XCTAssertEqual(launch?.cwd, "~/src/work")
+        XCTAssertEqual(launch?.env["EDITOR"], "nvim")
+    }
+
+    func testResolveSetEnvPathIsIgnoredWithWarning() {
+        var warnings: [String] = []
+        let set = XttyConfigLoader.resolveSet(from: """
+        [profile "x"]
+        env-PATH = /tmp
+        env-FOO = bar
+        """) { warnings.append($0) }
+        let launch = set.profiles["x"]?.launch
+        XCTAssertNil(launch?.env["PATH"], "PATH is built by the login shell")
+        XCTAssertEqual(launch?.env["FOO"], "bar")
+        XCTAssertTrue(warnings.contains { $0.contains("PATH") })
+    }
+
+    func testResolveSetParsesConfirmClose() {
+        XCTAssertEqual(XttyConfigLoader.resolveSet(from: "confirm-close = false").confirmClose, false)
+        XCTAssertEqual(XttyConfigLoader.resolveSet(from: "confirm-close = true").confirmClose, true)
+    }
+
+    func testResolveSetDefaultProfileInsideBlockIsIgnoredWithWarning() {
+        var warnings: [String] = []
+        let set = XttyConfigLoader.resolveSet(from: """
+        [profile "work"]
+        default-profile = work
+        """) { warnings.append($0) }
+        XCTAssertNil(set.defaultProfileName)
+        XCTAssertTrue(warnings.contains { $0.contains("default-profile") })
+    }
+
     // MARK: Loading from disk
 
     func testLoadMissingFileReturnsDefaults() {

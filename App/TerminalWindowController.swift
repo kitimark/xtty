@@ -7,8 +7,11 @@ import XttyCore
 /// the app delegate, which holds the shared registry + config).
 @MainActor
 protocol WindowCoordinator: AnyObject {
+    /// Open a new window/tab using the default profile.
     @discardableResult func openNewWindow() -> TerminalWindowController
     func openNewTab(relativeTo controller: TerminalWindowController)
+    /// Open a new tab using a specific profile ("New Tab with Profile ▸").
+    func openNewTab(relativeTo controller: TerminalWindowController, profile: XttyProfile)
     func windowControllerDidClose(_ controller: TerminalWindowController)
 }
 
@@ -28,8 +31,10 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
     let window: NSWindow
     weak var coordinator: WindowCoordinator?
 
-    private let config: XttyConfig
     private let registry: SessionRegistry
+    /// Whether to confirm closing a pane with a running foreground job
+    /// (the `confirm-close` config key — design D10).
+    private let confirmCloseEnabled: Bool
 
     /// The split-tree structure (view-free model) and the controllers backing it.
     private var tree: PaneNode
@@ -41,14 +46,10 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
     private var clickMonitor: Any?
     private var isTerminated = false
 
-    /// Confirm before closing a pane that has a running foreground process.
-    /// A built-in default in this milestone (the `confirm-close` config key lands
-    /// with the profiles work in P3b — design D5).
-    private static let confirmCloseEnabled = true
-
-    init(config: XttyConfig, registry: SessionRegistry, contentSize: NSSize = NSSize(width: 900, height: 560)) {
-        self.config = config
+    init(profile: XttyProfile, registry: SessionRegistry, confirmClose: Bool = true,
+         contentSize: NSSize = NSSize(width: 900, height: 560)) {
         self.registry = registry
+        self.confirmCloseEnabled = confirmClose
         window = NSWindow(
             contentRect: NSRect(origin: .zero, size: contentSize),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
@@ -56,7 +57,7 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             defer: false
         )
         let root = PaneController(
-            config: config, registry: registry,
+            profile: profile, registry: registry,
             frame: NSRect(origin: .zero, size: contentSize)
         )
         self.tree = .leaf(root.pane)
@@ -182,7 +183,7 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
     func paneRequestsClose(_ pane: PaneController) {
         // Confirm only on user-initiated close of a pane with a running foreground
         // job (shell-exit goes through paneDidTerminate, which never prompts).
-        if Self.confirmCloseEnabled, hasForegroundJob(pane.view), !confirmClose() {
+        if confirmCloseEnabled, hasForegroundJob(pane.view), !confirmClose() {
             return
         }
         closePane(pane)
@@ -224,8 +225,11 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
     // MARK: Split / close
 
     private func splitFocusedPane(axis: SplitAxis) {
+        // A split inherits the focused pane's profile (appearance + launch
+        // overrides), so splitting an ssh/profiled pane yields another like it.
+        let inherited = panes[activePaneID]?.profile ?? PaneController.baseProfile
         let newPane = PaneController(
-            config: config, registry: registry,
+            profile: inherited, registry: registry,
             frame: NSRect(origin: .zero, size: NSSize(width: 400, height: 300))
         )
         newPane.delegate = self
@@ -400,8 +404,8 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         let state: [String: Any] = [
             "fontFamily": active.view.font.familyName ?? active.view.font.fontName,
             "fontSize": Double(active.view.font.pointSize),
-            "theme": config.themeName,
-            "scrollbackCap": config.scrollback,
+            "theme": active.profile.config.themeName,
+            "scrollbackCap": active.profile.config.scrollback,
             "optionAsMeta": active.view.optionAsMetaKey,
             "rows": engine.rows,
             "isAlt": engine.isCurrentBufferAlternate,
@@ -411,6 +415,9 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             "paneCount": leaves.count,
             "focusedPaneIndex": leaves.firstIndex(where: { $0.id == activePaneID }) ?? -1,
             "tabCount": window.tabbedWindows?.count ?? 1,
+            // Profile of the focused pane (empty string = base profile).
+            "profileName": active.pane.profileName ?? "",
+            "cwd": active.pane.session.launchConfig.cwd ?? "",
         ]
         if let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]) {
             try? data.write(to: URL(fileURLWithPath: UITestDump.stateDumpPath))
