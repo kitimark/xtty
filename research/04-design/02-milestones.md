@@ -48,15 +48,14 @@ Requirement tags reference [xtty-requirements](../03-analysis/xtty-requirements.
 
 **Done when:** tabs + splits feel native and stable. *(P3a meets this; P3b adds the extras.)*
 
-## Phase 4 — Semantic capture / blocks  ·  H3 *(keystone — old P7)*
-**Goal:** the foundation for every differentiator.
-- **OSC 7 cwd** is free (`hostCurrentDirectoryUpdated`) — use it for new-split cwd.
-- Register **OSC 133** on the engine: `terminal.registerOscHandler(code: 133, …)`; parse A/B/C/D + exit code.
-- Build the **blocks model** in `XttyCore`: each command + output range (engine buffer rows) + exit code + cwd. Ship shell-integration snippets (zsh/bash/fish) + auto-injection w/ fallback.
+## Phase 4 — Semantic capture / blocks  ·  H3 *(keystone — old P7)*  *(P4a ✅ implemented & archived-pending; P4b deferred)*
+**Goal:** the foundation for every differentiator. **Split into P4a (data model, fork-free) + P4b (spatial ops, needs a SwiftTerm fork)** — see [`p4-semantic-capture-decisions`](../03-analysis/p4-semantic-capture-decisions.md).
+- ✅ **P4a (`add-semantic-capture`)** — **OSC 7 cwd** captured via the (now wired) `hostCurrentDirectoryUpdate` delegate, decoded (`file://`/`kitty-shell-cwd://`, remote-host flag); new **splits open in the focused pane's live cwd**. **OSC 133** registered on the engine (`registerOscHandler(code: 133)`); a view-free parser (A/B/C/D/P, bare-positional exit code, `cmdline`/`cmdline_url`, `k=s`) feeds a view-free **block-lifecycle state machine** + per-session `BlockTracker` (command/exit/cwd/timestamps/state — **no fragile row coordinates**). **Auto-injects zsh** integration via `ZDOTDIR` redirection (bundled `.zshenv` restores the user's config; additive hooks coexist with p10k/starship; skipped for `command` one-shots; manual fallback documented). **Alt-screen gating** via an `open bufferActivated` override + public `isCurrentBufferAlternate` (full-screen apps → `opaque`, never normal blocks; OSC 133 best-effort, tmux/ssh degrade to plain output). 126 `XttyCore` unit + 17 XCUITests green (the block/cwd e2e drives a real injected zsh).
+- 📋 **P4b (deferred, needs a small SwiftTerm fork)** — **jump-to-prompt**, **select-a-command's-output**, **gutter fail-marks**: all need stable absolute row anchors (internal `yBase`+`linesTop`) and the internal `SelectionService`, so they ride a `~5-line upstreamable accessor fork` in a separate change. Also subsumes the **P3b-deferred file:line click-to-open**.
 
-**Done when:** new splits open in the right cwd; you can jump-to-prompt, select one command's output, and failed commands are marked.
-**Refs:** [08-modern-innovations](../02-internals/08-modern-innovations.md), [agents-and-xtty](../03-analysis/agents-and-xtty.md)
-**Risks:** fragile prompt hooks (Starship/p10k); tmux/ssh passthrough; alt-screen apps must NOT be chopped into blocks.
+**Done when (P4a):** new splits open in the right cwd; commands are captured as blocks with exit codes + state (failed marked); full-screen apps don't become blocks; integration is automatic for zsh. **(P4b adds the spatial jump/select/mark affordances.)**
+**Refs:** [08-modern-innovations](../02-internals/08-modern-innovations.md), [agents-and-xtty](../03-analysis/agents-and-xtty.md), [p4 decisions](../03-analysis/p4-semantic-capture-decisions.md)
+**Risks (handled in P4a):** fragile prompt hooks (Starship/p10k) → additive `add-zsh-hook`; tmux/ssh passthrough → best-effort degrade to no-blocks; alt-screen apps NOT chopped into blocks → `bufferActivated` gating.
 
 ## Phase 5 — Session-progress sidebar  ·  H1 *(the favorite feature — old P8)*
 **Goal:** at-a-glance per-session state — what you liked most in Warp.

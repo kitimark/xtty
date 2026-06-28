@@ -1,0 +1,53 @@
+# xtty zsh integration: emit OSC 133 (semantic command boundaries) + OSC 7 (cwd).
+# Sourced by xtty's bootstrap .zshenv for interactive shells, after the user's
+# own startup files. Hooks are registered additively (add-zsh-hook), so they
+# coexist with prompt frameworks like powerlevel10k / starship.
+
+# Guard against double-loading (e.g. nested shells).
+if [[ -n "$XTTY_SHELL_INTEGRATION_LOADED" ]]; then
+  return 0
+fi
+typeset -g XTTY_SHELL_INTEGRATION_LOADED=1
+
+autoload -Uz add-zsh-hook
+
+# Percent-encode a string for OSC 133 cmdline_url (safe across ';' and newlines).
+# ASCII is exact; multibyte is best-effort (xtty decodes with a raw fallback).
+_xtty_url_encode() {
+  local s="$1" out="" i c
+  for (( i = 1; i <= ${#s}; i++ )); do
+    c="${s[i]}"
+    case "$c" in
+      [A-Za-z0-9._~-]) out+="$c" ;;
+      *) out+=$(printf '%%%02X' "'$c") ;;
+    esac
+  done
+  printf '%s' "$out"
+}
+
+# OSC 7: report the current directory (kitty-shell-cwd:// form — no encoding).
+_xtty_report_cwd() {
+  printf '\e]7;kitty-shell-cwd://%s%s\a' "${HOST}" "${PWD}"
+}
+
+# precmd runs before each prompt: close the previous command (D + exit code),
+# report cwd, then mark the new prompt start (A).
+_xtty_precmd() {
+  local exit_code=$?
+  if [[ -n "$_xtty_command_active" ]]; then
+    printf '\e]133;D;%s\a' "$exit_code"
+    unset _xtty_command_active
+  fi
+  _xtty_report_cwd
+  printf '\e]133;A\a'
+}
+
+# preexec runs after the user submits a command, before it executes: mark output
+# start (C) and carry the command line.
+_xtty_preexec() {
+  printf '\e]133;C;cmdline_url=%s\a' "$(_xtty_url_encode "$1")"
+  typeset -g _xtty_command_active=1
+}
+
+add-zsh-hook precmd _xtty_precmd
+add-zsh-hook preexec _xtty_preexec

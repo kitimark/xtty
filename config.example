@@ -60,6 +60,22 @@
 # The `fn` key is not supported. Example: toggle on Ctrl+Option+Backtick.
 # quick-terminal-hotkey = ctrl+opt+grave
 
+# --- Shell integration (OSC 133 command blocks + OSC 7 cwd) ---
+#
+# xtty automatically integrates with zsh so it can track command boundaries and
+# the working directory (new splits open where you are; a future sidebar shows
+# per-command status). It does this by pointing ZDOTDIR at a bundled directory
+# whose .zshenv restores your real ZDOTDIR and sources your config first, then
+# installs additive precmd/preexec hooks — your dotfiles, prompt (powerlevel10k /
+# starship), .zprofile and .zshrc all load normally. There is nothing to set up.
+#
+# If a system /etc/zshenv overrides ZDOTDIR (rare) the automatic redirect can't
+# apply; enable integration manually by sourcing the bundled hooks from your
+# ~/.zshrc:
+#   source "/Applications/xtty.app/Contents/Resources/shell-integration/zsh/xtty-integration"
+# (Adjust the path if xtty is installed elsewhere.) bash/fish are not yet
+# auto-integrated.
+
 # --- Close confirmation ---
 #
 # Whether to confirm before closing a pane that has a running foreground job

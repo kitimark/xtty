@@ -27,6 +27,18 @@ public final class TerminalSession {
     /// running, and `nil` if the process ended without a reported code).
     public private(set) var exitCode: Int32?
 
+    /// The shell's most recently reported working directory (from OSC 7),
+    /// decoded; `nil` until the shell first reports one (callers fall back to the
+    /// launch directory). Distinct from `launchConfig.cwd` (the static start dir).
+    public private(set) var currentWorkingDirectory: OSC7.WorkingDirectory?
+
+    /// The command blocks captured from OSC 133 (the P5 sidebar reads these).
+    public let blocks = BlockTracker()
+
+    /// Whether the session's terminal is currently on the alternate screen
+    /// (mirrors the engine's `isCurrentBufferAlternate`).
+    public private(set) var isAlternateScreen = false
+
     public init(terminal: Terminal, launchConfig: ShellLaunchConfig) {
         self.terminal = terminal
         self.launchConfig = launchConfig
@@ -36,5 +48,31 @@ public final class TerminalSession {
     /// the child process terminates (drives the exit policy).
     public func recordExit(code: Int32?) {
         exitCode = code
+    }
+
+    /// Record a working directory reported via OSC 7 (already decoded).
+    public func updateWorkingDirectory(_ wd: OSC7.WorkingDirectory) {
+        currentWorkingDirectory = wd
+    }
+
+    /// Feed a parsed OSC 133 mark into the block tracker, tagging it with the
+    /// session's current working directory.
+    public func handleSemanticMark(_ mark: SemanticMark) {
+        blocks.handle(mark, cwd: liveLocalDirectory ?? launchConfig.cwd)
+    }
+
+    /// Record an alternate-screen transition (drives block suppression).
+    public func setAlternateScreen(_ isAlt: Bool) {
+        isAlternateScreen = isAlt
+        blocks.setAlternateScreen(isAlt)
+    }
+
+    /// The best-known *local* directory to start a new pane in: the live cwd when
+    /// it is on the local machine, else `nil` (so callers fall back to the
+    /// inherited profile's launch directory). A remote cwd (e.g. over ssh) yields
+    /// `nil` rather than a path that doesn't exist locally.
+    public var liveLocalDirectory: String? {
+        guard let cwd = currentWorkingDirectory, !cwd.isRemote else { return nil }
+        return cwd.path
     }
 }

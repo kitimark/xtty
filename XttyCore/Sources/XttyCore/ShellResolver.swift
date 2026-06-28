@@ -31,6 +31,12 @@ public struct ShellLaunchConfig: Equatable, Sendable {
         self.environment = environment
         self.cwd = cwd
     }
+
+    /// A copy with the working directory replaced — used when a split inherits the
+    /// focused pane's *live* directory instead of the profile's static `cwd`.
+    public func withWorkingDirectory(_ newCwd: String?) -> ShellLaunchConfig {
+        ShellLaunchConfig(executable: executable, args: args, execName: execName, environment: environment, cwd: newCwd)
+    }
 }
 
 /// Resolves which shell to launch and how, independent of any terminal view.
@@ -128,6 +134,7 @@ public enum ShellResolver {
         override: LaunchOverride,
         forShell shellPath: String,
         environment: [String: String],
+        integrationDir: String? = nil,
         homeDirectory: String = NSHomeDirectory(),
         cwdExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) },
         warn: (String) -> Void = { _ in }
@@ -137,6 +144,21 @@ public enum ShellResolver {
 
         var seed = seedEnvironment(environment: environment)
         for (key, value) in override.env { seed[key] = value }
+
+        // Shell-integration injection (zsh only): redirect ZDOTDIR to xtty's
+        // bundled integration dir so the shell emits OSC 133/7 with no dotfile
+        // edits. The bundled `.zshenv` restores the user's real ZDOTDIR (forwarded
+        // here as XTTY_ORIG_ZDOTDIR — read from the *inherited* env BEFORE the seed
+        // replaces it) and then sources their config. Skipped for `command`
+        // one-shots, where there is no interactive prompt to instrument.
+        let isCommand = (override.command.map { !$0.isEmpty }) ?? false
+        if let integrationDir, base == "zsh", !isCommand {
+            if let originalZDotDir = environment["ZDOTDIR"], !originalZDotDir.isEmpty {
+                seed["XTTY_ORIG_ZDOTDIR"] = originalZDotDir
+            }
+            seed["ZDOTDIR"] = integrationDir
+            seed["XTTY_SHELL_INTEGRATION"] = "1"
+        }
 
         var cwd: String? = nil
         if let rawCwd = override.cwd {
@@ -181,6 +203,7 @@ public enum ShellResolver {
     public static func resolve(
         override: LaunchOverride,
         environment: [String: String] = ProcessInfo.processInfo.environment,
+        integrationDir: String? = nil,
         warn: (String) -> Void = { _ in }
     ) -> ShellLaunchConfig {
         let path = resolveShellPath(
@@ -188,7 +211,7 @@ public enum ShellResolver {
             isExecutable: { FileManager.default.isExecutableFile(atPath: $0) },
             accountShell: accountShellPath
         )
-        return launchConfig(override: override, forShell: path, environment: environment, warn: warn)
+        return launchConfig(override: override, forShell: path, environment: environment, integrationDir: integrationDir, warn: warn)
     }
 
     /// The current account's login shell from the password database, or `nil`.

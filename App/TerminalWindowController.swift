@@ -228,9 +228,13 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         // A split inherits the focused pane's profile (appearance + launch
         // overrides), so splitting an ssh/profiled pane yields another like it.
         let inherited = panes[activePaneID]?.profile ?? PaneController.baseProfile
+        // …and opens in the focused pane's current (live) directory when known,
+        // falling back to the profile's own start directory (startDirectory nil).
+        let startDirectory = panes[activePaneID]?.pane.session.liveLocalDirectory
         let newPane = PaneController(
             profile: inherited, registry: registry,
-            frame: NSRect(origin: .zero, size: NSSize(width: 400, height: 300))
+            frame: NSRect(origin: .zero, size: NSSize(width: 400, height: 300)),
+            startDirectory: startDirectory
         )
         newPane.delegate = self
         panes[newPane.pane.id] = newPane
@@ -401,6 +405,15 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         let engine = active.engine
         let depth = engine.getTopVisibleRow()
         let leaves = tree.leaves()
+        let session = active.pane.session
+        // Semantic capture (P4a): the live cwd, alt-screen state, and block list.
+        let blocks: [[String: Any]] = session.blocks.blocks.map { b in
+            [
+                "command": b.command ?? "",
+                "exitCode": b.exitCode.map { NSNumber(value: $0) } ?? NSNull(),
+                "state": b.state.rawValue,
+            ]
+        }
         let state: [String: Any] = [
             "fontFamily": active.view.font.familyName ?? active.view.font.fontName,
             "fontSize": Double(active.view.font.pointSize),
@@ -418,9 +431,25 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             // Profile of the focused pane (empty string = base profile).
             "profileName": active.pane.profileName ?? "",
             "cwd": active.pane.session.launchConfig.cwd ?? "",
+            // Semantic capture.
+            "currentDirectory": session.currentWorkingDirectory?.path ?? "",
+            "isAlternateScreen": session.isAlternateScreen,
+            "lastSemanticAction": Self.actionName(session.blocks.lastAction),
+            "blocks": blocks,
         ]
         if let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]) {
             try? data.write(to: URL(fileURLWithPath: UITestDump.stateDumpPath))
+        }
+    }
+
+    /// Short name for a semantic action (for the DEBUG dump).
+    private static func actionName(_ action: SemanticAction?) -> String {
+        switch action {
+        case .promptStart: return "A"
+        case .promptEnd: return "B"
+        case .commandStart: return "C"
+        case .commandEnd: return "D"
+        case nil: return ""
         }
     }
     #endif

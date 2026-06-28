@@ -36,6 +36,11 @@ final class XttyTerminalView: LocalProcessTerminalView {
     /// The owner that fulfills pane-scoped commands (the `PaneController`).
     weak var commands: XttyTerminalViewCommands?
 
+    /// Called when the engine switches between the normal and alternate screen
+    /// buffers (passes `true` when now on the alternate screen). Drives OSC 133
+    /// block suppression so full-screen apps (vim/htop) don't become blocks.
+    var onBufferActivated: ((Bool) -> Void)?
+
     /// Smallest/largest live font sizes, to keep the grid legible and bounded.
     private static let fontSizeRange: ClosedRange<CGFloat> = 6...72
 
@@ -71,6 +76,16 @@ final class XttyTerminalView: LocalProcessTerminalView {
     @objc func focusPaneDown(_ sender: Any?) { commands?.moveFocus(.down) }
     @objc func newTerminalTab(_ sender: Any?) { commands?.newTab() }
     @objc func newTerminalWindow(_ sender: Any?) { commands?.newWindow() }
+
+    // MARK: Alternate-screen detection
+
+    /// SwiftTerm calls this (an `open` `TerminalDelegate` method on the view) on
+    /// every normal⇄alternate buffer switch (DECSET/DECRST 47/1047/1049). Read the
+    /// engine's public truth source to derive enter vs exit, then relay it.
+    override func bufferActivated(source: Terminal) {
+        super.bufferActivated(source: source)
+        onBufferActivated?(source.isCurrentBufferAlternate)
+    }
 
     // MARK: Menu validation
 

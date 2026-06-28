@@ -26,7 +26,15 @@ targets:
     type: application
     platform: macOS
     sources:
-      - App
+      - path: App
+        excludes:
+          - "Resources/**"
+      # Shell-integration scripts shipped in the app bundle (zsh OSC 133/7 hooks).
+      # A folder reference copies the directory verbatim so the hidden `.zshenv`
+      # (which zsh requires by that exact name in ZDOTDIR) is preserved.
+      - path: App/Resources/shell-integration
+        type: folder
+        buildPhase: resources
     # Make `xcodebuild test -scheme xtty` run the UI tests (the auto-generated
     # scheme's Test action). See the verification-harness change.
     scheme:

@@ -178,4 +178,53 @@ final class ShellResolverTests: XCTestCase {
         XCTAssertEqual(ShellResolver.expandCwd("/abs", home: "/Users/t", exists: { _ in true }), "/abs")
         XCTAssertNil(ShellResolver.expandCwd("/missing", home: "/Users/t", exists: { _ in false }))
     }
+
+    // MARK: shell-integration injection (ZDOTDIR)
+
+    func testInjectionSetsZDotDirForZsh() {
+        let config = ShellResolver.launchConfig(
+            override: .none, forShell: "/bin/zsh", environment: [:],
+            integrationDir: "/Applications/xtty.app/Contents/Resources/shell-integration/zsh"
+        )
+        XCTAssertEqual(config.environment["ZDOTDIR"],
+                       "/Applications/xtty.app/Contents/Resources/shell-integration/zsh")
+        XCTAssertEqual(config.environment["XTTY_SHELL_INTEGRATION"], "1")
+        XCTAssertNil(config.environment["XTTY_ORIG_ZDOTDIR"], "no inherited ZDOTDIR to forward")
+    }
+
+    func testInjectionForwardsInheritedZDotDir() {
+        let config = ShellResolver.launchConfig(
+            override: .none, forShell: "/bin/zsh",
+            environment: ["ZDOTDIR": "/Users/t/.zsh"],
+            integrationDir: "/xtty/zsh"
+        )
+        XCTAssertEqual(config.environment["ZDOTDIR"], "/xtty/zsh")
+        XCTAssertEqual(config.environment["XTTY_ORIG_ZDOTDIR"], "/Users/t/.zsh",
+                       "the user's original ZDOTDIR is forwarded for the bootstrap to restore")
+    }
+
+    func testInjectionSkippedForCommandOneShot() {
+        let config = ShellResolver.launchConfig(
+            override: LaunchOverride(command: "ssh box"), forShell: "/bin/zsh",
+            environment: [:], integrationDir: "/xtty/zsh"
+        )
+        XCTAssertNil(config.environment["ZDOTDIR"], "command one-shots are not instrumented")
+        XCTAssertNil(config.environment["XTTY_SHELL_INTEGRATION"])
+    }
+
+    func testInjectionSkippedForNonZshShell() {
+        let config = ShellResolver.launchConfig(
+            override: .none, forShell: "/opt/homebrew/bin/fish",
+            environment: [:], integrationDir: "/xtty/zsh"
+        )
+        XCTAssertNil(config.environment["ZDOTDIR"], "ZDOTDIR injection is zsh-only")
+    }
+
+    func testNoInjectionWhenIntegrationDirAbsent() {
+        let config = ShellResolver.launchConfig(
+            override: .none, forShell: "/bin/zsh", environment: [:]
+        )
+        XCTAssertNil(config.environment["ZDOTDIR"])
+        XCTAssertNil(config.environment["XTTY_SHELL_INTEGRATION"])
+    }
 }

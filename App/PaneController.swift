@@ -47,15 +47,32 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
     /// when a focused pane can't be found for split inheritance.
     static let baseProfile = XttyProfile(name: nil, config: .default, launch: .none)
 
-    init(profile: XttyProfile, registry: SessionRegistry, frame: NSRect) {
+    /// Lowercased names that denote the local machine, so an OSC 7 cwd reported by
+    /// the local host is treated as a local path and a foreign host (e.g. over ssh)
+    /// is flagged remote. Computed once.
+    static let localHostNames: Set<String> = {
+        var names: Set<String> = ["", "localhost"]
+        let host = ProcessInfo.processInfo.hostName.lowercased()  // e.g. marks-mbp.local
+        names.insert(host)
+        if let short = host.split(separator: ".").first { names.insert(String(short)) }
+        return names
+    }()
+
+    init(profile: XttyProfile, registry: SessionRegistry, frame: NSRect, startDirectory: String? = nil) {
         // Build everything via locals first — `self` is unavailable before super.init.
         let view = XttyTerminalView(frame: frame)
         // Resolve the launch from the profile's overrides: a `command` runs through
         // the user's login+interactive shell (so PATH/dotfiles apply), else a plain
         // login shell; `cwd`/`env` are applied here too (design D4/D5/D6).
-        let launch = ShellResolver.resolve(override: profile.launch) {
+        var launch = ShellResolver.resolve(
+            override: profile.launch,
+            integrationDir: ShellIntegration.zshDirectory
+        ) {
             NSLog("[xtty] profile '%@': %@", profile.name ?? "base", $0)
         }
+        // A split passes the focused pane's live cwd, overriding the profile's
+        // static start directory so the new pane opens where the user is working.
+        if let startDirectory { launch = launch.withWorkingDirectory(startDirectory) }
         let session = TerminalSession(terminal: view.getTerminal(), launchConfig: launch)
         let pane = registry.makePane(for: session, profileName: profile.name)
 
@@ -69,6 +86,17 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
         view.processDelegate = self
         view.commands = self
         view.configuredFontSize = CGFloat(profile.config.fontSize)
+
+        // Semantic capture (P4a). Alternate-screen transitions gate block-building;
+        // the OSC 133 handler feeds the per-session block tracker. Both fire on the
+        // engine's main feed path (assumeIsolated is safe — see design D1).
+        view.onBufferActivated = { [weak self] isAlternate in
+            self?.session.setAlternateScreen(isAlternate)
+        }
+        view.getTerminal().registerOscHandler(code: 133) { [weak self] data in
+            guard let mark = OSC133.parse(String(decoding: data, as: UTF8.self)) else { return }
+            MainActor.assumeIsolated { self?.session.handleSemanticMark(mark) }
+        }
 
         // Apply config (font / theme palette / bounded scrollback / option-as-meta)
         // before the shell starts so the initial PTY size + appearance reflect it.
@@ -123,8 +151,17 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
         MainActor.assumeIsolated { delegate?.paneDidUpdateTitle(self, title: title) }
     }
 
-    // OSC 7 cwd capture is P4; ignore here.
-    nonisolated func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
+    // OSC 7 cwd capture: SwiftTerm's built-in handler stores the raw URL and fires
+    // this delegate (trust-gated; we deliberately do not register a custom OSC 7
+    // handler). Decode it and record the per-session live cwd.
+    nonisolated func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {
+        MainActor.assumeIsolated {
+            guard let directory,
+                  let wd = OSC7.decode(directory, localHostNames: PaneController.localHostNames)
+            else { return }
+            session.updateWorkingDirectory(wd)
+        }
+    }
 
     /// This pane's headless engine (read by the window controller's DEBUG dump).
     var engine: Terminal { view.getTerminal() }
