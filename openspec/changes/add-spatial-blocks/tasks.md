@@ -42,13 +42,13 @@
 
 ## 8. Phase 2 — light up (deferred; the chosen mechanism)
 
-- [ ] 8.1 Stand up the leading mechanism: add `migueldeicaza/SwiftTerm` as a submodule pinned to `v1.13.0`; add the prepare step that drops `XttyAccessors.swift` (group 1.3) into its `Sources/SwiftTerm/`; switch `XttyCore/Package.swift:23` to `.package(path: "../external/SwiftTerm")`; `swift package resolve`; reset DerivedData package caches; `xcodegen generate` (or vendor-in-tree / fork as the reversible alternative — finalize per the strategy research doc)
-- [ ] 8.2 Swap the **production** seam body to the real engine reads (`getScrollInvariantCursorLocation().row` / `scrollbackBase`) — ~2 lines in the `PaneController` bridge
-- [ ] 8.3 Add the real-injected-zsh happy-path e2e: jump resolves to an earlier prompt; copy captures a known command's output excluding the prompt; **including the scrolled-up correctness case**; run the empirical `clear; <flood>` masking check and decide whether the in-engine `resetGeneration` counter is needed
+- [x] 8.1 Stand up the leading mechanism: add `migueldeicaza/SwiftTerm` as a submodule pinned to `v1.13.0`; add the prepare step that drops `XttyAccessors.swift` (group 1.3) into its `Sources/SwiftTerm/`; switch `XttyCore/Package.swift:23` to `.package(path: "../external/SwiftTerm")`; `swift package resolve`; reset DerivedData package caches; `xcodegen generate` (or vendor-in-tree / fork as the reversible alternative — finalize per the strategy research doc)
+- [x] 8.2 Swap the **production** seam body to the real engine reads (`getScrollInvariantCursorLocation().row` / `scrollbackBase`) — ~2 lines in the `PaneController` bridge
+- [x] 8.3 Add the real-injected-zsh happy-path e2e: jump resolves to an earlier prompt; copy captures a known command's output excluding the prompt; **including the scrolled-up correctness case**; run the empirical `clear; <flood>` masking check and decide whether the in-engine `resetGeneration` counter is needed
 - [ ] 8.4 File the upstream PR mirroring `getScrollInvariantLine`; link it for later retirement of the local mechanism
 
 ## 9. Verification + docs/trackers (pre-archive)
 
-- [ ] 9.1 Run `swift test` (XttyCore) and the full app + UI test suites; record the green counts
-- [ ] 9.2 Update `research/03-analysis/p4b-2-spatial-blocks-decisions.md` (mark spikes 1/3/copy-semantics resolved) and `research/03-analysis/swiftterm-fork-vs-patch-strategy.md` (record the chosen mechanism) and `research/04-design/02-milestones.md` (P4b-2 state); refresh **Current status** in `AGENTS.md`
-- [ ] 9.3 `openspec validate add-spatial-blocks`; confirm ready to archive (archive only after Phase 2 — the spec'd behavior is live, not just no-opping)
+- [x] 9.1 Run `swift test` (XttyCore) and the full app + UI test suites; record the green counts
+- [x] 9.2 Update `research/03-analysis/p4b-2-spatial-blocks-decisions.md` (mark spikes 1/3/copy-semantics resolved) and `research/03-analysis/swiftterm-fork-vs-patch-strategy.md` (record the chosen mechanism) and `research/04-design/02-milestones.md` (P4b-2 state); refresh **Current status** in `AGENTS.md`
+- [x] 9.3 `openspec validate add-spatial-blocks`; confirm ready to archive (archive only after Phase 2 — the spec'd behavior is live, not just no-opping)

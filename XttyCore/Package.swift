@@ -20,7 +20,11 @@ let package = Package(
         .library(name: "XttyCore", targets: ["XttyCore"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", from: "1.13.0"),
+        // SwiftTerm is pinned as a git submodule (external/SwiftTerm @ v1.13.0)
+        // with our add-only accessor file dropped in by scripts/bootstrap-swiftterm.sh
+        // — the no-fork "patch in repo" mechanism (P4b-2). Run that script once after
+        // cloning. See research/03-analysis/swiftterm-fork-vs-patch-strategy.md.
+        .package(path: "../external/SwiftTerm"),
     ],
     targets: [
         .target(

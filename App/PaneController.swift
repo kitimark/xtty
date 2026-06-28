@@ -246,14 +246,12 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
 
     // MARK: Spatial blocks (P4b-2) — scroll-coordinate seam + jump + copy
 
-    // The trim-invariant absolute cursor row and scrollback base come from a
-    // SwiftTerm engine addition that is DEFERRED (design D1). Until it lands
-    // (Phase 2), these return nil, so anchors are never captured and jump/copy
-    // no-op gracefully. PHASE-2 LIGHT-UP swaps exactly these two bodies to:
-    //   row  -> engine.getScrollInvariantCursorLocation().row
-    //   base -> engine.scrollbackBase
-    private func engineScrollRow() -> Int? { nil }
-    private func engineScrollbackBase() -> Int? { nil }
+    // The trim-invariant absolute cursor row + scrollback base come from the
+    // SwiftTerm engine accessors added via the pinned submodule + drop-in
+    // (scripts/bootstrap-swiftterm.sh; see the fork-vs-patch research doc). These
+    // were the Phase-1 nil seam; lit up in Phase 2 to read the real accessors.
+    private func engineScrollRow() -> Int? { engine.getScrollInvariantCursorLocation().row }
+    private func engineScrollbackBase() -> Int? { engine.scrollbackBase }
 
     /// liveTop = yBase + linesTop = (scroll-invariant cursor row) − (yBase-relative
     /// cursor y, public). `nil` when the provider is unavailable (Phase 1).
