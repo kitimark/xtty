@@ -69,12 +69,14 @@ Requirement tags reference [xtty-requirements](../03-analysis/xtty-requirements.
 **Done when:** you glance at the sidebar and see what each terminal is doing.
 **Refs:** [adjacent-tools (Herdr)](../03-analysis/adjacent-tools.md) (state-sidebar model); [P5/P4b sequencing](../03-analysis/p5-sidebar-and-p4b-sequencing.md)
 
-## Phase 6 — File / diff view  ·  H2 *(the Zed habit — old P9)*
-**Goal:** lightweight in-terminal project files + git diff before commit.
-- File-tree panel for the current project (cwd from OSC 7).
-- Git status + diff view (read-only first). Keep it *lightweight* — not a full IDE (non-goal).
+## Phase 6 — File / diff view  ·  H2 *(the Zed habit — old P9)*  *(decisions captured — not yet started)*
+**Goal:** lightweight in-terminal **git review before commit** — *not* a full IDE (non-goal). **Split into P6a (git-review panel, lead) + P6b (full file-tree browser, deferred)** — see [`p6-file-diff-decisions`](../03-analysis/p6-file-diff-decisions.md).
+- **P6a — read-only git-review panel (ship first):** a `git status`-derived changed-files list (grouped Changes / Untracked / Conflicts) → click-to-diff, a plain **unified** diff in SwiftUI; in a new collapsible **right-edge** panel (left edge stays the P5 session sidebar); ⌘-click a file → open in editor (reuses P4b-1). Git via **shell-out** (no libgit2); cwd from P4a's OSC 7 (`liveLocalDirectory`). Refresh on OSC-133 command-finish **+ a ~5 s gated poll backstop** (catches an agent editing *mid*-command) — the "review what the agent changed, then commit" surface.
+- **P6b — full project file-tree browser (deferred / optional):** browse *all* files (lazy tree, expand/collapse). The `git status` list already gives a scoped file view, so the tree is a convenience, not the keystone.
+- **Out of scope (read-only bet):** staging / commit / discard — every comparable tool is read-write, but xtty stays read-only for leanness and pairs with `lazygit`; the data model stays forward-compatible with a later stage toggle.
 
-**Done when:** you can browse files and review a diff without leaving xtty.
+**Done when (P6a):** you can glance at what changed in the focused pane's repo and read each file's diff without leaving xtty — and ⌘-click a changed file to open it at the line.
+**Refs:** [p6 file/diff decisions](../03-analysis/p6-file-diff-decisions.md); reuses P4a cwd + P4b-1 click-to-open.
 
 ## Phase 7 — Polish + MEASURE (decision gate)  ·  M1, M4 *(old P10)*
 **Goal:** verify the lean + fast requirements with data — this gates Phase 8.
