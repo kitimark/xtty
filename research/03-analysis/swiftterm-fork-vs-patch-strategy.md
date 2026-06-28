@@ -88,6 +88,33 @@ Two honest caveats that "one-line swap" otherwise hides:
 
 `add-spatial-blocks` Phase 2 lit this up with **Option B (submodule + drop-in)**: `external/SwiftTerm` pinned to `v1.13.0` (`8e7a1e1`), `patches/swiftterm/XttyAccessors.swift` dropped in by `scripts/bootstrap-swiftterm.sh`, and `XttyCore/Package.swift` switched to `.package(path: "../external/SwiftTerm")`. The `.gitmodules` carries `ignore = untracked` so the drop-in file doesn't dirty the parent tree; AGENTS **Building** documents the one-time bootstrap. The Phase-1 injectable seam meant light-up was a 2-line swap in `PaneController` (`engineScrollRow`/`engineScrollbackBase`); the real-injected-zsh happy-path e2e (jump + copy + scroll-invariance) went green on the first run. The upstream PR (the same accessor file) is **prepared but not yet filed** — filing needs a GitHub fork of SwiftTerm (the user's call). No fork repo was created.
 
+## Follow-up (2026-06-28): the submodule wart → Playwright's *gitignored-checkout* model
+
+After Option B shipped, the drop-in file's nature was questioned: it is tracked in `patches/` but the **active copy at its compile location** (`external/SwiftTerm/Sources/SwiftTerm/XttyAccessors.swift`) is *not* version-controlled — it is a loose build artifact reconstituted by the bootstrap script (the parent `git status` stays clean only via `.gitmodules` `ignore = untracked`). A re-read of Playwright (the original prompt) showed we'd half-adopted its model.
+
+**What Playwright actually does (corrected):** the decisive file is `browser_patches/firefox/.gitignore` → **`/checkout`**. Playwright does **not** use a git submodule for the browser. It tracks only the **patch (`patches/bootstrap.diff`) + the pin (`UPSTREAM_CONFIG.sh`: `REMOTE_URL` + `BASE_REVISION`)**, and a build script **clones upstream into a gitignored `checkout/`, checks out `BASE_REVISION`, and `git apply`s the patch.** The entire patched tree is *untracked build infrastructure*, reconstituted on demand. (It uses `git apply` because it *modifies* existing Firefox files; the patched checkout's changes are also uncommitted — Playwright doesn't care, because the checkout isn't in the repo.)
+
+**The reframe:** *a git submodule is the wrong primitive for a dependency you patch.* A submodule is a pristine pointer to an exact upstream commit used as-is; dropping a file into it leaks the abstraction (untracked-file-inside-a-tracked-thing + the `ignore = untracked` hack). Playwright avoids the leak by making the upstream tree a **gitignored checkout**, so the only things in version control are the patch + pin + script.
+
+**The lens that should drive the choice — the mechanism is temporary.** The accessors are add-only and upstreamable (task 8.4); when the upstream PR lands, the whole local mechanism is torn out and replaced by a plain `.package(url:, from: "X.Y.Z")` version bump. So optimize for *cleanest-to-live-with **and** easiest-to-delete*, not "best forever" — which argues against vendoring (heaviest to undo).
+
+**What each option tracks (the axis that actually matters here):**
+
+| Option | git tracks | compile-tree file | pin enforced | external repo | bootstrap |
+|---|---|---|---|---|---|
+| **B. submodule + copy** *(shipped)* | `.gitmodules` + gitlink + patch + script | untracked **inside a tracked submodule** ← the wart | git gitlink ✓ | no | init + cp |
+| **B′. gitignored clone** *(Playwright's actual model)* | patch + pin-file + script (+ `.gitignore` line) | **fully gitignored** (clean by design) | script-enforced (see below) | no | clone + cp |
+| **C. vendor in-tree** | all of SwiftTerm + our file | tracked ✓ | snapshot | no | none (hermetic) |
+| **D. fork** | `.gitmodules` + gitlink → *our* fork | tracked ✓ (in the fork) | git gitlink ✓ | **yes** | init only (no cp) |
+
+**The quietly-surprising row is D (fork):** cleanest on nearly every axis — file tracked *in source*, pin git-enforced, *no bootstrap copy at all*, trivially deletable on merge — its **only** cost is the external repo we keep ruling out. So the decision collapses to: *willing to keep a throwaway SwiftTerm fork repo?* → **D**; *no?* → **B′** (the cleanest no-repo option, and literally what Playwright does).
+
+**B′'s one weakness — "the pin isn't git-enforced" — dissolves** if the bootstrap **enforces the pinned ref every run** (idempotent `fetch && checkout $ref` from a tracked `UPSTREAM_REF` pin-file). Then drift is impossible without re-running bootstrap (same guarantee as `.build/` being scratch), giving reproducibility ≈ parity with the submodule. We keep `cp` of an add-only `.swift` rather than `git apply` of a `.diff` — a diff is only needed when *modifying* existing source (as Playwright does to Firefox); for a pure add, the file itself is the cleanest artifact.
+
+**Spec-neutral.** The `terminal-spatial-blocks` requirement says *"the means of injecting the addition … is an implementation choice and is NOT fixed by this requirement."* So B → B′ needs **no OpenSpec change** — it's a `chore`/`build` edit (deinit the submodule, add `external/SwiftTerm/` to `.gitignore`, switch the bootstrap to clone+enforce-pin, tidy `Package.swift`/AGENTS). The spec's *example* phrasing ("a pinned submodule") becomes mildly stale — harmless, or a one-line tidy.
+
+**Decision:** given "no external repo" keeps being chosen, **switch B → B′** (gitignored clone + bootstrap-enforced pin) — it removes the wart, matches Playwright exactly, and stays nearly as reproducible. If the repo constraint ever relaxes, **D (fork)** is cleaner still and equally easy to retire on merge.
+
 ## Recommendation
 
 **A now (with the injectable seam, not bare `nil`); B when lighting it up** — if avoiding the fork repo remains the goal. The injectable seam de-risks the deferral to a ~2-line production swap + a bounded validation pass, lets ~80–90% of the feature land and be *really* tested today, and keeps the mechanism choice (B/C/D) reversible. The injectable seam is worth adding **regardless** of which mechanism is eventually chosen — it isolates the one place SwiftTerm internals leak in.
@@ -97,7 +124,7 @@ This supersedes design D1's "fork now" assumption for `add-spatial-blocks` (D1 +
 ---
 
 ## Sources
-- **Playwright** (shallow sparse clone, 2026-06-28) — `browser_patches/firefox/UPSTREAM_CONFIG.sh`, `browser_patches/firefox/patches/bootstrap.diff`, `browser_patches/roll_from_upstream.sh`.
+- **Playwright** (shallow sparse clone, 2026-06-28) — `browser_patches/firefox/UPSTREAM_CONFIG.sh` (pin), `browser_patches/firefox/patches/bootstrap.diff` (the patch), **`browser_patches/firefox/.gitignore` → `/checkout`** (the upstream checkout is gitignored, not a submodule — the load-bearing evidence for B′), `browser_patches/roll_from_upstream.sh`.
 - **SwiftTerm** `v1.13.0` (`8e7a1e1`) — `Package.swift` (target source globbing + `exclude:`).
 - **xtty** — `XttyCore/Package.swift:23` (the SwiftTerm pin), `project.yml` (`packages:`), and the P4b-2 design (`openspec/changes/add-spatial-blocks/design.md`, D1 + Migration).
 - **Prior decisions** — [P4b-2 spatial-blocks decisions](p4b-2-spatial-blocks-decisions.md) (the 2-accessor fork anatomy this injects), [P4 semantic-capture decisions](p4-semantic-capture-decisions.md).
