@@ -114,7 +114,16 @@ Strong cross-terminal convergence: jump-to-prompt is universally a **keyboard-na
 
 ---
 
-## Open spikes / sub-decisions (shape the proposal; not blockers)
+## Spikes resolved during implementation (2026-06-28)
+
+The `add-spatial-blocks` change was implemented; the spikes below were all resolved in code:
+- ✅ **[fork size — KEY] Stays a 2-accessor fork.** `reflow` is reachable only from `Buffer.resize` (`:503`), and the only caller of `terminal.resize` is `AppleTerminalView.resize` (`:1934`), which fires `sizeChanged` right after; in-band DECCOLM fires it too — all paths reach `PaneController.sizeChanged` (a previously-empty stub now calling `bumpEpoch`). `changeScrollback` skips `sizeChanged` but xtty calls it only at config time (pre-anchor). So **no in-engine `resetGeneration` counter is needed.**
+- ✅ **[masking] Closed by `scrolled`-delegate sampling.** `liveTop` is sampled on every scroll (via the link proxy's `onScrolled` hook) as well as at OSC marks; a `clear; <flood>` scrolls, firing the drop detection — so the masking window is closed in practice. Confirms the 2-accessor decision.
+- ✅ **[conflict audit] Cmd+Shift+↑/↓ is free** in both presets (focus uses Cmd+Opt+arrows); bound as menu key-equivalents so the menu intercepts ahead of the view. Copy = **Cmd+Shift+C**.
+- ✅ **[copy semantics] Excludes the trailing prompt** — the copy range is `[outputStart(C) … outputEnd(D)]`; the e2e asserts the copied text contains the output but not the command echo. Default scope: the running block else the last completed block.
+- ✅ **Mechanism: pinned submodule + drop-in (no fork repo)** — `external/SwiftTerm @ v1.13.0` + `patches/swiftterm/XttyAccessors.swift` via `scripts/bootstrap-swiftterm.sh` + a local-path SPM dep; the App seam was lit up to read the real accessors. 162 `XttyCore` unit + 23 XCUITests green (3 spatial e2e on real injected zsh). See [SwiftTerm fork vs patch-in-repo](swiftterm-fork-vs-patch-strategy.md).
+
+## Open spikes / sub-decisions (original; resolved above)
 
 - **[fork size — KEY]** Confirm `invalidate-all-on-sizeChanged` fully covers the reflow + resize-trim + `changeHistorySize` holes (spike strongly indicates yes — all reachable only via `resize()`/`changeHistorySize()`, both firing `sizeChanged`), so no in-engine epoch counter is needed. Verify there is no other reflow/trim entry point and that xtty receives `sizeChanged` before the next anchor-consuming action. **This decides whether the fork stays 2-accessor or grows the `resetGeneration` counter.**
 - **[masking]** Confirm per-feed `liveTop` sampling reliably catches `clear`/CSI-3J/reset **and** the `clear; <flood>`-within-one-feed-chunk case; if masking is observable, fold the tiny engine `resetGeneration` counter into the fork instead.

@@ -84,6 +84,10 @@ Two honest caveats that "one-line swap" otherwise hides:
 
 ---
 
+## Outcome (2026-06-28): Option B shipped
+
+`add-spatial-blocks` Phase 2 lit this up with **Option B (submodule + drop-in)**: `external/SwiftTerm` pinned to `v1.13.0` (`8e7a1e1`), `patches/swiftterm/XttyAccessors.swift` dropped in by `scripts/bootstrap-swiftterm.sh`, and `XttyCore/Package.swift` switched to `.package(path: "../external/SwiftTerm")`. The `.gitmodules` carries `ignore = untracked` so the drop-in file doesn't dirty the parent tree; AGENTS **Building** documents the one-time bootstrap. The Phase-1 injectable seam meant light-up was a 2-line swap in `PaneController` (`engineScrollRow`/`engineScrollbackBase`); the real-injected-zsh happy-path e2e (jump + copy + scroll-invariance) went green on the first run. The upstream PR (the same accessor file) is **prepared but not yet filed** — filing needs a GitHub fork of SwiftTerm (the user's call). No fork repo was created.
+
 ## Recommendation
 
 **A now (with the injectable seam, not bare `nil`); B when lighting it up** — if avoiding the fork repo remains the goal. The injectable seam de-risks the deferral to a ~2-line production swap + a bounded validation pass, lets ~80–90% of the feature land and be *really* tested today, and keeps the mechanism choice (B/C/D) reversible. The injectable seam is worth adding **regardless** of which mechanism is eventually chosen — it isolates the one place SwiftTerm internals leak in.
