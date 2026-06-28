@@ -11,19 +11,43 @@
 P4a's `Block` model already carries everything the sidebar needs (command / exit / cwd / timestamps / state), entirely view-free in `XttyCore`. The sidebar is therefore **100% fork-free** and it **absorbs the highest-value slice of P4b** — "which command failed / what's running, at a glance." P4b's genuinely fork-gated value is only the *in-terminal spatial* affordances; defer those behind one tiny additive fork, and **drop gutter fail-marks** (the sidebar delivers that value, and a true in-terminal gutter pierces the swappable render seam the architecture rule protects).
 
 ```
- NOW (fork-free, S)        NEXT change (fork-free)         LATER change (one fork)     CONDITIONAL
-┌──────────────────┐   ┌───────────────────────────┐   ┌──────────────────────┐   ┌──────────┐
-│ BlockTracker gap │──▶│ P5 add-session-sidebar    │──▶│ P4b add-spatial-blocks│──▶│ P8 own   │
-│ emit running +   │   │ • idle/running/ok/fail/   │   │ jump + copy-output +  │   │ renderer │
-│ rowAtC capture   │   │   fullScreen, Tab▸Pane    │   │ file:line click-open  │   │ (fork    │
-│ (the ONE gap)    │   │ • click → focus pane      │   │ (needs 2–3 accessors) │   │ moot)    │
-└──────────────────┘   └───────────────────────────┘   └──────────────────────┘   └──────────┘
-                                                          ✗ gutter fail-marks dropped → folded into P5
+ DONE (fork-free)          NEXT change (fork-free)         LATER change (one fork)      CONDITIONAL
+┌──────────────────┐   ┌───────────────────────────┐   ┌───────────────────────┐   ┌──────────┐
+│ P5 sidebar ✅     │──▶│ P4b-1 add-file-link-open  │──▶│ P4b-2 add-spatial-    │──▶│ P8 own   │
+│ idle/running/ok/ │   │ • file:line click→editor  │   │   blocks              │   │ renderer │
+│ fail/fullScreen, │   │ • D7 scheme guard         │   │ jump-to-prompt +      │   │ (fork    │
+│ Tab▸Pane, click→ │   │ • on P4a cwd + default-on │   │ copy-output [+ visual │   │ moot)    │
+│ focus pane       │   │   implicit links +        │   │ select] (2–3 accessors)│   │          │
+│                  │   │   requestOpenLink delegate│   │                       │   │          │
+└──────────────────┘   └───────────────────────────┘   └───────────────────────┘   └──────────┘
+   at-a-glance (H1)       agent-CLI win; feeds P6           in-terminal-nav win        ✗ gutter marks dropped
 ```
 
 ---
 
-## The minimal P4b fork, precisely (for when P4b lands)
+## Update (2026-06-28, post-P5): **P4b splits in two — file:line click-to-open is fork-free**
+
+> _Added after P5 (`add-session-sidebar`) shipped and archived, during a follow-up `/opsx:explore p4b`. Produced by a repo-wide reference sweep + direct reads of the SwiftTerm `v1.13.0` checkout. All fork access-levels below were **re-verified unchanged** today (still `from: "1.13.0"`; `linesTop`/`yBase` internal; `getScrollInvariantLine`/`getText`/`Position` public; `setSelection` a public member on the internal `SelectionService`)._
+
+The original framing above (and the milestone/AGENTS trackers) bundled **file:line click-to-open** with jump-to-prompt + copy-output as "all behind the fork." Reading SwiftTerm's actual link machinery shows that is wrong: **file:line click-to-open needs no fork.** So P4b is two independent changes:
+
+- **P4b-1 `add-file-link-open` — FORK-FREE.** Click a `path:line:col` (or bare/relative/rooted path) → open it in the user's editor, resolved against the pane's live cwd. Plus the deferred **D7 scheme guard** (a safety win on its own). Builds on P4a's OSC 7 cwd. This is the **agent-CLI win** (agents emit `file:line` constantly) and the on-ramp to the **P6 file/diff view**.
+- **P4b-2 `add-spatial-blocks` — needs the 2–3 accessor fork** (anatomy unchanged, see next section): **jump-to-prompt** + **copy-output** [+ **visual-select**]. This is where the "do we fork SwiftTerm yet?" decision actually lives; P4b-1 lets it be deferred again.
+
+**Why file:line click-to-open is fork-free (evidence, SwiftTerm `v1.13.0`):**
+- ✅ **Implicit link detection is ON by default** — `public var linkReporting: LinkReporting = .implicit` (`Mac/MacTerminalView.swift:599`); clicks resolve via `.explicitAndImplicit` (`:2108`).
+- ✅ **The implicit matcher already detects file paths, not just URLs** — `ghosttyImplicitLinkRegex` (`Terminal.swift:6106`, a port of Ghostty's matcher) has three branches: scheme-URLs, rooted/relative paths (`./ ../ ~/ $VAR/ /abs`), and **bare relative paths** (`src/foo.swift`). The `:line:col` suffix survives because `:` is in `pathChars`; only a *trailing* colon is trimmed (`noTrailingColon`).
+- ✅ **The click is delivered through a delegate, not an override** — `requestOpenLink(source:link:params:)` is a `TerminalViewDelegate` protocol method (`Apple/TerminalViewDelegate.swift:59`), so `PaneController` (already a `LocalProcessTerminalViewDelegate` with `hostCurrentDirectoryUpdate`) can implement it directly. **No `open`-vs-`public` problem** (contrast `progressReport`), no `TerminalView` internals, no fork.
+- ✅ **xtty currently implements no `requestOpenLink` handler** → it silently inherits SwiftTerm's default (`NSWorkspace.open` on *anything*). That is exactly the **deferred D7 gap** (P3a `terminal-links` design): file:line click-to-open is "finish the D7 delegate + resolve-vs-cwd + open-in-editor," not new fork work.
+
+**P4b-1 shape (for the proposal):** implement `requestOpenLink` in `PaneController` → classify (URL vs `path[:line[:col]]`) → **scheme guard** (whitelist `http(s)`/`file`/`mailto`; route file-paths to the editor; deny/confirm app-launching schemes) → resolve relative paths against the pane's live cwd → open via a configurable opener.
+
+**P4b-1 open questions (small, not blockers):**
+- **Editor invocation** — a `file-opener` / `editor` config key? Per-editor line syntax (`code -g f:L:C`, `vim +L f`, `idea --line L f`), `$EDITOR` + heuristics, or macOS `open`?
+- **One cheap spike** — click `foo.swift:42:10` in a running build and log the exact `link` string the delegate receives, to confirm `:42:10` is captured before designing the parser (regex says yes; confirm empirically — needs a manual click).
+- **Relative resolution** — resolve bare paths against the pane's *current* cwd (best-effort; the standard OSC 7 caveat for scrolled-back lines).
+
+## The minimal P4b fork, precisely (for when P4b-2 lands)
 
 Three additive public declarations in 2 files, all symmetric with the **already-public** `getScrollInvariantLine(row:)` (`Terminal.swift:743`) — so they read as "finish the public scroll-invariant surface," which is why upstream acceptance is plausible:
 
