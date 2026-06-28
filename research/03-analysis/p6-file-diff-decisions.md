@@ -1,0 +1,267 @@
+# P6 File/Diff View — Engineering Decisions
+
+> **Provenance.** Authored 2026-06-29. Two-pass research: pass-1 (web + xtty-codebase grounded) produced the decision skeleton; pass-2 deep-read the *actual source* of comparable OSS (zed, vscode, lazygit, gitui, delta, waveterm; clones inspected file-by-file) to confirm / correct / enrich it. xtty citations are `repo-relative:line` and were re-verified against `main` (commit `902f41a`). Borrowed-pattern citations name the tool + its in-repo path.
+> **Confidence legend:** ✅ confirmed by real source · ❌ corrected by real source · ❓ open / spike.
+
+## Headline decision
+
+Ship **P6a: a read-only git-review panel** as P6 v1 — a **changed-files list grouped by status category** (Changes / Untracked / Conflicts) with **click-to-diff**, rendered as a **unified diff in plain SwiftUI** (red/green line backgrounds, no syntax highlighting), hosted in a **new collapsible trailing-edge (right) panel**, **default-collapsed** behind a toggle (⌃⌘G). Git data comes from **shelling out to the `git` binary** (reusing `FileOpener`'s login-shell-PATH + literal-argv pattern — zero new deps, no libgit2), parsed by a **pure view-free `XttyCore` module**.
+
+Two source-grounded changes from pass-1 shape the build: (1) use **porcelain v1 `-z`** (`git status --porcelain=v1 -z --untracked-files=all --no-renames`), *not* v2 `--branch` — every mature tool uses v1; branch/ahead-behind are separate commands; and (2) the panel refreshes on a **`.commandEnd`-gated, debounced** OSC-133 fast-path **plus a gated ~5 s poll backstop** (not OSC-133 alone) so a long-running agent editing files *mid-command* isn't invisible — the agent-host gap both git TUIs solve with exactly this poll. FSEvents stays **deferred** (the two TUI analogs poll, not watch). Both are gated on panel-visible AND focused-session `liveLocalDirectory != nil` AND idle. Defer the **full file-tree browser (P6b)** and **staging/commit (indefinitely — pair with lazygit)**, but keep the data model forward-compatible with a later stage toggle.
+
+## Source-grounded changes vs pass-1
+
+**Confirmed by reading real source (no change):**
+- ✅ Shell out to `git`, not libgit2 — lazygit, VS Code, zed all spawn the CLI (`git/repository.rs`, `extensions/git/src/git.ts`); gitui is the lone libgit2 user but needs a linked lib (no SPM path in Swift). Stands.
+- ✅ Plain unified diff, no syntax model — lazygit (`patch/patch_line.go:5-19`) and gitui (`asyncgit/src/sync/diff.rs:53-121`) ship *exactly* the minimal tagged-line model pass-1 proposed.
+- ✅ Lazy/virtualized rendering, large-diff caps, per-file lazy diff — gitui viewport-only `get_text` (`src/components/diff.rs:331-392`); delta line caps.
+- ✅ Both parser self-corrections: rename byte order (target-first) and `--no-index` exit-1-as-success — confirmed empirically *and* in lazygit (`working_tree.go:386-424`).
+- ✅ No lean terminal ships a git-review panel — waveterm's only diff surfaces are a Monaco generic viewer and an AI-tool-call diff, neither reads `git status`/`git diff`. xtty's panel is a genuine differentiator.
+- ✅ Refresh should be debounced + visibility-gated — VS Code's literal pipeline confirms (`@debounce(1000)` → wait-for-focus → wait-for-idle → status).
+
+**Corrected by real source (changed the call):**
+- ❌ **MATERIAL — porcelain v2 + `--branch` → porcelain v1 `-z`, branch fetched separately.** No mature tool uses v2 for the file list (VS Code `git status -z`, lazygit `--porcelain`, zed `--porcelain=v1 --no-renames`), and none folds `--branch` into it (branch/upstream/ahead-behind come from `symbolic-ref` / `for-each-ref` / `rev-list --left-right --count`). The v2-rename-order fix stays true but is **moot under v1 + `--no-renames`**.
+- ❌ **MATERIAL — OSC-133-D alone is weaker than every tool studied; add a gated poll backstop.** D only fires *after* a command completes, so an agent editing mid-command is invisible for the whole run — undercutting the agent-host value. Both TUIs solve this with a cheap low-frequency poll (lazygit 10 s files / 2 s refs-snapshot; gitui 5 s). Add a 5 s poll backstop to v1; keep FSEvents deferred.
+- ❌ **MATERIAL — group by status *category*, not staged/unstaged.** VS Code has 4 groups (merge/index/workingTree/untracked); zed has 3 sections (Conflicts/Tracked/Untracked). A staged/unstaged frame only makes sense once staging exists. P6a groups **Changes / Untracked / Conflicts** (hide-when-empty).
+- ❌ **MATERIAL — read-only is a deliberate narrowing, not the norm.** *Every* comparable tool (incl. the user's habit, zed) is read-WRITE. Keep read-only for leanness, but keep the file/status data model forward-compatible with a later stage toggle.
+- ❌ **MINOR — word-level intra-line diff is a separable, cheap-if-gated cost**, not lumped with syntax highlighting. delta/zed both ship it behind hard gates. Keep it deferred, but as an *optional gated overlay* on the unchanged line model, not a blanket "skip for cost."
+- ❌ **MINOR — left-edge is the IDE norm; right-edge is xtty's own choice** (left is taken by the session sidebar). Don't cite zed/vscode as precedent for right placement.
+- ❌ **MINOR — debounce floor.** Pass-1's ~200 ms is right to coalesce a D-burst, but borrow VS Code's **~5 s minimum spacing between actual `git status` spawns** + serialize (single in-flight + one pending) so the D fast-path and the poll never stack.
+
+**Added by real source (new, borrow-worthy):**
+- `GIT_OPTIONAL_LOCKS=0` env (VS Code) / `--no-optional-locks` (lazygit) on every read — zero-side-effect reader, never races `.git/index.lock`.
+- `--no-ext-diff --no-color` on every parsed diff so user `diff.external`/pager/color config can't corrupt output; `-z` auto-disables `core.quotepath` (raw UTF-8, no octal escapes).
+- `--numstat -z` for cheap per-file +/- badges without parsing the diff (binary → `-\t-`).
+- `--untracked-files=all`; skip trailing-slash dir entries; sort+dedup parsed entries by path (git can emit duplicates); explicit unmerged-XY handling (DD/AU/UD/UA/DU/AA/UU → Conflicts).
+- Deleted files rendered **muted, not red** (zed: "so we don't get a bunch of red labels").
+- `diff-context` config key (lazygit threads `--unified=%d`).
+- Read-only **next/prev-hunk keyboard nav** (zed's GoToHunk idea, minus editing/staging).
+
+## Decisions table
+
+| Open question | Decision | Confidence | Key evidence |
+|---|---|---|---|
+| **Layout / placement** | New **trailing-edge** collapsible panel (~260–300 pt own width), default-collapsed; left sidebar stays session-progress only | ✅ High | xtty `App/TerminalWindowController.swift:158` buildLayout, `:211-214` toggleSidebar, `:176` `terminalContainer.trailing` pinned to container (**rework, not copy-paste**). Right-edge is xtty's own (left taken); IDEs default LEFT — zed `git_panel.rs:7350-7358` dock Left\|Right |
+| **Git access** | **Shell out to `git`** (Process + login-shell PATH), **not** libgit2 | ✅ High | xtty `App/FileOpener.swift:60-76` Process+ShellResolver+literal-argv; `XttyCore/Package.swift:29` single dep; lazygit `git_commands/file_loader.go`, VS Code `git.ts`, zed `git/repository.rs` all CLI; gitui uses libgit2 but needs a linked lib (no SPM) |
+| **Status invocation** | `git --no-optional-locks -C <top> status --porcelain=v1 -z --untracked-files=all --no-renames`; branch name via separate `symbolic-ref` | ✅ High (was ❌ v2/`--branch`) | VS Code `git.ts:2746`; lazygit `file_loader.go:180-181`; zed `git/repository.rs:3426-3429`; branch fetched separately VS Code `git.ts:3230-3234` |
+| **Diff render** | **Unified**, plain monospaced SwiftUI rows, **no syntax highlighting** v1; pure Files→Hunks→Lines parser in `XttyCore`; `--no-ext-diff --no-color` | ✅ High | lazygit `patch/patch_line.go:5-19` + `patch/parse.go:10-85`; gitui `sync/diff.rs:53-121`; delta `handlers/hunk_header.rs:213`; xtty `SessionSidebar.swift` value-snapshot precedent |
+| **Refresh model** | **`.commandEnd`-gated + ~200 ms debounce + ~5 s poll backstop + ~5 s min spacing**, serialized; visible+local+idle-gated; **FSEvents deferred** | ✅ High (poll backstop ❌ added) | OSC-133-D-only too weak (agent mid-command); lazygit `gui/background.go:131-139` (10 s) + `:161-224` (2 s refs-snapshot), gitui `main.rs:114,187-191` (5 s) both poll; VS Code `repository.ts:3169-3218` debounce pipeline; xtty `App/PaneController.swift:131,141` |
+| **Grouping** | Status-category groups **Changes / Untracked / Conflicts** (hide-when-empty), flat list (no tree), per-file glyph+color, **deleted=muted** | ✅ High (was ❌ staged/unstaged) | VS Code `repository.ts:1006-1009` ("Changes"), `:3060-3066` unmerged map; zed `git_panel.rs:422-428` sections, `:6602-6620` color (deleted=muted) |
+| **Scope / v1 boundary** | **P6a git-review (lead)**, read-only; defer **P6b file tree**; defer staging indefinitely (forward-compatible model) | ✅ High | H2 "lightweight, not a full IDE"; all comparables are read-WRITE → read-only is a deliberate bet; zed `git_panel_settings.rs:30-37` tree-toggle = the P6b increment |
+| **Edge cases** | Rename(via add/del)/delete/untracked/binary/conflict/dedup/dir-skip from porcelain; cap huge diffs → "open in editor"; numstat badges; empty states | ✅ High | zed `git/status.rs:451-487` dir-skip+dedup; lazygit `working_tree.go:401` untracked `--no-index`; gitui `diff.rs:394-424` binary summary; delta `delta.rs:221-234` 3000-char cap |
+| **Harness** | **State-dump-first** (`gitReview` field, cached snapshot), env-file trigger `XTTY_TEST_GIT_SELECT`; reuse `XTTY_TEST_LINK_PATH`+`lastLinkOpen` for ⌘-click→editor | ✅ High | xtty `App/XttyApp.swift:101-105,118,129`; `App/TerminalWindowController.swift:517,557` writeStateDump (0.15 s timer → must read cache) |
+
+---
+
+## Decision detail
+
+### 1. Layout — trailing-edge collapsible panel
+
+Place the git panel on the **right**, leaving the left edge uncontested for the #1 feature (the session-progress sidebar). Real source shows IDEs default their SCM surface **left** (zed `crates/git_ui/src/git_panel.rs:7350-7358`, dock Left|Right; VS Code is a left activity-bar viewlet) — so the right-edge placement is **xtty's own** choice (left is occupied), not a mirror of those tools; don't cite them as precedent.
+
+Reuse — but do **not** blind-copy — the proven sidebar mechanism (`App/TerminalWindowController.swift`): an `NSHostingView` pinned with its own width constraint, a `toggleGitPanel()` clone of `toggleSidebar()` (`:211-214`), wired to a View-menu item + ⌃⌘G. **Correction (verified):** `buildLayout()` pins `terminalContainer.trailingAnchor` to the *container's* trailing (`:176`), so a right slot means **repointing that constraint** to the new host's leading anchor — a constraint rework, not a symmetric paste.
+
+**Why default-collapsed:** the default window is 900×560; left 220 + terminal + right 260 leaves ~420 pt of terminal on the built-in display. Default-collapsed + own width + on-demand hotkey protects LEAN/native-feel for free given the constraint mechanism. The panel is **per-window, focused-pane-driven** via the same provider-closure + `@Observable` revision contract the sidebar uses, reading the focused session's `liveLocalDirectory` (`XttyCore/.../TerminalSession.swift:92-93`); `nil` (remote/ssh) → empty state for free.
+
+> ❓ Optional spike: native SwiftUI `.inspector` (deployment target macOS 14) would be leaner than the hand-rolled mirror. Pick during implementation; the AppKit mirror is acceptable for `buildLayout` consistency.
+
+### 2. Git access — shell out, not libgit2
+
+Shelling out carries **zero new dependencies** (serving M1 LEAN), reuses the verified `App/FileOpener.swift` Process + `ShellResolver` login-shell-PATH + literal-argv pattern (`:60-76`), and is what every comparable CLI tool does (lazygit `pkg/commands/git_commands/file_loader.go`, VS Code `extensions/git/src/git.ts`, zed `crates/git/src/repository.rs`). gitui is the lone libgit2 user (`asyncgit/src/sync/diff.rs:38-45`) but that needs a *linked* lib — and Swift's SwiftGit2 has no SPM support (it vendors libgit2 as a submodule, Carthage + Xcode-project build), confirming the libgit2 path is heavy. The dep edit pass-1 feared would land in `XttyCore/Package.swift:29` (today a single `.package(path: ../external/SwiftTerm)`) — and we avoid it.
+
+**Canonical invocations** (git resolved to an absolute path via cached login-shell `command -v git`; every path a literal argv element after `--`; `GIT_OPTIONAL_LOCKS=0` env on all reads):
+
+1. **Discovery:** `git -C <cwd> rev-parse --show-toplevel` (empty/nonzero → not a repo → empty state).
+2. **Status:** `git --no-optional-locks -C <top> status --porcelain=v1 -z --untracked-files=all --no-renames`.
+3. **Branch (separate, optional):** `git -C <top> symbolic-ref --short HEAD` (detached → fall back to short SHA). Ahead/behind via `rev-list --left-right --count <branch>...<upstream>` is **deferred to P6a+** (not needed for the changed-files list).
+4. **Counts:** `git --no-optional-locks -C <top> diff --numstat -z [-- <path>]` → `added\tdeleted\tpath` (binary → `-\t-`) for cheap +/- badges.
+5. **Diff (lazy, per file on selection):** tracked → `git -C <top> diff --no-ext-diff --no-color [--unified=N] -- <path>`; untracked → `git -C <top> diff --no-ext-diff --no-color --no-index -- /dev/null <path>` (**exit 1 == success**).
+
+**Why v1 not v2 (source-grounded ❌ correction):** No mature tool uses porcelain v2 for the file list — VS Code `git status -z` (v1 default, `git.ts:2746`), lazygit `--porcelain` (v1, `file_loader.go:180-181`), zed `--porcelain=v1 --no-renames` (`repository.rs:3426-3429`). v1 is a fixed `XY␠<path>` per `-z` record (+ an optional next NUL-element only for renames, which `--no-renames` removes), simpler than v2's mode/oid/submodule columns — dead weight for a read-only panel. The two pass-1 self-corrections survive: the **rename byte order** fix is now moot under `--no-renames` (a rename surfaces as `D <old>` + `?? <new>`); the **`--no-index` exit-1-as-success** fix stands (lazygit `working_tree.go:422-424` discards the error and uses stdout).
+
+**Parser gotchas (source-grounded):** `-z` auto-disables `core.quotepath` → paths are raw NUL-terminated UTF-8, never octal-escaped (no `-c core.quotepath=false` needed). **Skip trailing-slash entries** (untracked dirs; VS Code `git.ts:878`, zed `status.rs:451-453`). **Sort+dedup by path** — git can emit duplicate `?? file` lines and `D `+`??` pairs for delete-then-recreate (zed `status.rs:464-487`). **Map the 7 unmerged XY combos** (DD/AU/UD/UA/DU/AA/UU) to a Conflicts group *before* the per-side switch (VS Code `repository.ts:3060-3066`) — they won't diff cleanly against one ref.
+
+**Seam split:** pure porcelain/numstat/diff parsing lives in a new view-free `XttyCore` module (`GitStatusParser`/`DiffParser`, unit-tested like `OSC133`/`LinkOpen`); the Process exec is an App-layer `GitRunner` side effect (like `FileOpener`), keeping `XttyCore` free of Process/AppKit. **Note:** `FileOpener.run()` (`:89-96`) does **not** capture stdout — only the *pattern* (Process + Pipe + login-shell PATH, as in the `command -v` resolver at `:66-76`) is reusable; `GitRunner` needs a stdout-capturing variant.
+
+### 3. Diff rendering — unified, plain, in SwiftUI
+
+A narrow panel makes side-by-side unusable, and unified is delta's own default. **No syntax highlighting in v1** is the literal "lightweight, not a full IDE" point and the only zero-dep choice (Splash=Swift-only, Highlightr ships a JavaScriptCore+highlight.js runtime, tree-sitter bundles grammar blobs — all fail LEAN).
+
+**Minimal data model (the exact shape two shipping TUIs use — drop-in for SwiftUI):**
+
+```
+Patch { header: [String], hunks: [Hunk] }
+Hunk  { oldStart: Int, newStart: Int, headerContext: String, lines: [DiffLine] }
+DiffLine { kind: .context | .add | .del | .hunkHeader | .noNewline, content: String }  // keep leading +/-/space
+```
+
+Parse = split on `\n`; match `@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)` for hunk starts (lazygit's regex, `pkg/commands/patch/parse.go:10-85`), else classify by first char (lazygit `patch/patch_line.go:5-19`, gitui `asyncgit/src/sync/diff.rs:53-121`, delta `handlers/hunk.rs:255-272`). A pre-classified `DiffLine` array is exactly what a SwiftUI `List`/`LazyVStack` should render — one `Text` per line styled by `.kind`. Git already did the semantic work; nothing richer is needed for a read-only view (lazygit's *display* path doesn't even parse — it streams `git diff --color` ANSI; it only parses for staging. Our SwiftUI panel isn't an ANSI engine, so it parses, but the parse stays trivial).
+
+**Render cheaply via virtualization + lazy-per-file.** SwiftUI `LazyVStack`/`List` virtualizes row construction for free (gitui hand-rolls the equivalent: viewport-only `get_text` materializes only `[scrollTop, scrollTop+height]` and skips off-screen hunks, `src/components/diff.rs:331-392` + `:480-499`). Keep **each file's diff an independent array, lazy-loaded on selection** (mirrors zed's per-path excerpt model, `crates/git_ui/src/project_diff.rs`), so an unopened 50k-line file is never parsed.
+
+**Large-diff safety caps (concrete defaults from delta):** truncate any single line longer than **~3000 chars** with an ellipsis marker (delta `src/delta.rs:221-234`, `cli.rs:613`); per-file rendered-line cap → "diff too large — N lines, click to open in editor" guard (reuse `FileOpener`/`LinkRouter`); binary → "Binary file (no preview)" summary (gitui `diff.rs:394-424`), never attempt to render.
+
+**Reject reusing a SwiftTerm view to render the diff** — a second VT engine/grid (memory vs M1), loses structure (no click-to-line, no granular refresh), violates the `XttyCore` no-view-import seam. The structured-value path gives click-to-open-line for free via existing `LinkRouter`/`FileOpener`.
+
+**Word-level intra-line diff (❌ reframed, still deferred to P6a+):** it is a *separable, characterizable* cost — Wagner–Fischer/Needleman–Wunsch O(m·n) per minus/plus line-pair (delta `src/align.rs:18-115`, driven by `src/edits.rs:24-106`), **cheap enough to ship if gated**. Both mature tools gate hard rather than defer: zed only computes it when added==removed line count AND ≤5 lines (`crates/buffer_diff/src/buffer_diff.rs:20,1210-1214`); delta bounds it with a 32-line subhunk buffer (`handlers/hunk.rs:70-77`) + a distance-threshold pairing (default 0.6) + the 3000-char cap. For xtty it remains a clean **optional overlay** on the unchanged line model — defer to P6a+, but know it's a small, bounded add, not an open-ended one.
+
+> Borrowed structure (optional even without word-diff): delta's **subhunk-boundary buffering** (`handlers/hunk.rs:61-132`) — buffer consecutive minus then plus lines, flush the group on a context line — is the clean way to render a removed block then an added block together. Useful for hunk grouping; not required for a pass-through line list.
+
+### 4. Refresh model — `.commandEnd` fast-path + gated poll backstop
+
+The OSC-133 hook is wired on a main-actor path (`App/PaneController.swift:131,141`), so "refresh when a command finishes" needs no new plumbing in principle. **Critical correction (carried from pass-1, confirmed):** do **not** drive git off `registry.revision` — it bumps on *every* OSC-133 mark (A/B/C/D), alt-screen flips (`:128`), and register/unregister/focus, with **no debounce in the repo**. Re-spawning git on that firehose is a LEAN violation.
+
+**The source-grounded ❌ that resolves the "FSEvents-vs-command-boundary" challenge:** OSC-133-D *alone* is weaker than every tool studied — it fires only *after* a command completes, so a long-running agent (Claude Code) or external editor changing files **mid-command** is invisible for the command's whole duration, directly undercutting xtty's agent-host value. Both git TUIs — the true analogs — solve exactly this with a cheap low-frequency **poll backstop** (lazygit 10 s files / 2 s refs-snapshot, `pkg/gui/background.go:131-224`; gitui 5 s ticker default, `src/main.rs:114,187-191`), and **neither watches the filesystem by default** (lazygit's fsnotify is `// indirect`; gitui's `--watcher` is opt-in). **Final call (✅ High):** keep FSEvents **deferred** (TUI-consistent, lean, M1-friendly), and **add a ~5 s poll backstop to v1** alongside the D fast-path. `git status --porcelain` is inherently `.gitignore`-aware, so the poll never sees `node_modules` churn — far cheaper than a raw recursive watcher (gitui's unfiltered recursive watch leans entirely on a 2 s debounce to survive event storms, `src/watcher.rs:67-82`). This catches mid-command agent edits at a fraction of FSEvents' cost.
+
+**The pipeline (proven values borrowed from VS Code `extensions/git/src/repository.ts:3169-3218`):**
+- **Fast-path:** branch `if case .commandEnd = mark.action` in the handler (`PaneController.swift:131`; mark already in scope, `OSC133.swift:12` `commandEnd(exitCode:)`) → notify a dedicated `@Observable GitStatusStore` in `XttyCore` (separate from `noteActivityChange()`). `PaneController` needs the store injected, like it already holds `registry` (`:42`).
+- **Backstop:** a ~5 s repeating timer, same gates, same funnel.
+- **Debounce ~200 ms** (trailing) on the trigger so `&&`-chains/loops coalesce to one invocation. VS Code uses 1000 ms but on raw fs events (far noisier); 200 ms suits a meaningful command boundary.
+- **~5 s minimum spacing** between actual `git status` spawns + **serialize** (single in-flight `Task` + one pending flag, dropping intermediate triggers — VS Code's `@throttle`, `decorators.ts:39-66`) so the D fast-path and the poll never stack subprocesses. Run git **off the main actor**, publish the snapshot back on main (the handler runs under `MainActor.assumeIsolated`).
+- **Gate (all required before spawning git):** panel-visible AND focused-session `liveLocalDirectory != nil` AND idle (no in-flight git op). Zero work when collapsed or remote (VS Code's "wait for window focus + op-idle", `repository.ts:3203-3217`).
+- **Pause during xtty's own foreground git** (lazygit `pauseRefreshesCount`, `background.go`) — suppress refresh while the user is running git in the terminal, to avoid self-triggering churn.
+- **Fallbacks:** refresh on focus-change (single funnel `setActivePane`/`focusPane` + window becomeKey), on panel open/expand, and explicit **manual refresh** (the only thing that works over ssh).
+- **Dedup:** two panes/tabs in the same worktree both fire D → `GitStatusStore` keys by repo toplevel to avoid double-spawning.
+
+> ❓ If dogfooding later shows the 5 s poll is too slow during long agent sessions, the upgrade path is FSEvents scoped to worktree root with the VS Code ignore-set (drop `index.lock`, worktree `index.lock`, `.watchman-cookie`; `repository.ts:453-503`) — documented, not built.
+
+### 5. Grouping & file list — status categories, flat, color-coded
+
+**❌ correction:** group by **status category, not staged/unstaged** (a staged frame only exists once staging does). P6a renders up to three groups, **hide-when-empty** for Conflicts/Untracked, always-show Changes (VS Code's `hideWhenEmpty` model, `repository.ts:1006-1009,1044-1045`; zed sections `git_panel.rs:422-428`):
+- **Changes** — tracked modified/deleted (VS Code literally titles the working-tree group "Changes").
+- **Untracked** — `??` entries (from `--untracked-files=all`).
+- **Conflicts** — the 7 unmerged XY combos.
+
+**Flat list only** for P6a (no tree) — the simplest, leanest shape; a flat-vs-tree toggle is the natural P6b increment (zed `git_panel_settings.rs:30-37`). Model rows behind a single `GitListEntry` enum (`Status`/`Header`, later `Directory`) like zed (`git_panel.rs:432-437`) so the tree increment is additive.
+
+**Per-file glyph + color** derived from the porcelain status (M/A/D/?/U), mapped onto xtty's theme. **Borrow zed's deliberate tweak: render deleted files muted, not red** (`git_panel.rs:6602-6620` — "so we don't get a bunch of red labels"). Conflict/added/modified get distinct theme colors. Show the numstat +/- badges per file.
+
+**Read-only is a product bet, not the norm (❌):** every comparable tool — including the user's habit (zed `git_panel.rs:34-35` Stage/Unstage/Stash/Discard) — is full read-WRITE. Keep read-only for leanness, but make the `GitFile`/status value type **forward-compatible with a later per-file stage state** so a future toggle doesn't reshape the model.
+
+### 6. Scope — P6a leads, P6b deferred
+
+`git status` is already a scoped changed-files list, so "changed-files + click-to-diff" is simultaneously the scoped file view **and** the diff view — matching the literal H2 habit ("git diff before commit") and the agent-review framing, and confirmed differentiated (no lean terminal ships this; waveterm's only diffs are a Monaco generic viewer `frontend/app/view/codeeditor/diffviewer.tsx` and an AI-tool-call diff `aifilediff.tsx`, neither git). The **full file-tree browser** is the separable, more-IDE-ish half → **P6b**. Staging/commit/inline-edit is the IDE-creep gravity → **deferred indefinitely; pair with lazygit**, which the agent-host/native-zsh values endorse.
+
+**Borrow in read-only form, not the IDE form:** zed's diff review is an *editable* multibuffer with per-hunk staging (`crates/git_ui/src/project_diff.rs:9-21`) — the "full IDE" line to avoid. Take only the **next/prev-hunk keyboard navigation** idea over the plain SwiftUI unified-diff view (no editing, no per-hunk staging).
+
+### 7. Edge cases
+
+| Case | v1 behavior |
+|---|---|
+| Remote/ssh (`liveLocalDirectory == nil`) | Empty state "Remote session — review unavailable" (free via existing guard) |
+| Not a git repo | Empty state "Not a git repository" (`rev-parse` nonzero) |
+| Deep inside repo | `rev-parse --show-toplevel`, repo-root-relative paths |
+| Huge repo / status latency | git off-main + debounce + spacing + timeout; spinner, never block UI |
+| Huge diff | Per-file line cap + 3000-char line truncation → "diff too large — open in editor" (`FileOpener` escape hatch) |
+| Binary file | "Binary file (no preview)" (numstat `-\t-` / "Binary files differ") |
+| Renamed | `--no-renames` → surfaces as `D <old>` + `?? <new>` (no two-path parse) |
+| Deleted / untracked | Listed with glyph (deleted=muted); untracked diffed via `--no-index` (exit 1 = success) |
+| Merge conflict (7 XY combos) | Conflicts group, conflict marker; **do not** build a merge tool |
+| Untracked dir entry (`path/`) | Skipped (trailing slash) — `--untracked-files=all` lists the real files |
+| Duplicate / delete-recreate entries | Sort+dedup by path |
+| Detached HEAD | Branch header shows short SHA (`symbolic-ref` fails → fall back) |
+| git not installed / not on PATH | Login-shell resolve like `FileOpener`; on failure empty state "git not found" + `NSLog` |
+
+**Deferred:** bare repo (treat as not-a-repo), rebase/merge-in-progress banner, submodule inner-diff, ahead/behind counts, full file tree (P6b).
+
+### 8. Harness — state-dump-first
+
+Follow the DEBUG state-dump convention, **not** AX (the P5 sidebar is SwiftUI yet asserts via the JSON dump). The dump lets tests assert the git *model* (status codes, counts) rather than fragile rendered strings.
+
+- **One compact `gitReview` dump field** on `writeStateDump()` (`App/TerminalWindowController.swift:517`, alongside `sessionActivity:554`/`lastLinkOpen:557`): `{ isRepo, isRemote, repoRoot, branch, changedFiles:[{path,status,added,removed}], selectedDiff:{path,added,removed,isBinary,truncated} }` — counts/paths/statuses only, **never full diff text**. **Critical:** `writeStateDump` fires on the 0.15 s repeating timer (`App/XttyApp.swift:129`), so `gitReview` MUST read a **cached** `GitStatusStore` snapshot — never trigger a git exec inside the dump path.
+- **New env-file trigger** `XTTY_TEST_GIT_SELECT` mirroring `routePendingTestLink`/`routePendingTestSpatialOp` (`App/XttyApp.swift:101-105,118`) for click→diff selection.
+- **⌘-click→editor needs no new surface** — reuse `XTTY_TEST_LINK_PATH` + `lastLinkOpen` verbatim (same `LinkRouter`/`FileOpener` path).
+- **Refresh assertion:** add a git-refresh counter (+ last-status hash) to the dump so XCUITests can assert a D-driven refresh deterministically despite async git timing.
+- **e2e setup:** drive the real injected zsh (`cd <HOME/xtty-gittest-UUID>; git init; commit; modify`), wait for `currentDirectory` in the dump, assert `gitReview.changedFiles`, trigger select → assert `selectedDiff`, trigger link → assert `lastLinkOpen`. Degrade to screenshot when capture/hooks inactive, like the sidebar/semantic suites.
+
+---
+
+## V1 scope
+
+**IN (P6a):**
+- Trailing-edge collapsible git-review panel (default-collapsed, ⌃⌘G + View menu item).
+- Changed-files list from `git status --porcelain=v1 -z --untracked-files=all --no-renames`, grouped **Changes / Untracked / Conflicts** (hide-when-empty), per-file glyph+color (deleted=muted) + numstat +/- badges, branch name header.
+- Click a file → read-only **unified** diff inline (plain red/green, `--no-ext-diff --no-color`, lazy-per-file).
+- ⌘-click a file → open in editor at line (reuse `LinkRouter`/`FileOpener`); next/prev-hunk keyboard nav.
+- Refresh: `.commandEnd` fast-path (debounced) + ~5 s gated poll backstop + focus + panel-open + manual; serialized, ~5 s min spacing, visible+local+idle-gated, pause-during-own-git.
+- Large-diff/line caps (3000-char line truncation, per-file line cap → "open in editor"), binary summary, empty/degraded states (remote, non-repo, git-not-found).
+- Pure `XttyCore` parser module(s) + App-layer `GitRunner`; cached `GitStatusStore`; `gitReview` dump field + e2e.
+- `diff-context` config key (defaults to git's 3).
+
+**OUT (v1):**
+- Syntax highlighting; word-level intra-line diff (gated overlay, P6a+).
+- Side-by-side diff; ahead/behind counts.
+- Staging / unstaging / commit / discard / any write op.
+- Full project file-tree browser.
+- FSEvents file watcher.
+- libgit2 / any new SPM dependency.
+- Inline comments-to-agent; merge/rebase tooling.
+
+**Deferred increments:**
+- **P6b** — full file-tree browser (lazy-load, expand/collapse, flat-vs-tree toggle).
+- **P6a+** — gated word-level diff overlay (zed/delta gates) and syntax highlighting (forces the tree-sitter-vs-Highlightr dep choice); ahead/behind via `rev-list --count`.
+- **P6a+** — FSEvents auto-refresh (only if the 5 s poll proves too slow mid-agent-session; scoped to worktree root + VS Code ignore-set).
+- **Indefinite** — staging/commit (pair with lazygit; model kept forward-compatible).
+
+---
+
+## ASCII mockup (panel expanded)
+
+```
++--------+-----------------------------+-------------------------+
+| Tab A  | user@host ~/proj %          | Changes        main     |
+|  shell | $ claude edit ...           |  M App/Foo.swift   +8 -2 |
+|  *run  |                             |  M App/Bar.swift   +0 -3 |
+| Tab B  |   [ terminal / panes ]      | Untracked               |
+|  vim   |                             |  ? docs/new.md          |
+|        |                             | Conflicts               |
+| (left  |                             |  U App/Baz.swift        |
+| session|                             | ----------------------- |
+| sidebar|                             | @@ -10,6 +10,8 @@        |
+|  220pt)|                             |   context line          |
+|        |                             | +  added line           |
+|        |                             | -  removed line  (muted)|
+|        |                             |   context line          |
+|        |                             |  [⌘-click → editor]     |
+|        |                             |  [ ↑/↓ prev/next hunk ] |
+|        |                             |        (~260-300pt)     |
++--------+-----------------------------+-------------------------+
+  leading          terminalContainer            trailing
+  (#1 feature)                       (toggle ⌃⌘G, default collapsed)
+```
+
+---
+
+## Residual unknowns / cheap manual spikes
+
+1. ❓ **Sandboxed runner exec-git (10 min):** can the XCUITest runner `Process`-exec `git` directly into a HOME-relative temp repo for a hermetic test, or must setup drive the live shell?
+2. ❓ **git PATH with CLT-only (quick):** does login-shell `command -v git` reliably resolve when only Xcode Command Line Tools are installed (incl. the CLT install-prompt when absent)?
+3. ❓ **Large-repo `git status` latency (spike):** cold (GUI-launched) vs warm-cache timing on the user's largest repo, to confirm the 200 ms debounce + 5 s spacing + 5 s poll windows and that off-main is mandatory; whether `--untracked-files=no` is ever needed.
+4. ❓ **Poll-backstop interval (dogfood):** is 5 s the right floor for mid-agent-session freshness, or does it need 2–3 s (lazygit's refs-snapshot cadence)? Decide from real Claude-Code sessions before considering FSEvents.
+5. ❓ **Diff readability at ~260–300 pt (visual):** legible inline on the built-in display at the 900 pt default when `terminalContainer` is also split into panes? Determines whether side-by-side ever needs a wider/detached host.
+6. ❓ **OSC-133 mark cardinality (quick):** confirm which marks the bundled injected zsh emits per command (does B/promptEnd fire? PS2 `k=s`?) to size the over-refresh the `.commandEnd` gate avoids.
+7. ❓ **`.inspector` vs hand-rolled mirror (optional):** native SwiftUI `.inspector` (macOS 14) is leaner; benchmark vs the AppKit mirror during implementation.
+
+---
+
+## Proposed OpenSpec capabilities touched (mechanism-neutral)
+
+- **`git-review`** (NEW capability spec) — the panel: lists changed files for the focused local repo grouped by status category; click → read-only diff; ⌘-click → open in editor; empty states for remote/non-repo/git-not-found; refresh on command-finish + periodic backstop + focus + manual. Requirements stay mechanism-neutral (the *what*); v1-vs-v2, shell-out-vs-libgit2, trailing-panel, debounce+poll+spacing mechanics live in `design.md`.
+- **`verification-harness`** (MODIFIED) — DEBUG dump SHALL expose the `gitReview` snapshot (counts/paths/statuses + selectedDiff summary + refresh counter, never full diff text); new e2e scenarios for known-state listing, click→diff (`XTTY_TEST_GIT_SELECT`), and ⌘-click→editor (reusing `lastLinkOpen`).
+- **`terminal-keybindings`** + **`app-shell`** (MODIFIED) — a Toggle-Git-Review action / View-menu item / default ⌃⌘G chord; next/prev-hunk actions.
+- **`terminal-configuration`** (MODIFIED) — add a **`diff-context`** key (and optionally a per-file diff line cap). Editor-open reuses the existing **`link-opener`** key (`XttyCore/.../XttyConfigLoader.swift:158`), so **no new config key for the editor path**.
+
+**Decisive guardrails the proposal must encode** (under-specified in the raw findings): (a) refresh git **only on `.commandEnd` + a gated periodic poll**, debounced, ~5 s-spaced, serialized, visible+local+idle-gated — **never** on `registry.revision`; (b) status is **porcelain v1 `-z --no-renames -uall`** with branch fetched separately, **not** v2 `--branch`; (c) `git diff --no-index` **exit 1 == success**; (d) all reads carry `GIT_OPTIONAL_LOCKS=0` and diffs carry `--no-ext-diff --no-color`; (e) `gitReview` dump reads a **cached** snapshot, never exec; (f) the right-panel slot **reworks** `terminalContainer.trailing` (`TerminalWindowController.swift:176`), it is not a free mirror; (g) the file/status data model stays **forward-compatible with a later stage toggle** though staging ships nothing in v1.
+
+---
+
+## Sources
+
+- **xtty codebase** (re-verified `main`@`902f41a`): `App/TerminalWindowController.swift`, `App/PaneController.swift`, `App/FileOpener.swift`, `App/XttyApp.swift`, `XttyCore/Sources/XttyCore/{OSC133,TerminalSession,XttyConfigLoader}.swift`, `XttyCore/Package.swift`.
+- **lazygit** (Go): `pkg/commands/patch/{patch_line,parse}.go`, `pkg/commands/git_commands/{file_loader,diff,working_tree}.go`, `pkg/gui/background.go`, `pkg/gui/controllers/helpers/diff_helper.go`, `go.mod`.
+- **gitui** (Rust): `asyncgit/src/sync/diff.rs`, `src/components/diff.rs`, `src/main.rs`, `src/watcher.rs`.
+- **delta** (Rust): `src/align.rs`, `src/edits.rs`, `src/delta.rs`, `src/cli.rs`, `src/handlers/{hunk,hunk_header}.rs`, `src/paint.rs`.
+- **zed** (Rust): `crates/git/src/{repository,status}.rs`, `crates/git_ui/src/{git_panel,git_panel_settings,project_diff}.rs`, `crates/buffer_diff/src/buffer_diff.rs`, `crates/project_panel/src/project_panel.rs`.
+- **VS Code** (TS): `extensions/git/src/{git,repository,decorators}.ts`.
+- **waveterm** (TS): `frontend/app/view/codeeditor/{diffviewer,aifilediff}.tsx`, `frontend/app/view/term/termsticker.tsx`.
+- **SwiftGit2**: no `Package.swift` (vendors libgit2 submodule + Carthage/Xcode-project) → confirms libgit2 is heavy for Swift.
