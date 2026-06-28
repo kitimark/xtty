@@ -3,7 +3,6 @@
 ## Purpose
 
 Defines xtty's capture of semantic command structure from the OSC 133 byte stream: a view-free OSC 133 parser (FinalTerm `A`/`B`/`C`/`D` plus `P`, with `D`'s bare positional exit code, `cmdline`/`cmdline_url` command text, and `k=s` continuation marks), a per-session block-lifecycle state machine and block model in `XttyCore` (each block's command, exit code, working directory, timestamps, and state — succeeded/failed/opaque — and deliberately no fragile screen coordinates), and alternate-screen gating so full-screen applications never become command blocks. OSC 133 capture is best-effort: when marks are absent (tmux, ssh without integration) the terminal degrades to plain output and never gates rendering on them. This is the consume side of the P4a keystone — the data foundation the session-progress sidebar (P5) builds on. The spatial operations over blocks (jump-to-prompt, select-output, gutter marks) are deferred to P4b (they need stable absolute row anchors unavailable via SwiftTerm's public API).
-
 ## Requirements
 ### Requirement: OSC 133 command-boundary capture
 
@@ -33,7 +32,7 @@ The application SHALL register an OSC 133 handler on the headless engine (the en
 
 ### Requirement: Per-session command-block model
 
-`XttyCore` SHALL maintain, per session, a view-free list of command blocks driven by a lifecycle state machine over the parsed OSC 133 marks. A block SHALL record the command text (when known), the exit code (when reported), the working directory at the time it ran, start and end timestamps, and a state of running, succeeded, failed, or opaque (full-screen). A block SHALL be opened only on an output-start (`C`) mark and closed only on the first command-end (`D`) mark following it; a `D` with no open block SHALL be a no-op. A prompt with no intervening command (e.g. an empty line or interrupted input) SHALL NOT produce a block. The block list SHALL feed downstream consumers (the future session-progress sidebar) and SHALL NOT store fragile screen coordinates.
+`XttyCore` SHALL maintain, per session, a view-free list of command blocks driven by a lifecycle state machine over the parsed OSC 133 marks. A block SHALL record the command text (when known), the exit code (when reported), the working directory at the time it ran, start and end timestamps, and a state of running, succeeded, failed, or opaque (full-screen). A block SHALL be opened only on an output-start (`C`) mark and closed only on the first command-end (`D`) mark following it; a `D` with no open block SHALL be a no-op. A prompt with no intervening command (e.g. an empty line or interrupted input) SHALL NOT produce a block. In addition to the list of finished blocks, the tracker SHALL expose the **in-flight running block** while a command is executing — between its output-start (`C`) and command-end (`D`), and not while suppressed by the alternate screen — as a block in the running state carrying the open command's text, its working directory, and its start timestamp (with no end timestamp). The block list and the running block SHALL feed downstream consumers (the session-progress sidebar) and SHALL NOT store fragile screen coordinates.
 
 #### Scenario: A run command becomes a completed block
 - **WHEN** the user runs a command that starts (`C`) and finishes (`D ; 0`)
@@ -42,6 +41,11 @@ The application SHALL register an OSC 133 handler on the headless engine (the en
 #### Scenario: A failed command is marked failed
 - **WHEN** a command finishes with a non-zero exit code
 - **THEN** its block's state is failed and the exit code is recorded
+
+#### Scenario: An in-flight command is observable as running
+- **WHEN** a command has started (`C`) but not yet finished (no `D` yet) and the session is not on the alternate screen
+- **THEN** the tracker exposes a running block carrying that command's text, cwd, and start timestamp, with no end timestamp
+- **AND** once the command finishes (`D`) the running block is cleared and a finished block is appended
 
 #### Scenario: Pressing Return at an empty prompt produces no block
 - **WHEN** the user presses Return at a prompt without entering a command (no output-start mark)
@@ -53,7 +57,7 @@ The application SHALL register an OSC 133 handler on the headless engine (the en
 
 #### Scenario: Block model runs without the app
 - **WHEN** the test suite runs
-- **THEN** the block lifecycle (open on C, close on first D, discard prompt-only regions, record fields) is exercised by a unit test that does not launch the app or create a terminal view
+- **THEN** the block lifecycle (open on C, expose the running block, close on first D, discard prompt-only regions, record fields) is exercised by a unit test that does not launch the app or create a terminal view
 
 ### Requirement: Alternate-screen suppression and best-effort degradation
 
