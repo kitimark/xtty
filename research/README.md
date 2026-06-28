@@ -41,6 +41,7 @@ Research library on terminal emulators — competitive landscape, internals, and
 - [SwiftTerm Metal renderer spike](03-analysis/swiftterm-metal-renderer-spike.md) — P2 finding: SwiftTerm's GPU path works in xtty's AppKit host; adoption deferred to the P7 latency gate
 - [P3b shell-UX decisions](03-analysis/p3b-shell-ux-decisions.md) — explore-phase decisions for the deferred half of P3 (Quick-Terminal + Profiles); error-matching moved to P4
 - [P4 semantic-capture decisions](03-analysis/p4-semantic-capture-decisions.md) — explore-phase decisions for the keystone (OSC 7 cwd + OSC 133 blocks): ship P4a (data model, fork-free) and defer P4b (jump/select/marks — needs a SwiftTerm fork); auto-inject zsh via `ZDOTDIR`; protocol grammar
+- [P5 sidebar + P4b sequencing](03-analysis/p5-sidebar-and-p4b-sequencing.md) — post-P4a decision: ship the **P5 session sidebar before P4b** (fork-free, on the existing block model), defer P4b behind a ~3-accessor fork, drop gutter marks; resolves 6 open questions (states, fork-free jump, grouping, copy-vs-select, upstream strategy, refresh cadence)
 - [xtty requirements](03-analysis/xtty-requirements.md) — the opinionated product target: must-haves, features, non-goals
 
 ### 04 — Design

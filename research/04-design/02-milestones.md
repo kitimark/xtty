@@ -48,23 +48,25 @@ Requirement tags reference [xtty-requirements](../03-analysis/xtty-requirements.
 
 **Done when:** tabs + splits feel native and stable. *(P3a meets this; P3b adds the extras.)*
 
-## Phase 4 — Semantic capture / blocks  ·  H3 *(keystone — old P7)*  *(P4a ✅ implemented & archived-pending; P4b deferred)*
+## Phase 4 — Semantic capture / blocks  ·  H3 *(keystone — old P7)*  *(P4a ✅ implemented & archived; P4b deferred until after P5)*
 **Goal:** the foundation for every differentiator. **Split into P4a (data model, fork-free) + P4b (spatial ops, needs a SwiftTerm fork)** — see [`p4-semantic-capture-decisions`](../03-analysis/p4-semantic-capture-decisions.md).
 - ✅ **P4a (`add-semantic-capture`)** — **OSC 7 cwd** captured via the (now wired) `hostCurrentDirectoryUpdate` delegate, decoded (`file://`/`kitty-shell-cwd://`, remote-host flag); new **splits open in the focused pane's live cwd**. **OSC 133** registered on the engine (`registerOscHandler(code: 133)`); a view-free parser (A/B/C/D/P, bare-positional exit code, `cmdline`/`cmdline_url`, `k=s`) feeds a view-free **block-lifecycle state machine** + per-session `BlockTracker` (command/exit/cwd/timestamps/state — **no fragile row coordinates**). **Auto-injects zsh** integration via `ZDOTDIR` redirection (bundled `.zshenv` restores the user's config; additive hooks coexist with p10k/starship; skipped for `command` one-shots; manual fallback documented). **Alt-screen gating** via an `open bufferActivated` override + public `isCurrentBufferAlternate` (full-screen apps → `opaque`, never normal blocks; OSC 133 best-effort, tmux/ssh degrade to plain output). 126 `XttyCore` unit + 17 XCUITests green (the block/cwd e2e drives a real injected zsh).
-- 📋 **P4b (deferred, needs a small SwiftTerm fork)** — **jump-to-prompt**, **select-a-command's-output**, **gutter fail-marks**: all need stable absolute row anchors (internal `yBase`+`linesTop`) and the internal `SelectionService`, so they ride a `~5-line upstreamable accessor fork` in a separate change. Also subsumes the **P3b-deferred file:line click-to-open**.
+- 📋 **P4b (deferred until after P5, needs a small SwiftTerm fork)** — **jump-to-prompt**, **copy/select a command's output**, and the **P3b-deferred file:line click-to-open**. These need a stable absolute row anchor (internal `yBase`+`linesTop`) and, for *visual* selection, the internal `SelectionService` — so they ride a **~2–3 additive, upstreamable accessor fork** (`getScrollInvariantCursorLocation` + `scrollbackBase` [+ a `setSelection` forwarder for visual select]) in a separate change. **Gutter fail-marks dropped** — the P5 sidebar delivers that value fork-free, and an in-terminal gutter pierces the swappable render seam (revisit at P8). A *best-effort* jump / copy-output is technically fork-free but degrades on scrollback trim/clear, so the clean fork is preferred. Decisions: [`p5-sidebar-and-p4b-sequencing`](../03-analysis/p5-sidebar-and-p4b-sequencing.md).
 
-**Done when (P4a):** new splits open in the right cwd; commands are captured as blocks with exit codes + state (failed marked); full-screen apps don't become blocks; integration is automatic for zsh. **(P4b adds the spatial jump/select/mark affordances.)**
+**Done when (P4a):** new splits open in the right cwd; commands are captured as blocks with exit codes + state (failed marked); full-screen apps don't become blocks; integration is automatic for zsh. **(P4b adds the spatial jump/copy affordances, after P5.)**
 **Refs:** [08-modern-innovations](../02-internals/08-modern-innovations.md), [agents-and-xtty](../03-analysis/agents-and-xtty.md), [p4 decisions](../03-analysis/p4-semantic-capture-decisions.md)
 **Risks (handled in P4a):** fragile prompt hooks (Starship/p10k) → additive `add-zsh-hook`; tmux/ssh passthrough → best-effort degrade to no-blocks; alt-screen apps NOT chopped into blocks → `bufferActivated` gating.
 
-## Phase 5 — Session-progress sidebar  ·  H1 *(the favorite feature — old P8)*
-**Goal:** at-a-glance per-session state — what you liked most in Warp.
-- SwiftUI sidebar listing sessions/panes with state (idle / running / done / failed), from OSC 133 boundaries + exit codes.
-- **Bonus:** wire SwiftTerm's **OSC 9;4 progress** (`progressReport`/`Terminal.ProgressReport`) into the sidebar for live progress bars.
-- Click to focus; show last command / duration.
+## Phase 5 — Session-progress sidebar  ·  H1 *(the favorite feature — old P8)*  *(📋 next change: `add-session-sidebar`, fork-free)*
+**Goal:** at-a-glance per-session state — what you liked most in Warp. **Fully fork-free on P4a's block model.** Scope settled in [`p5-sidebar-and-p4b-sequencing`](../03-analysis/p5-sidebar-and-p4b-sequencing.md).
+- **Prerequisite (one small `XttyCore` change):** close the `BlockTracker` in-flight gap — emit `BlockState.running`, expose the running block + `startedAt` (today blocks are appended only at the closing OSC 133 `D`). Capture `rowAtC` here too (the future jump anchor — same write).
+- SwiftUI sidebar as a **`Tab ▸ Pane` tree** (key window), with a session-level state enum `idle / running / succeeded / failed / fullScreen`, from OSC 133 boundaries + exit codes + `isAlternateScreen`.
+- Click → **focus the pane** (reuse the existing `setActivePane`); **not** scroll-to-row (that would pull the P4b fork forward). Show last command / live duration (`TimelineView(.periodic(by: 1))` scoped to running rows).
+- Updates are **event-driven** (`@Observable`; the OSC handlers already run on the main actor — no marshalling).
+- **Bonus (deferred, not in the first change):** OSC 9;4 progress (`.set`/`.pause`/`.error`). ⚠️ **Cannot** be captured by overriding `progressReport` — it is `public`, not `open` — so use a custom `registerOscHandler(code: 9)` in `XttyCore`, re-forwarding non-`4;` OSC 9. Best-effort "Copy output" is the other deferred bonus.
 
 **Done when:** you glance at the sidebar and see what each terminal is doing.
-**Refs:** [adjacent-tools (Herdr)](../03-analysis/adjacent-tools.md) (state-sidebar model)
+**Refs:** [adjacent-tools (Herdr)](../03-analysis/adjacent-tools.md) (state-sidebar model); [P5/P4b sequencing](../03-analysis/p5-sidebar-and-p4b-sequencing.md)
 
 ## Phase 6 — File / diff view  ·  H2 *(the Zed habit — old P9)*
 **Goal:** lightweight in-terminal project files + git diff before commit.

@@ -30,7 +30,7 @@ These map directly to the [research conclusions](opportunities.md): GPU renderin
 
 | # | Feature | Why / source |
 |---|---|---|
-| H1 | **At-a-glance per-session progress** — sidebar/tab list showing each terminal's state (idle / working / done / blocked) | User's favorite Warp feature; mirrors [Herdr](adjacent-tools.md)'s agent-state sidebar |
+| H1 | **At-a-glance per-session progress** — sidebar/tab list showing each terminal's state (idle / working / done / failed) | User's favorite Warp feature; mirrors [Herdr](adjacent-tools.md)'s agent-state sidebar. (State vocabulary settled in [P5 sidebar + P4b sequencing](p5-sidebar-and-p4b-sequencing.md): "failed" replaces "blocked" — xtty has no native needs-human signal.) |
 | H2 | **In-terminal file/diff view** — project file tree + git diff before commit | User's Zed habit; the one thing Warp got right that plain terminals lack |
 | H3 | **Semantic capture (OSC 7 / OSC 133)** with auto-injection + robust fallback | Foundation for H1, jump-to-prompt, failed-command marks, and any future agent features ([agents-and-xtty](agents-and-xtty.md)) |
 
