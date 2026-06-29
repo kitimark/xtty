@@ -32,6 +32,8 @@ Every milestone P0–P6 added **observable behavior**. P7 does not: its delivera
 
 ## Finding 2 — latency capture: a fork-free in-process screen-capture probe
 
+> **⚠️ Superseded in part — see the [2026-06-29 addendum](#addendum-2026-06-29--building-p7a-the-screenshot-polling-latency-probe-is-too-coarse) below.** The screen-capture *approach* shipped fork-free as planned and the **memory** half delivered, but building it disproved the "A/B delta is exact" claim for a *polling* probe: each screenshot costs ~20 ms, exceeding the latency signal. Trustworthy latency is deferred to P7b.
+
 - ❓ **No present-timestamp hook exists today** (survey): no `CVDisplayLink`/`CADisplayLink`/`mach_absolute_time`/FPS/latency code anywhere in `App/` or `XttyCore/`.
 - A *precise* present timestamp would require a **per-renderer SwiftTerm patch** — `draw(_:)` for CoreGraphics, present-drawable for the Metal path — shipped via the existing `patches/swiftterm/` mechanism (as the P4b-2 accessors were). That's two patches + maintenance, and it *still* excludes hardware latency.
 - ✅ **Decision: primary instrument = inject a synthetic `CGEvent` (t0) → poll the window's pixels (ScreenCaptureKit, fallback `CGWindowListCreateImage`) until the glyph changes (t1); latency = t1 − t0.** This is **fork-free, renderer-agnostic, and automatable**, and it captures *more* of the real stack (app → compositor → window-server) than an internal draw hook would. It excludes the ~20 ms constant hardware tail (keyboard/USB/monitor pixel response) — **acceptable, because that tail is identical for CoreGraphics and Metal, so the A/B *delta* is exact**, which is exactly what the gate needs. Reserve a SwiftTerm patch only if sub-frame precision the capture loop can't deliver is ever required.
@@ -67,6 +69,39 @@ Every milestone P0–P6 added **observable behavior**. P7 does not: its delivera
 
 - ❓ **Latency target wording** — leaning *relative* (≤ Terminal.app on the same display) over a hard ms.
 - ❓ **Capture API** — leaning **ScreenCaptureKit** (macOS 12.3+, frame callbacks) as primary, with `CGWindowListCreateImage` as a legacy fallback.
+
+## Addendum (2026-06-29) — building P7a: the screenshot-polling latency probe is too coarse
+
+Implementing P7a (`add-latency-memory-harness`) and **running it on the dev machine** (MacBookPro18,3, macOS 26.2, 120 Hz) settled two things the plan had only assumed:
+
+- ✅ **Memory measurement fully delivers — and the M1 goal looks met.** Per-scenario (each measured from a clean single-pane reset): idle **~66–69 MB**, 4 panes ~100–109 MB, a *saturated* 20k-line scrollback ~123–136 MB, alt-screen ~116–136 MB; Metal costs ~10–15 MB more than CoreGraphics. All **far** under Warp's ~300 MB–1 GB (the M1 anti-target) — xtty is squarely lean-native. (`task_info` `phys_footprint`.) An adversarial review caught that the scenarios were initially measured *cumulatively* — flood/alt sampled with `multiPane`'s 4 panes still open — which made `flood` read *lower* than 4-pane; fixed by resetting to one clean pane before each scenario, after which the numbers became monotonic and sensible.
+- ❌ **The screenshot-polling latency probe cannot resolve key-to-photon latency.** `SCScreenshotManager.captureImage` costs **~20 ms per call — larger than the ~8–16 ms signal** — so the first post-keystroke capture already contains the rendered glyph; the probe reported a nonsensical p50 ≈ 0 ms. (`CGWindowListCreateImage`, the originally-planned synchronous fallback, is **unavailable** on the macOS 26 SDK — it doesn't compile — forcing the SCK path.) The cursor-blink two-frame guard was also insufficient (captures are faster than the caret's ~500 ms half-period), separately fixed by hiding the caret during the probe — but that didn't rescue the fundamental resolution problem.
+
+### 3× benchmark run (means of 3 iterations per renderer; `make bench` + `/usr/bin/time -l`)
+
+| Metric | CoreGraphics | Metal |
+| --- | --- | --- |
+| Latency p50 / p95 / p99 (ms) — *coarse* | 54.4 / 60.4 / 126.4 | 54.4 / 109.1 / 129.0 |
+| Memory idle 1 pane (`phys_footprint`) | **67.9 MB** | 64.3 MB |
+| Memory 4 panes | 99.7 MB | 106.9 MB |
+| Memory scrollback flood (saturated 20k) | 122.0 MB | 134.4 MB |
+| Memory alt-screen | 114.0 MB | 134.9 MB |
+| CPU whole run (user + sys) | 1.66 + 0.23 s | 1.65 + 0.24 s |
+| Peak RSS (`time -l` max resident) | 234 MB | 240 MB |
+| **Idle** (plain instance, no probe) | **0.0 % CPU**, ~132 MB RSS / ~68 MB footprint | same |
+
+Reads (✅ trustworthy / ⚠️ caveated):
+- ✅ **Idle CPU = 0.0 %** — no busy-loop at rest (the Warp complaint); xtty passes.
+- ✅ **Lean memory** — ~64–68 MB idle footprint, ≤135 MB even with saturated scrollback; far under Warp's 300 MB–1 GB (M1 met).
+- ✅ **CoreGraphics vs Metal:** CPU identical; Metal costs **~7–20 MB more** under load; latency **indistinguishable** → no reason to leave CoreGraphics on these numbers (the real verdict is P7b, with a real latency probe).
+- ⚠️ **Two "memory" numbers, different meanings:** *footprint* (`phys_footprint`, ~68 MB idle = Activity Monitor's "Memory", private/dirty pages — the representative figure) vs *peak RSS* (~234 MB — includes shared framework pages **plus the benchmark's own ScreenCaptureKit probe buffers + the flood**; *not* normal-use memory). The plain idle instance (132 MB RSS / 68 MB footprint, no probe) is the realistic resident figure.
+- ⚠️ **Latency ~54 ms is the capture floor, not real key-to-photon** (≥2 screenshots × ~20 ms per trial); p50 is identical across renderers because the probe can't resolve the difference — see the coarseness finding above.
+
+### Operational finding — running the latency probe re-prompts for Screen Recording (ad-hoc signing); a stable self-signed identity fixes it
+
+The latency probe calls ScreenCaptureKit, which requires the **Screen Recording** TCC grant. Because xtty is **ad-hoc signed** ("Sign to Run Locally"), its code identity (cdhash) changes on **every rebuild**, so macOS keys the grant to a different identity each time and **re-prompts on every build** — disruptive when iterating on the probe. Fix (a local dev convenience, *not* committed signing config): a **stable self-signed code-signing certificate** (`scripts/create-signing-cert.sh` → `xtty-dev`) plus an opt-in `XTTY_SIGN_IDENTITY` Makefile override. With a stable cert the designated requirement becomes `identifier "com.xtty.app" and certificate leaf = H"…"` (cert-based, not cdhash) — **verified persistent across two rebuilds with zero re-prompts**. Notes from the experiment: macOS `security` can't import a LibreSSL/OpenSSL-3 **PKCS#12** ("MAC verification failed") — import a combined key+cert **PEM** instead; an untrusted self-signed cert (`CSSMERR_TP_NOT_TRUSTED`, excluded from `find-identity -v`) **still signs fine** (trust only affects Gatekeeper verification, not signing). The default build stays ad-hoc/portable (CI + other devs unaffected). This is the lightweight slice of the deferred P7-distribution signing work; full **Hardened Runtime + Developer ID + notarization** remain deferred. The **harness e2e** sidesteps the prompt entirely by gating the benchmark test behind `XTTY_RUN_BENCH_E2E=1`, so routine `make test` is prompt-free without any signing setup. **Formalized as the `add-local-signing-identity` OpenSpec change** (a `build-workflow` spec delta — an opt-in `XTTY_SIGN_IDENTITY` build override + the creation helper, leaving the committed default ad-hoc); see `openspec/changes/.../add-local-signing-identity/` and AGENTS → Building.
+
+**Decision (revised):** P7a ships as the **memory + renderer-A/B + report-infrastructure** harness; the latency probe is retained but **documented coarse/experimental** (it exercises the full input→render→capture path and is a useful regression smoke-test, not a latency oracle). A **trustworthy** key-to-photon probe — an `SCStream` delivering per-frame **presentation timestamps**, or an engine present-hook (the fork route) — and the actual **CoreGraphics-vs-Metal latency verdict** move to **P7b**, which always owned the renderer decision and was gated on trustworthy latency anyway. The relative-bar method (compare against Terminal.app/iTerm2/Warp) still stands for P7b. The `renderer = coregraphics|metal` config key + `make bench` + the JSON report shape are reusable by P7b as-is.
 
 ## Sources
 

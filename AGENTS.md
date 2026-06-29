@@ -67,7 +67,8 @@ The Xcode project is generated from a committed `project.yml` via **XcodeGen**; 
 | `make setup` | first-time, post-clone: `doctor` → bootstrap SwiftTerm → generate the project |
 | `make build` / `make run` | build (then launch) the app — **auto-bootstraps SwiftTerm and regenerates the project only when their tracked inputs changed** |
 | `make test-core` | the fast `XttyCore` unit loop (no app build) |
-| `make test` | the app XCUITests |
+| `make test` | the app XCUITests (the benchmark e2e is opt-in — set `XTTY_RUN_BENCH_E2E=1` — so routine runs never prompt for Screen Recording) |
+| `make bench` | the P7a performance harness — latency + per-scenario memory for both renderers → JSON reports under `build/bench/` (latency is **coarse/experimental**; memory is the trustworthy result — see `research/03-analysis/p7-measurement-methodology.md`) |
 | `make bootstrap` / `make generate` | force a re-run after editing the SwiftTerm pin/patch or `project.yml` |
 | `make clean` / `make reset` | remove build outputs / nuke + rebuild the SwiftTerm checkout |
 
@@ -81,6 +82,8 @@ The targets are thin wrappers — reach for the underlying commands below direct
 - **Core package:** `XttyCore` is a local SPM package (the engine-facing seam). It builds/tests standalone from `XttyCore/` via `swift build` / `swift test` (tests need Xcode's toolchain for XCTest).
 
 Signing posture (P0): **App Sandbox OFF** (`App/xtty.entitlements`), **Sign to Run Locally** (ad-hoc identity), Hardened Runtime/notarization deferred.
+
+- **Optional stable local signing (dev convenience):** ad-hoc signing changes the app's code identity every rebuild, so any TCC grant (notably **Screen Recording**, which `make bench`'s latency probe needs) re-prompts on each build. To make a grant persist, create a self-signed code-signing cert once with **`scripts/create-signing-cert.sh`** (→ `xtty-dev`) and build with **`XTTY_SIGN_IDENTITY=xtty-dev make build|test|bench`**; unset, builds stay ad-hoc/portable (CI + other contributors unaffected). This is the lightweight slice of the deferred P7-distribution signing work — *not* Developer ID/notarization. Formalized as the **`add-local-signing-identity`** OpenSpec change (a `build-workflow` spec delta). Details + the experiment write-up: `research/03-analysis/p7-measurement-methodology.md` (2026-06-29 addendum).
 
 ## Product values (hard requirements)
 
