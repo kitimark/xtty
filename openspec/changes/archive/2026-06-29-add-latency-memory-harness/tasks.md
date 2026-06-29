@@ -41,4 +41,4 @@
 
 - [x] 7.1 `swift test --package-path XttyCore` green (224); `make build` green; full XCUITest suite green (31, incl. 4 new performance-harness e2e; the benchmark e2e is opt-in via `XTTY_RUN_BENCH_E2E=1` and skips by default, so routine `make test` is prompt-free)
 - [x] 7.2 `openspec validate "add-latency-memory-harness"` clean; `config.example` documents `renderer`
-- [ ] 7.3 On completion, reconcile trackers per AGENTS.md (AGENTS Current status + milestones Phase 7 → P7a implemented) — done in the archive session
+- [x] 7.3 On completion, reconcile trackers per AGENTS.md (AGENTS Current status + milestones Phase 7 → P7a implemented) — done in the archive session
