@@ -47,7 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
 
         let controller = TerminalWindowController(
             profile: configSet.defaultProfile, registry: registry, confirmClose: configSet.confirmClose,
-            gitReviewLayout: configSet.gitReviewLayout
+            gitReviewLayout: configSet.gitReviewLayout, renderer: configSet.renderer
         )
         controller.coordinator = self
         windowControllers.append(controller)
@@ -67,8 +67,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
         if ProcessInfo.processInfo.arguments.contains("-UITestGridDump") {
             startUITestDump()
         }
+        // Performance benchmark (P7a): measure latency + memory for the active
+        // renderer, write a report, and quit. Let the window settle first.
+        if ProcessInfo.processInfo.arguments.contains("-Benchmark") {
+            let reportPath = benchmarkReportPath(renderer: configSet.renderer)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak controller] in
+                guard let controller else { return }
+                BenchmarkRunner.run(controller: controller, renderer: configSet.renderer, reportPath: reportPath)
+            }
+        }
         #endif
     }
+
+    #if DEBUG
+    /// The benchmark report destination: `-BenchmarkReport <path>` when given, else
+    /// a renderer-tagged file in the temp dir (the app sandbox is off, so /tmp-like
+    /// paths are writable).
+    private func benchmarkReportPath(renderer: RendererBackend) -> String {
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-BenchmarkReport"), i + 1 < args.count, !args[i + 1].isEmpty {
+            return args[i + 1]
+        }
+        return (NSTemporaryDirectory() as NSString)
+            .appendingPathComponent("xtty-bench-\(renderer.rawValue).json")
+    }
+    #endif
 
     /// Create the quake controller and register its global hotkey when enabled
     /// with a valid chord. Fail-soft: a failed `RegisterEventHotKey` (e.g. a
@@ -208,7 +231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
     private func makeWindow(profile: XttyProfile) -> TerminalWindowController {
         let controller = TerminalWindowController(
             profile: profile, registry: registry, confirmClose: configSet.confirmClose,
-            gitReviewLayout: configSet.gitReviewLayout
+            gitReviewLayout: configSet.gitReviewLayout, renderer: configSet.renderer
         )
         controller.coordinator = self
         windowControllers.append(controller)
@@ -327,21 +350,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
     }
 
     #if DEBUG
-    /// XCUITest determinism: `-UITestScrollback <n>` shrinks the scrollback cap so
-    /// the bounded-scrollback flood test runs fast with an exact saturation point.
+    /// XCUITest determinism overrides applied at launch:
+    /// - `-UITestScrollback <n>` shrinks the scrollback cap so the bounded-scrollback
+    ///   flood test runs fast with an exact saturation point.
+    /// - `-UITestRenderer <coregraphics|metal>` forces the rendering backend so the
+    ///   CoreGraphics-vs-Metal A/B can run without rebuilding (P7a).
+    /// Every other field is carried through unchanged.
     private static func applyUITestOverrides(to set: XttyConfigSet) -> XttyConfigSet {
         let args = ProcessInfo.processInfo.arguments
-        guard let i = args.firstIndex(of: "-UITestScrollback"),
-              i + 1 < args.count, let n = Int(args[i + 1]), n >= 0 else {
-            return set
-        }
+
         var base = set.base.config
-        base.scrollback = n
+        if let i = args.firstIndex(of: "-UITestScrollback"),
+           i + 1 < args.count, let n = Int(args[i + 1]), n >= 0 {
+            base.scrollback = n
+        }
+
+        var renderer = set.renderer
+        if let i = args.firstIndex(of: "-UITestRenderer"),
+           i + 1 < args.count, let value = RendererBackend(rawValue: args[i + 1].lowercased()) {
+            renderer = value
+        }
+
         let newBase = XttyProfile(name: set.base.name, config: base, launch: set.base.launch)
         return XttyConfigSet(
             base: newBase, profiles: set.profiles,
             defaultProfileName: set.defaultProfileName, confirmClose: set.confirmClose,
-            gitReviewLayout: set.gitReviewLayout
+            gitReviewLayout: set.gitReviewLayout, renderer: renderer
         )
     }
     #endif

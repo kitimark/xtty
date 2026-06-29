@@ -198,6 +198,9 @@ public enum XttyConfigLoader {
             if pairs["git-review-layout"] != nil {
                 warn("git-review-layout is ignored inside profile '\(name)' (it is base-only)")
             }
+            if pairs["renderer"] != nil {
+                warn("renderer is ignored inside profile '\(name)' (it is base-only)")
+            }
             let config = resolve(from: pairs, base: baseConfig, warn: warn)
             profiles[name] = XttyProfile(name: name, config: config, launch: launchOverride(from: pairs, warn: warn))
         }
@@ -229,12 +232,22 @@ public enum XttyConfigLoader {
             }
         }
 
+        var renderer: RendererBackend = .coregraphics
+        if let raw = basePairs["renderer"] {
+            if let value = RendererBackend(rawValue: raw.lowercased()) {
+                renderer = value
+            } else {
+                warn("renderer: '\(raw)' is not 'coregraphics' or 'metal'; using \(renderer.rawValue)")
+            }
+        }
+
         return XttyConfigSet(
             base: base,
             profiles: profiles,
             defaultProfileName: defaultProfileName,
             confirmClose: confirmClose,
-            gitReviewLayout: gitReviewLayout
+            gitReviewLayout: gitReviewLayout,
+            renderer: renderer
         )
     }
 

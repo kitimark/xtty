@@ -58,19 +58,24 @@ public struct XttyConfigSet: Equatable, Sendable {
     /// The git-review panel's default changed-files list layout (global, base-only).
     /// Defaults to `.flat` (the status-category grouping).
     public let gitReviewLayout: GitReviewLayout
+    /// The terminal rendering backend (global, base-only). Defaults to
+    /// `.coregraphics`; `.metal` opts into SwiftTerm's experimental Metal path.
+    public let renderer: RendererBackend
 
     public init(
         base: XttyProfile,
         profiles: [String: XttyProfile] = [:],
         defaultProfileName: String? = nil,
         confirmClose: Bool = true,
-        gitReviewLayout: GitReviewLayout = .flat
+        gitReviewLayout: GitReviewLayout = .flat,
+        renderer: RendererBackend = .coregraphics
     ) {
         self.base = base
         self.profiles = profiles
         self.defaultProfileName = defaultProfileName
         self.confirmClose = confirmClose
         self.gitReviewLayout = gitReviewLayout
+        self.renderer = renderer
     }
 
     /// The profile new sessions use: the `default-profile` if it resolves, else base.

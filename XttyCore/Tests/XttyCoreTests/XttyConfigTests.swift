@@ -341,6 +341,35 @@ final class XttyConfigTests: XCTestCase {
         XCTAssertTrue(warnings.contains { $0.contains("git-review-layout") })
     }
 
+    func testResolveSetParsesRenderer() {
+        XCTAssertEqual(XttyConfigLoader.resolveSet(from: "renderer = metal").renderer, .metal)
+        XCTAssertEqual(XttyConfigLoader.resolveSet(from: "renderer = coregraphics").renderer, .coregraphics)
+        // Case-insensitive value (the key itself is already lowercased by parsing).
+        XCTAssertEqual(XttyConfigLoader.resolveSet(from: "renderer = METAL").renderer, .metal)
+    }
+
+    func testResolveSetRendererDefaultsToCoreGraphics() {
+        XCTAssertEqual(XttyConfigLoader.resolveSet(from: "").renderer, .coregraphics)
+    }
+
+    func testResolveSetInvalidRendererFallsBackAndWarns() {
+        var warnings: [String] = []
+        let set = XttyConfigLoader.resolveSet(from: "renderer = vulkan") { warnings.append($0) }
+        XCTAssertEqual(set.renderer, .coregraphics)
+        XCTAssertTrue(warnings.contains { $0.contains("renderer") })
+    }
+
+    func testResolveSetRendererInsideBlockIsIgnoredWithWarning() {
+        var warnings: [String] = []
+        let set = XttyConfigLoader.resolveSet(from: """
+        renderer = metal
+        [profile "work"]
+        renderer = coregraphics
+        """) { warnings.append($0) }
+        XCTAssertEqual(set.renderer, .metal, "the base value wins; the profile copy is ignored")
+        XCTAssertTrue(warnings.contains { $0.contains("renderer") })
+    }
+
     func testResolveSetDefaultProfileInsideBlockIsIgnoredWithWarning() {
         var warnings: [String] = []
         let set = XttyConfigLoader.resolveSet(from: """

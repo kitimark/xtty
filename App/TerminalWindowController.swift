@@ -42,6 +42,10 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
     /// Whether to confirm closing a pane with a running foreground job
     /// (the `confirm-close` config key — design D10).
     private let confirmCloseEnabled: Bool
+    /// The rendering backend applied to every pane's view (the `renderer` config
+    /// key / `-UITestRenderer` override). `.coregraphics` is the default no-op;
+    /// `.metal` enables SwiftTerm's Metal path once the view is in a window.
+    private let renderer: RendererBackend
 
     /// The split-tree structure (view-free model) and the controllers backing it.
     private var tree: PaneNode
@@ -78,9 +82,11 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
 
     init(profile: XttyProfile, registry: SessionRegistry, confirmClose: Bool = true,
          gitReviewLayout: GitReviewLayout = .flat,
+         renderer: RendererBackend = .coregraphics,
          contentSize: NSSize = NSSize(width: 900, height: 560)) {
         self.registry = registry
         self.confirmCloseEnabled = confirmClose
+        self.renderer = renderer
         window = NSWindow(
             contentRect: NSRect(origin: .zero, size: contentSize),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
@@ -132,6 +138,9 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         positionOnBuiltInDisplay()
         window.makeKeyAndOrderFront(nil)
         focusActivePane()
+        // Apply the rendering backend now that the root view is in a window
+        // (SwiftTerm's Metal path requires it). No-op for the CoreGraphics default.
+        applyRenderer()
 
         keyObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main
@@ -509,6 +518,21 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         setTerminalRoot(root)
         if let split = root as? NSSplitView { distributeEvenly(split) }
         focusActivePane()
+        // New split panes are now in the window; ensure they share the backend.
+        applyRenderer()
+    }
+
+    /// Apply the configured rendering backend to every pane's view. SwiftTerm's
+    /// Metal path must be enabled only once a view is in a window, so this is
+    /// called after the window is shown and after each split rebuild. The
+    /// CoreGraphics default needs no call; `setUseMetal` is idempotent, and a
+    /// failure (e.g. no Metal device) is logged, never fatal.
+    private func applyRenderer() {
+        guard renderer == .metal else { return }
+        for pane in panes.values {
+            do { try pane.view.setUseMetal(true) }
+            catch { NSLog("xtty: setUseMetal(true) failed: \(error)") }
+        }
     }
 
     /// Recursively build the AppKit view tree for a `PaneNode`.
@@ -582,6 +606,64 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
     }
 
     #if DEBUG
+    /// The active backend in ground truth (the active pane's view), for the dump.
+    var activeRenderer: RendererBackend {
+        (activePane?.view.isUsingMetalRenderer ?? false) ? .metal : .coregraphics
+    }
+
+    /// Establish a benchmark memory scenario on this window and return a resident
+    /// footprint sample (P7a `-Benchmark` mode only). Each scenario is measured
+    /// **independently**: the window is first reset to one clean pane, so (matching
+    /// each scenario's `paneCount`) the flood/alt-screen scenarios are single-pane
+    /// states and never carry the panes or scrollback of a prior scenario. Synchronous,
+    /// spinning the runloop briefly so layout/feed settle before sampling.
+    func benchmarkSample(_ scenario: BenchScenario) -> UInt64? {
+        benchmarkResetToSinglePane()
+        guard let pane = activePane else { return nil }
+        switch scenario {
+        case .idleOnePane:
+            break
+        case .multiPane:
+            var axisToggle = true
+            while tree.leaves().count < scenario.paneCount {
+                splitFocusedPane(axis: axisToggle ? .row : .column)
+                axisToggle.toggle()
+            }
+        case .scrollbackFlood:
+            // Feed the engine directly (no PTY) to saturate scrollback fast.
+            let line = String(repeating: "x", count: 80) + "\r\n"
+            pane.engine.feed(text: String(repeating: line, count: 20_000))
+        case .altScreen:
+            pane.engine.feed(text: "\u{1b}[?1049h")   // enter alternate screen
+        }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        return MemorySampler.currentFootprintBytes()
+    }
+
+    /// Collapse to a single pane and clear its engine state (exit alt-screen + full
+    /// reset, dropping scrollback), so each benchmark scenario starts from the same
+    /// clean single-pane baseline.
+    private func benchmarkResetToSinglePane() {
+        for leaf in tree.leaves() where leaf.id != activePaneID {
+            if let pc = panes[leaf.id] { closePane(pc) }
+        }
+        activePane?.engine.feed(text: "\u{1b}[?1049l\u{1b}c")   // exit alt-screen, then RIS
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+    }
+
+    /// Bring the window forward and focus the active pane so a latency probe's
+    /// injected keystroke reaches the PTY (design D3, first-responder precondition).
+    func benchmarkPrepareForProbe() {
+        window.makeKeyAndOrderFront(nil)
+        focusActivePane()
+    }
+
+    /// Hide/show the active pane's text caret during the latency probe, so the
+    /// blinking caret cannot be mistaken for the typed glyph (design D4).
+    func benchmarkSetCaretHidden(_ hidden: Bool) {
+        activePane?.engine.feed(text: hidden ? "\u{1b}[?25l" : "\u{1b}[?25h")
+    }
+
     /// Write this window's focused-pane grid + multiplexing inventory to the temp
     /// files the XCUITest harness reads. Called by the app delegate's single dump
     /// timer for the **key** window's controller, so multiple tab/window
@@ -652,6 +734,11 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             // Git review (P6a): the cached store snapshot — NEVER exec git here
             // (this runs on the 0.15s dump timer). Counts/paths/statuses only.
             "gitReview": Self.gitReviewDump(gitReview.store),
+            // Performance harness (P7a): the active rendering backend (ground
+            // truth from the view) + the latest resident-memory sample (bytes),
+            // so the renderer toggle + memory sampler are e2e-assertable.
+            "renderer": activeRenderer.rawValue,
+            "memoryFootprintBytes": MemorySampler.currentFootprintBytes().map { NSNumber(value: $0) } ?? NSNull(),
         ]
         if let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]) {
             try? data.write(to: URL(fileURLWithPath: UITestDump.stateDumpPath))

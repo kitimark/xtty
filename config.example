@@ -29,6 +29,11 @@
 # Accepts true/false, yes/no, on/off, 1/0.
 # option-as-meta = true
 
+# Rendering backend: "coregraphics" (default) or "metal". Metal opts into
+# SwiftTerm's GPU path — experimental, used mainly to A/B latency at the P7
+# measurement gate. Leave as coregraphics unless you are benchmarking.
+# renderer = coregraphics
+
 # --- Opening file links ---
 #
 # Cmd-click a file path in output (e.g. a compiler error like src/x.swift:42:7,
