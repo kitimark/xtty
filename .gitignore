@@ -1,5 +1,14 @@
-# Claude Code local files
-.claude/
+# Claude Code local files — ignored EXCEPT this project's own committed tooling:
+# the /xtty: command(s) and the xtty-* skill(s). Machine-local settings/locks and
+# the openspec-generated commands/skills stay out of git. (Re-include level by
+# level — git can't un-ignore a child of an ignored directory.)
+.claude/*
+!.claude/commands/
+.claude/commands/*
+!.claude/commands/xtty/
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/xtty-*/
 
 # Generated Xcode project (produced from project.yml via `xcodegen generate`)
 xtty.xcodeproj/
