@@ -20,6 +20,9 @@ protocol WindowCoordinator: AnyObject {
     func sidebarTabs(forTabGroupOf controller: TerminalWindowController) -> [SidebarTabItem]
     /// Focus a pane by id from the sidebar — bringing its tab/window forward.
     func focusPane(_ id: PaneID)
+    /// Perform a per-block sidebar action (P4b-3) on the pane owning `id` —
+    /// select (focus + scroll-to-block), copy output/command, or reveal cwd.
+    func performBlockAction(_ id: PaneID, target: BlockTarget, action: SidebarBlockAction)
 }
 
 /// Owns one xtty window/tab and the **tree of panes** inside it.
@@ -268,7 +271,10 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
                 return [SidebarTabItem(id: self.window.windowNumber, title: self.tabTitle,
                                        isCurrent: true, panes: self.paneItems())]
             },
-            onActivate: { [weak self] id in self?.coordinator?.focusPane(id) }
+            onActivate: { [weak self] id in self?.coordinator?.focusPane(id) },
+            onBlockAction: { [weak self] id, target, action in
+                self?.coordinator?.performBlockAction(id, target: target, action: action)
+            }
         )
     }
 
@@ -342,8 +348,59 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
                 lastCommand: session.blocks.blocks.last?.command,
                 runningSince: session.blocks.runningBlock?.startedAt,
                 runningCommand: session.runningCommand,
-                isActive: pane.id == activePaneID
+                isActive: pane.id == activePaneID,
+                blocks: blockItems(session: session, controller: panes[pane.id])
             )
+        }
+    }
+
+    /// Build a pane's recent command blocks for the sidebar (P4b-3), newest-first:
+    /// the in-flight running block first, then the finished list reversed. Each
+    /// block's `isActionable` is the owning controller's **live** engine check (so a
+    /// scrolled-out/trimmed block dims even though its anchor epoch is still valid).
+    private func blockItems(session: TerminalSession, controller: PaneController?) -> [SidebarBlockItem] {
+        var items: [SidebarBlockItem] = []
+        let tracker = session.blocks
+        if let running = tracker.runningBlock {
+            items.append(SidebarBlockItem(
+                id: "running",
+                command: running.command ?? "",
+                state: running.state,
+                startedAt: running.startedAt,
+                endedAt: nil,
+                isActionable: controller?.isBlockActionable(.running) ?? false,
+                hasWorkingDirectory: !(running.cwd ?? "").isEmpty,
+                target: .running
+            ))
+        }
+        for (i, b) in tracker.blocks.enumerated().reversed() {
+            items.append(SidebarBlockItem(
+                id: String(b.startedAt.timeIntervalSinceReferenceDate),
+                command: b.command ?? "",
+                state: b.state,
+                startedAt: b.startedAt,
+                endedAt: b.endedAt,
+                isActionable: controller?.isBlockActionable(.index(i)) ?? false,
+                hasWorkingDirectory: !(b.cwd ?? "").isEmpty,
+                target: .index(i)
+            ))
+        }
+        return items
+    }
+
+    /// Perform a per-block sidebar action on a pane this tab owns (P4b-3). `select`
+    /// focuses the pane (bringing the tab/window forward) then scrolls to the block;
+    /// the rest act in place. Called by the coordinator after owning-controller
+    /// resolution, so `panes[id]` is this controller's pane.
+    func performBlockAction(_ id: PaneID, target: BlockTarget, action: SidebarBlockAction) {
+        guard let pane = panes[id] else { return }
+        switch action {
+        case .select:
+            focusPane(id)                 // bring forward + focus (never via private setActivePane alone)
+            pane.scrollToBlock(target)
+        case .copyOutput: pane.copyOutput(of: target)
+        case .copyCommand: pane.copyCommand(of: target)
+        case .reveal: pane.revealWorkingDirectory(of: target)
         }
     }
 
@@ -709,11 +766,14 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         let leaves = tree.leaves()
         let session = active.pane.session
         // Semantic capture (P4a): the live cwd, alt-screen state, and block list.
-        let blocks: [[String: Any]] = session.blocks.blocks.map { b in
+        let blocks: [[String: Any]] = session.blocks.blocks.enumerated().map { i, b in
             [
                 "command": b.command ?? "",
                 "exitCode": b.exitCode.map { NSNumber(value: $0) } ?? NSNull(),
                 "state": b.state.rawValue,
+                // P4b-3: whether scroll-to/copy-output resolve right now (live engine
+                // check — dims trimmed/epoch-stale blocks in the sidebar).
+                "actionable": active.isBlockActionable(.index(i)),
             ]
         }
         let state: [String: Any] = [
@@ -748,6 +808,11 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             // without reading scroll chrome or the real clipboard.
             "lastJumpTargetRow": active.lastJumpTargetRow.map { NSNumber(value: $0) } ?? NSNull(),
             "lastCopiedOutput": active.lastCopiedOutput ?? NSNull(),
+            // Block sidebar (P4b-3): the last per-block menu action (copy-command /
+            // reveal-cwd) so the harness asserts without a real clipboard / Finder.
+            "lastBlockMenuAction": active.lastBlockMenuAction.map {
+                ["kind": $0.kind.rawValue, "value": $0.value]
+            } ?? NSNull(),
             // Git review (P6a): the cached store snapshot — NEVER exec git here
             // (this runs on the 0.15s dump timer). Counts/paths/statuses only.
             "gitReview": Self.gitReviewDump(gitReview.store),
@@ -809,6 +874,13 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         case "copy": pane.copyCommandOutputForTest()
         default: break
         }
+    }
+
+    /// XCUITest hook: drive a designated-block op (P4b-3) on the focused pane
+    /// ("verb:target", see `PaneController.routeTestBlock`), recording the resolved
+    /// scroll target / copied output / menu action in the state dump.
+    func routeTestBlockOnActivePane(_ spec: String) {
+        panes[activePaneID]?.routeTestBlock(spec)
     }
 
     /// XCUITest hook: select a file in the git-review panel (loads its diff through

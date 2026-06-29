@@ -24,6 +24,22 @@ protocol PaneControllerDelegate: AnyObject {
     func paneDidFinishCommand(_ pane: PaneController)
 }
 
+/// Designates which command block a sidebar-driven spatial op targets (P4b-3).
+/// The running block is exposed separately from the finished `blocks` list, so it
+/// can't be addressed by an index — hence the explicit `running` case.
+enum BlockTarget: Equatable {
+    case running
+    case index(Int)
+}
+
+/// A per-block menu action recorded for the DEBUG harness (P4b-3): copy-command
+/// records the command text, reveal records the resolved working directory.
+struct BlockMenuAction: Equatable {
+    enum Kind: String { case copyCommand, reveal }
+    let kind: Kind
+    let value: String
+}
+
 /// Owns one terminal pane: a single `XttyTerminalView` (its own PTY + shell +
 /// engine) wrapped as an `XttyCore.Pane` / `TerminalSession`, acting as the
 /// view's `LocalProcessTerminalViewDelegate`.
@@ -61,6 +77,10 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
     /// The last copy-command-output text (P4b-2), or `nil` when the last copy was a
     /// no-op. DEBUG dump (so the harness asserts without reading the real clipboard).
     private(set) var lastCopiedOutput: String?
+
+    /// The last per-block menu action (P4b-3 copy-command / reveal-cwd), surfaced in
+    /// the DEBUG dump so the harness asserts without a real clipboard / Finder.
+    private(set) var lastBlockMenuAction: BlockMenuAction?
 
     /// A safe fallback profile (base appearance + plain login shell), used only
     /// when a focused pane can't be found for split inheritance.
@@ -223,7 +243,13 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
         // Resize/reflow shifts buffer line indices without dropping linesTop, so
         // every stored anchor would silently mis-resolve — invalidate them all
         // (P4b-2, design D3). Fires after the reflow, before any later keypress.
-        MainActor.assumeIsolated { session.blocks.bumpEpoch() }
+        MainActor.assumeIsolated {
+            session.blocks.bumpEpoch()
+            // The epoch bump invalidated every anchor → the block sidebar's
+            // stale-dimming must recompute. The registry revision is the sidebar's
+            // only refresh trigger, and a resize doesn't otherwise bump it (P4b-3 D6).
+            registry.noteActivityChange()
+        }
     }
 
     nonisolated func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
@@ -289,9 +315,13 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
         engineScrollRow().map { $0 - engine.getCursorLocation().y }
     }
 
-    /// Sample liveTop for reset detection (called from the scroll hook).
+    /// Sample liveTop for reset detection (called from the scroll hook). When the
+    /// sample detects a clear/reset (epoch bump), refresh the block sidebar's
+    /// dimming — but only then, never per scroll tick (P4b-3 D6).
     private func sampleLiveTop() {
-        session.blocks.noteLiveTop(engineLiveTop())
+        if session.blocks.noteLiveTop(engineLiveTop()) {
+            registry.noteActivityChange()
+        }
     }
 
     /// The absolute prompt rows of anchored, still-valid blocks (jump targets).
@@ -323,13 +353,72 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
     }
 
     /// Copy the focused/last command's output (or the running command's output so
-    /// far) to the clipboard, excluding the trailing prompt (P4b-2). Engine-only
-    /// (`getText` → pasteboard, no on-screen selection). No-op (recorded) on an
-    /// invalid/trimmed anchor or an unavailable provider.
+    /// far) to the clipboard (P4b-2). The default keyboard surface; resolves to the
+    /// running block, else the last completed block, then delegates to `copyOutput`.
     func copyCommandOutput() {
+        let tracker = session.blocks
+        if tracker.runningBlock != nil {
+            copyOutput(of: .running)
+        } else if !tracker.blocks.isEmpty {
+            copyOutput(of: .index(tracker.blocks.count - 1))
+        } else {
+            lastCopiedOutput = nil
+        }
+    }
+
+    // MARK: Designated-block ops (P4b-3) — random-access scroll/copy/reveal
+
+    /// The block a target designates, or `nil` if it no longer exists (e.g. the
+    /// index was trimmed out of the bounded history between snapshot and click).
+    private func block(for target: BlockTarget) -> Block? {
+        let tracker = session.blocks
+        switch target {
+        case .running: return tracker.runningBlock
+        case .index(let i): return tracker.blocks.indices.contains(i) ? tracker.blocks[i] : nil
+        }
+    }
+
+    /// Whether a designated block's scroll/copy target resolves to an addressable
+    /// row **right now** (P4b-3, design D3). This is the *live* check the sidebar
+    /// dims on — stronger than `validPromptRows`, which omits the trim test because
+    /// keyboard jump tolerates trim by clamping; a persistent list cannot. A normal
+    /// scrollback trim advances `scrollbackBase` without bumping the epoch, so
+    /// `anchorIsValid` alone would wrongly call a trimmed block actionable.
+    func isBlockActionable(_ target: BlockTarget) -> Bool {
+        let tracker = session.blocks
+        guard let block = block(for: target),
+              let anchor = block.anchor, tracker.anchorIsValid(anchor),
+              let promptRow = anchor.promptRow,
+              let base = engineScrollbackBase(),
+              case .row = BlockNavigation.displayRow(forAbsolute: promptRow, scrollbackBase: base)
+        else { return false }
+        return true
+    }
+
+    /// Scroll the viewport to a designated block's prompt (P4b-3). Viewport only.
+    /// Graceful no-op (recorded) when the block is gone or its anchor is
+    /// missing/invalid/trimmed — never clamps to the top (a designated scroll must
+    /// not silently land somewhere unrelated).
+    func scrollToBlock(_ target: BlockTarget) {
+        lastJumpTargetRow = nil
+        let tracker = session.blocks
+        guard let block = block(for: target),
+              let anchor = block.anchor, tracker.anchorIsValid(anchor),
+              let promptRow = anchor.promptRow,
+              let base = engineScrollbackBase(),
+              case let .row(row) = BlockNavigation.displayRow(forAbsolute: promptRow, scrollbackBase: base)
+        else { return }
+        view.scrollTo(row: row)
+        lastJumpTargetRow = row
+    }
+
+    /// Copy a designated block's output, excluding the trailing prompt (P4b-3).
+    /// Engine-only (`getText` → pasteboard). No-op (recorded) on a gone/invalid/
+    /// trimmed anchor. The running block uses the live cursor row as its end.
+    func copyOutput(of target: BlockTarget) {
         lastCopiedOutput = nil
         let tracker = session.blocks
-        guard let block = tracker.runningBlock ?? tracker.blocks.last,
+        guard let block = block(for: target),
               let anchor = block.anchor, tracker.anchorIsValid(anchor),
               let base = engineScrollbackBase(),
               let range = BlockNavigation.outputRowRange(anchor: anchor, liveEnd: engineScrollRow()),
@@ -345,6 +434,38 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
         showToast("Copied output")
     }
 
+    /// Copy a designated block's command text (P4b-3). Anchor-free (always
+    /// available for a block with a known command). No-op when the command is
+    /// unknown/empty.
+    func copyCommand(of target: BlockTarget) {
+        lastBlockMenuAction = nil
+        guard let command = block(for: target)?.command, !command.isEmpty else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(command, forType: .string)
+        lastBlockMenuAction = BlockMenuAction(kind: .copyCommand, value: command)
+        showToast("Copied command")
+    }
+
+    /// Resolve + record a reveal target's working directory (P4b-3). Anchor-free;
+    /// `nil` when the block has no captured cwd. Shared by the live reveal and the
+    /// DEBUG record-only test path so reveal stays assertable without Finder.
+    @discardableResult
+    private func recordReveal(of target: BlockTarget) -> String? {
+        lastBlockMenuAction = nil
+        guard let cwd = block(for: target)?.cwd, !cwd.isEmpty else { return nil }
+        lastBlockMenuAction = BlockMenuAction(kind: .reveal, value: cwd)
+        return cwd
+    }
+
+    /// Reveal a designated block's working directory in Finder (P4b-3). Disabled
+    /// (no-op) when the block has no captured cwd; benign no-op on a missing/remote
+    /// path. The DEBUG test path uses `recordReveal` directly and never opens Finder.
+    func revealWorkingDirectory(of target: BlockTarget) {
+        guard let cwd = recordReveal(of: target) else { return }
+        NSWorkspace.shared.open(URL(fileURLWithPath: cwd))
+    }
+
     /// A transient, non-modal confirmation overlaid on the pane (never blocks
     /// input). Used to confirm what copy-command-output grabbed (the fork-free
     /// substitute for a visual selection — design D7).
@@ -357,6 +478,22 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
     /// assert the resolved target / copied text from the state dump.
     func jumpToPromptForTest(previous: Bool) { jumpToPrompt(previous ? .previous : .next) }
     func copyCommandOutputForTest() { copyCommandOutput() }
+
+    /// XCUITest hook: drive a designated-block op (P4b-3) on this pane through the
+    /// real pipeline. Spec = "verb:target", verb ∈ scroll|copyout|copycmd|reveal,
+    /// target ∈ "running" | an index into `blocks`. Reveal records-only (no Finder).
+    func routeTestBlock(_ spec: String) {
+        let parts = spec.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return }
+        let target: BlockTarget = parts[1] == "running" ? .running : .index(Int(parts[1]) ?? -1)
+        switch parts[0] {
+        case "scroll": scrollToBlock(target)
+        case "copyout": copyOutput(of: target)
+        case "copycmd": copyCommand(of: target)
+        case "reveal": recordReveal(of: target)  // record-only — never opens Finder under test
+        default: break
+        }
+    }
     #endif
 
     // MARK: XttyTerminalViewCommands (forward the focused view's intent to the owner)

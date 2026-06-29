@@ -53,6 +53,39 @@ final class BlockTrackerTests: XCTestCase {
         XCTAssertEqual(t.blocks[0].exitCode, 0)
     }
 
+    func testBlockHistoryIsBoundedDroppingOldest() {
+        let t = BlockTracker(now: clock(), maxBlocks: 3)
+        for i in 0..<5 {
+            t.handle(mark(.commandStart, command: "c\(i)"), cwd: "/x")
+            t.handle(mark(.commandEnd(exitCode: 0)), cwd: "/x")
+        }
+        XCTAssertEqual(t.blocks.count, 3, "history is capped at maxBlocks")
+        XCTAssertEqual(t.blocks.map { $0.command }, ["c2", "c3", "c4"],
+                       "oldest dropped; newest preserved in order")
+    }
+
+    func testTrimmingDoesNotAffectRunningBlock() {
+        let t = BlockTracker(now: clock(), maxBlocks: 2)
+        for i in 0..<3 {
+            t.handle(mark(.commandStart, command: "c\(i)"), cwd: "/x")
+            t.handle(mark(.commandEnd(exitCode: 0)), cwd: "/x")
+        }
+        t.handle(mark(.commandStart, command: "live"), cwd: "/x")  // now running
+        XCTAssertEqual(t.blocks.count, 2, "finished history stays capped")
+        XCTAssertEqual(t.runningBlock?.command, "live")
+        XCTAssertEqual(t.runningBlock?.state, .running)
+    }
+
+    func testNoteLiveTopSignalsEpochBumpOnlyOnDrop() {
+        let t = tracker()
+        XCTAssertFalse(t.noteLiveTop(10), "first sample establishes the high-water mark")
+        XCTAssertFalse(t.noteLiveTop(20), "monotonic increase does not bump")
+        let before = t.currentEpoch
+        XCTAssertTrue(t.noteLiveTop(5), "a drop below the high-water mark bumps the epoch")
+        XCTAssertEqual(t.currentEpoch, before + 1)
+        XCTAssertFalse(t.noteLiveTop(nil), "an unavailable sample never bumps")
+    }
+
     func testStrayEndIsNoOp() {
         let t = tracker()
         t.handle(mark(.promptStart), cwd: "/x")

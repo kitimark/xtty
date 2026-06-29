@@ -110,8 +110,14 @@ public final class BlockTracker {
     private var liveTopHighWater: Int?
     private let now: () -> Date
 
-    public init(now: @escaping () -> Date = Date.init) {
+    /// Upper bound on the retained finished-block history (lean-memory, P4b-3).
+    /// The oldest blocks are dropped beyond this; the running block is exposed
+    /// separately and is never affected by trimming.
+    private let maxBlocks: Int
+
+    public init(now: @escaping () -> Date = Date.init, maxBlocks: Int = 1000) {
         self.now = now
+        self.maxBlocks = max(1, maxBlocks)
     }
 
     /// Feed a parsed mark, with the session's current working directory (recorded
@@ -158,6 +164,9 @@ public final class BlockTracker {
                 command: openCommand, exitCode: exitCode, cwd: openCwd,
                 startedAt: startedAt, endedAt: now(), state: state, anchor: anchor
             ))
+            if blocks.count > maxBlocks {
+                blocks.removeFirst(blocks.count - maxBlocks)  // drop oldest, keep newest-N
+            }
             phase = .atPrompt
             openCommand = nil
             openCwd = nil
@@ -191,14 +200,21 @@ public final class BlockTracker {
     /// below the high-water mark bumps the epoch (invalidating pre-reset anchors).
     /// `nil` (provider unavailable) is ignored. Best-effort: a clear immediately
     /// followed by a large flood within one feed chunk may mask the drop.
-    public func noteLiveTop(_ liveTop: Int?) {
-        guard let liveTop else { return }
+    ///
+    /// Returns `true` when this sample bumped the epoch (a clear/reset was
+    /// detected), so the caller can refresh epoch-dependent UI (the block
+    /// sidebar's stale-dimming, P4b-3) only on a real invalidation rather than
+    /// on every scroll tick.
+    @discardableResult
+    public func noteLiveTop(_ liveTop: Int?) -> Bool {
+        guard let liveTop else { return false }
         if let hw = liveTopHighWater, liveTop < hw {
             bumpEpoch()
             liveTopHighWater = liveTop  // re-baseline from the post-reset level
-        } else {
-            liveTopHighWater = max(liveTopHighWater ?? liveTop, liveTop)
+            return true
         }
+        liveTopHighWater = max(liveTopHighWater ?? liveTop, liveTop)
+        return false
     }
 
     /// Whether an anchor is still usable (its epoch matches the current epoch).

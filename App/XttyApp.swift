@@ -176,6 +176,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
             .routeTestGitOpenOnActivePane(target)
     }
 
+    /// XCUITest hook: if the test wrote a block-select file (a "verb:target" spec),
+    /// drive the designated-block op on the key window's focused pane (records the
+    /// resolved scroll target / copied output / menu action in the state dump,
+    /// no real clipboard/Finder), then consume the file (P4b-3).
+    private func routePendingTestBlockSelect() {
+        guard let path = ProcessInfo.processInfo.environment["XTTY_TEST_BLOCK_SELECT"], !path.isEmpty,
+              let spec = try? String(contentsOfFile: path, encoding: .utf8)
+                  .trimmingCharacters(in: .whitespacesAndNewlines), !spec.isEmpty else { return }
+        try? FileManager.default.removeItem(atPath: path)
+        let key = NSApp.keyWindow
+        (windowControllers.first { $0.window === key } ?? windowControllers.last)?
+            .routeTestBlockOnActivePane(spec)
+    }
+
     private func startUITestDump() {
         dumpTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -184,6 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
                 self.routePendingTestSpatialOp()
                 self.routePendingTestGitSelect()
                 self.routePendingTestGitOpen()
+                self.routePendingTestBlockSelect()
                 let key = NSApp.keyWindow
                 // When the quake panel is key, its pane is the content under test,
                 // but the inventory must still come from a main window so the quake
@@ -286,6 +301,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
     /// Focus a pane by id from the sidebar — route to its owning tab/window.
     func focusPane(_ id: PaneID) {
         windowControllers.first { $0.owns(id) }?.focusPane(id)
+    }
+
+    /// Perform a per-block sidebar action (P4b-3) — route to the pane's owning
+    /// tab/window (which resolves focus + scroll / copy / reveal in place).
+    func performBlockAction(_ id: PaneID, target: BlockTarget, action: SidebarBlockAction) {
+        windowControllers.first { $0.owns(id) }?.performBlockAction(id, target: target, action: action)
     }
 
     /// View ▸ Toggle Sidebar — routed via the responder chain to the app delegate;

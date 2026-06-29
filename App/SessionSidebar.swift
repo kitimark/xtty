@@ -17,6 +17,48 @@ struct SidebarPaneItem: Identifiable {
     let runningSince: Date?
     let runningCommand: String?
     let isActive: Bool
+    /// This pane's recent command blocks, newest-first (P4b-3). Empty → the pane
+    /// row is a plain, non-expandable row (no disclosure chevron).
+    let blocks: [SidebarBlockItem]
+}
+
+/// One command-block row in a pane's disclosure (P4b-3). A plain value snapshot:
+/// the durable fields are always shown; `isActionable` (a live engine check) gates
+/// scroll/copy-output, and `target` is the descriptor a selection acts on.
+struct SidebarBlockItem: Identifiable {
+    let id: String
+    let command: String
+    let state: BlockState
+    let startedAt: Date
+    /// `nil` while the command is still running (drives a live duration).
+    let endedAt: Date?
+    /// Whether scroll-to / copy-output resolve to an addressable row right now
+    /// (anchor present + epoch-valid + not trimmed out). Gates those two actions.
+    let isActionable: Bool
+    /// Whether a working directory was captured (gates reveal-working-directory).
+    let hasWorkingDirectory: Bool
+    /// The descriptor a selection/menu action targets (running vs an index).
+    let target: BlockTarget
+
+    var isRunning: Bool { endedAt == nil }
+
+    /// The status glyph reuses the session-activity vocabulary (spec).
+    var activity: SessionActivity {
+        switch state {
+        case .running: return .running
+        case .succeeded: return .succeeded
+        case .failed: return .failed
+        case .opaque: return .fullScreen
+        }
+    }
+}
+
+/// A per-block sidebar action (P4b-3), routed to the owning pane via the coordinator.
+enum SidebarBlockAction {
+    case select        // focus the pane + scroll to the block
+    case copyOutput
+    case copyCommand
+    case reveal
 }
 
 struct SidebarTabItem: Identifiable {
@@ -38,6 +80,12 @@ struct SessionSidebarView: View {
     let registry: SessionRegistry
     let tabsProvider: () -> [SidebarTabItem]
     let onActivate: (PaneID) -> Void
+    /// Per-block action (P4b-3): select / copy-output / copy-command / reveal.
+    let onBlockAction: (PaneID, BlockTarget, SidebarBlockAction) -> Void
+
+    /// Panes whose block list is expanded. Empty = all collapsed (default);
+    /// persists across snapshot refreshes via the stable `PaneID`s.
+    @State private var expandedPanes: Set<PaneID> = []
 
     var body: some View {
         // Reading the observed revision registers this view for updates and forces
@@ -48,11 +96,12 @@ struct SessionSidebarView: View {
             ForEach(tabs) { tab in
                 Section {
                     ForEach(tab.panes) { pane in
-                        Button { onActivate(pane.id) } label: {
-                            SidebarPaneRow(pane: pane)
+                        paneRow(pane)
+                        if expandedPanes.contains(pane.id) {
+                            ForEach(pane.blocks) { block in
+                                blockRow(paneID: pane.id, block: block)
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .listRowBackground(pane.isActive ? Color.accentColor.opacity(0.18) : Color.clear)
                     }
                 } header: {
                     Text(tab.title)
@@ -63,6 +112,84 @@ struct SessionSidebarView: View {
         }
         .listStyle(.sidebar)
         .frame(minWidth: 180)
+    }
+
+    /// The pane row: a disclosure chevron (only when the pane has blocks) + the
+    /// focus button. Chevron toggles expansion; the row body focuses the pane.
+    @ViewBuilder
+    private func paneRow(_ pane: SidebarPaneItem) -> some View {
+        HStack(spacing: 2) {
+            if pane.blocks.isEmpty {
+                Spacer().frame(width: 14)   // align with chevroned rows
+            } else {
+                Button { toggle(pane.id) } label: {
+                    Image(systemName: expandedPanes.contains(pane.id) ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 14)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("sidebar.paneDisclosure")
+            }
+            Button { onActivate(pane.id) } label: { SidebarPaneRow(pane: pane) }
+                .buttonStyle(.plain)
+        }
+        .listRowBackground(pane.isActive ? Color.accentColor.opacity(0.18) : Color.clear)
+    }
+
+    private func blockRow(paneID: PaneID, block: SidebarBlockItem) -> some View {
+        Button { onBlockAction(paneID, block.target, .select) } label: {
+            SidebarBlockRow(block: block)
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button("Copy Output") { onBlockAction(paneID, block.target, .copyOutput) }
+                .disabled(!block.isActionable)
+            Button("Copy Command") { onBlockAction(paneID, block.target, .copyCommand) }
+            Button("Reveal Working Directory") { onBlockAction(paneID, block.target, .reveal) }
+                .disabled(!block.hasWorkingDirectory)
+        }
+    }
+
+    private func toggle(_ id: PaneID) {
+        if expandedPanes.contains(id) { expandedPanes.remove(id) } else { expandedPanes.insert(id) }
+    }
+}
+
+/// One command-block row under a pane (P4b-3): a status glyph, the command, and a
+/// duration (live while running). Non-actionable blocks (anchor stale/trimmed)
+/// dim — their scroll/copy-output is disabled, but they stay an informational record.
+@MainActor
+struct SidebarBlockRow: View {
+    let block: SidebarBlockItem
+
+    var body: some View {
+        HStack(spacing: 8) {
+            SidebarStatusIndicator(activity: block.activity).frame(width: 12)
+            Text(block.command.isEmpty ? "—" : block.command)
+                .font(.caption)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 4)
+            durationLabel
+        }
+        .padding(.vertical, 1)
+        .padding(.leading, 18)   // indent under the pane row
+        .contentShape(Rectangle())
+        .opacity(block.isActionable ? 1.0 : 0.55)   // dim non-actionable (D3)
+    }
+
+    @ViewBuilder
+    private var durationLabel: some View {
+        if block.isRunning {
+            TimelineView(.periodic(from: block.startedAt, by: 1)) { context in
+                Text(SidebarPaneRow.durationString(max(0, context.date.timeIntervalSince(block.startedAt))))
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+        } else if let ended = block.endedAt {
+            Text(SidebarPaneRow.durationString(max(0, ended.timeIntervalSince(block.startedAt))))
+                .font(.caption2).foregroundStyle(.secondary)
+        }
     }
 }
 
