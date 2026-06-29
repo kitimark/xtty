@@ -79,15 +79,17 @@ Requirement tags reference [xtty-requirements](../03-analysis/xtty-requirements.
 **Done when (P6a):** you can glance at what changed in the focused pane's repo and read each file's diff without leaving xtty — and ⌘-click a changed file to open it at the line.
 **Refs:** [p6 file/diff decisions](../03-analysis/p6-file-diff-decisions.md); reuses P4a cwd + P4b-1 click-to-open.
 
-## Phase 7 — Polish + MEASURE (decision gate)  ·  M1, M4 *(old P10)*
+## Phase 7 — Polish + MEASURE (decision gate)  ·  M1, M4 *(old P10)*  *(📐 methodology + scope explored 2026-06-29; no change proposed yet)*
 **Goal:** verify the lean + fast requirements with data — this gates Phase 8.
 - **Measure** key-to-photon latency and memory (scrollback + atlas + panes) against M1/M4.
 - If short: first flip `useMetalRenderer` + tune frame pacing (cheap); re-measure.
 - Memory pass: scrollback cap, retain-cycle/leak audit (Instruments). Crash hardening.
 - **Hardened Runtime + Developer ID + notarization** for distribution.
 
+**Explore-phase decisions (2026-06-29 — [`p7-measurement-methodology`](../03-analysis/p7-measurement-methodology.md)):** the bar is undefined (M1/M4 qualitative) → set it **relative** to installed comparators (Warp/iTerm2/Terminal.app; no Ghostty). Latency via a **fork-free in-process screen-capture probe** (inject `CGEvent` → poll window pixels until the glyph changes; renderer-agnostic, the CoreGraphics-vs-Metal **delta is exact** despite excluding the ~20 ms hardware tail) rather than a per-renderer SwiftTerm patch. Memory via `task_info` under fixed scenarios; the 0.15 s state-dump timer **reports** aggregates but latency **capture** needs its own high-res path. A base-only `renderer = coregraphics|metal` config key (+ `-UITestRenderer` arg) gives rebuild-free A/B. **Distribution is deferred** — 0 codesigning identities on the dev machine, and it's orthogonal to the gate. **Recommended split:** **P7a `add-latency-memory-harness`** (gate-critical, fork-free, a reusable regression guard) → **P7b** renderer decision (A/B + comparators → decision doc) → **P7c** memory/leak pass; distribution as a separate later change. Scope the first proposal to **P7a** and let its numbers drive P7b.
+
 **Done when:** footprint is lean and typing feels instant — OR you've decided Phase 8 is needed.
-**Refs:** [06-performance](../02-internals/06-performance-latency.md), [xtty-requirements](../03-analysis/xtty-requirements.md)
+**Refs:** [p7 measurement methodology](../03-analysis/p7-measurement-methodology.md), [06-performance](../02-internals/06-performance-latency.md), [Metal spike](../03-analysis/swiftterm-metal-renderer-spike.md), [xtty-requirements](../03-analysis/xtty-requirements.md)
 
 ## Phase 8 — *(conditional)* Drop to Level 1: own Metal renderer  ·  M4
 **Goal:** only if Phase 7 measurement misses the bar after cheap fixes.
