@@ -97,6 +97,8 @@ Fork-free is a dead end: it **cannot jump at all** (the dominant idiom is a view
 Not on fragility grounds (refuted) — on the **architecture seam + sequencing**: accessor #3 forks the *view*, not the engine (P7 Metal-gate exposure). Copy's full value is engine-only; Tier-2's verification benefit is covered fork-free by the flash/toast. Revisit Tier 2 only if user feedback shows demand, evaluated as a deliberate fork-the-view bundle (accessor #3 + guarded `feedPrepare` opt-out + trim-invariant selection anchoring + Metal re-verify).
 
 ### D3 — Keyboard-native; sidebar = P4b-3 ✅ high
+> ⚠️ **Superseded in part — see the [2026-06-29 P4b-3 addendum](#addendum-2026-06-29--p4b-3-reframe-the-clickable-block-sidebar-the-d3-no-one-does-this-premise-is-overturned) below.** The keyboard-native *primary* surface decision stands, but the carried-in premise that **no keyboard-first terminal ships a clickable command list is FALSE** (iTerm2's Toolbelt does exactly that). P4b-3 is reframed there from "deferred, maybe never" to a cheap, prior-art-validated, templated *secondary* convenience.
+
 Strong cross-terminal convergence: jump-to-prompt is universally a **keyboard-native viewport scroll**, and **Cmd+Shift+↑/↓ is the exact iTerm2 *and* Ghostty macOS default** (kitty `ctrl+shift+z/x`, WezTerm `Shift+↑/↓` — same arrow/scroll idiom, different modifier). **No keyboard-first terminal uses a clickable block-list as the primary surface** — only Warp, whose whole window *is* blocks. Copy-output is predominantly a keyboard one-shot for the last command (iTerm2 `Cmd+Shift+A`; kitty `ctrl+shift+g`). Cost agrees: the keybind pipeline is **S–M** (xtty's action→chord→menu→selector→command→controller path is already repeated ~13×, and new actions inherit `keybind-<action>` overrides for free — `KeyChord.swift:5-19`, `Keybindings.swift:84-93`, `KeybindAdapter.swift:36-41`, `MainMenu.swift:68-93`, `XttyTerminalView.swift:70-78`); the sidebar block-list is **M** net-new SwiftUI (`SessionSidebar.swift` is flat Tab▸Pane; `focusPane` is focus-only, `TerminalWindowController.swift:225-229`) and a grid right-click "copy output" would be **L** (no context-menu surface exists today). Both surfaces consume the *same* fork+anchor plumbing, so cost decides → keyboard wins; the sidebar (which is what designates an *arbitrary* old block for copy/jump) is the natural **P4b-3** follow-up on P5's sidebar.
 
 ---
@@ -144,3 +146,59 @@ The `add-spatial-blocks` change was implemented; the spikes below were all resol
 - **xtty** — `XttyCore/Sources/XttyCore/{Block,BlockTracker→Block.swift,KeyChord,Keybindings,KeybindParser,SessionRegistry,TerminalSession}.swift`, `App/{PaneController,TerminalWindowController,SessionSidebar,KeybindAdapter,MainMenu,XttyTerminalView}.swift`, `XttyCore/Package.swift`.
 - **Comparable terminals** (UX conventions, web-verified) — iTerm2 (marks, Cmd+Shift+↑/↓, "Select Output of Last Command" Cmd+Shift+A), Ghostty (`jump_to_prompt`, super+shift+arrow), kitty (`scroll_to_prompt`, `show_last_command_output`), WezTerm (`ScrollToPrompt`, semantic zones), Warp (block list).
 - **Prior decisions** — [P4 semantic-capture decisions](p4-semantic-capture-decisions.md), [P5 sidebar + P4b sequencing](p5-sidebar-and-p4b-sequencing.md), [milestones P4](../04-design/02-milestones.md).
+
+---
+
+## Addendum (2026-06-29) — P4b-3 reframe: the clickable block sidebar; the D3 "no-one-does-this" premise is overturned
+
+> **Provenance:** Drafted 2026-06-29 during an `/opsx:explore p4b-3` session (after the P7c leak/retain pass shipped). Grounded in the live code (`SessionSidebar.swift`, `Block.swift`, `BlockNavigation.swift`, `PaneController.swift`) plus **two external-source research agents** per the [research-from-external-sources](../README.md) preference: (1) a WebSearch sweep of how keyboard-first terminals present command navigation (iTerm2 / WezTerm / kitty / Ghostty / Warp / Wave), and (2) a **shallow clone of iTerm2 (`gnachman/iTerm2`, `main`) into `/tmp`** read for the exact `VT100ScreenMark` storage + invalidation mechanics. No code written (explore mode). This **partially supersedes D3** above (the keyboard-*primary* call stands; the "no clickable list exists" premise does not).
+
+**Scope:** P4b-3 = the deferred *clickable per-command-block surface* on P5's `Tab ▸ Pane` sidebar (click a block → focus pane + scroll to it; the random-access complement to P4b-2's relative keyboard jump). This addendum records the finding that reframes it; it is **not** a decision to build it (still un-proposed — the decisions-to-lock are listed at the end).
+
+### Finding 1 — D3's load-bearing premise is FALSE ❌
+
+D3 deferred P4b-3 partly on *"no keyboard-first terminal uses a clickable block-list as the primary surface — only Warp."* The first half doesn't survive contact with **iTerm2**:
+
+- ✅ **iTerm2's Toolbelt ships a clickable command list** — both **Command History** and **Captured Output** tools. **Single-click a row → scrolls the terminal viewport to that command's mark** (`ToolCommandHistoryView.m:284-292` → `toolbeltDidSelectMark:` → `PTYSession.m:9950 scrollToMark:`); **double-click → types/re-enters the command** (`:331-349`); it is **shell-integration-gated** (no OSC-133 mark ⇒ selecting a row no-ops, `:287`). It's a **secondary, opt-in drawer**, not the primary surface, and a flat history/grep list — *not* an at-a-glance progress sidebar.
+- ✅ **Cohort confirms the rest:** WezTerm (`ScrollToPrompt`), kitty (`Ctrl+Shift+Z/X`), Ghostty (`jump_to_prompt`) navigate commands **keyboard-only — no GUI list**. Warp & Wave make **blocks the *whole* window**, not a side panel.
+
+**Defensible reframing** (replaces the bald D3 claim): *iTerm2's optional toolbelt offers a clickable command-history/captured-output list (click → scroll-to-mark, shell-integration-gated), but it's a secondary grep-style drawer; no keyboard-first terminal elevates a clickable **session-progress** sidebar to a first-class surface.* So P4b-3 has **direct prior art + an interaction template** (single-click scrolls, double-click types, gate on a live mark) and a clear differentiation lane (progress/status, not grep).
+
+### Finding 2 — iTerm2's mark invalidation vs. xtty's: we're the leaner equivalent, same UX ✅
+
+Read from iTerm2 source (`/tmp` clone). A mark stores **no row of its own** — it's an `Interval` in an `IntervalTree` with `location = absRow*(width+1)+col`, made scroll-invariant by subtracting `cumulativeScrollbackOverflow` at read (`VT100ScreenState.m:526`).
+
+| Dimension | iTerm2 | xtty (P4b-2, shipped) |
+|---|---|---|
+| Position store | `absRow*(width+1)+col` interval in an IntervalTree (+ `MarkCache`) | trim-invariant absolute row (`BlockAnchor`) |
+| Scroll-invariant | ✅ subtract `cumulativeScrollbackOverflow` | ✅ `− scrollbackBase` |
+| **Resize/reflow** | **width baked in → eager per-mark recompute**, reflowed through the line buffer (`VT100ScreenMutableState+Resizing.m:638-695`) | **epoch bump → invalidate-all**, validate-at-use |
+| Trim | overflow counter + **eager GC sweep** every state sync (`removeInaccessibleIntervalTreeObjects`, `:3187`, called from `didSynchronize:`) | `liveTop` high-water-drop detector |
+| Stale click | `containsMark:` membership check → no-op (`PTYSession.m:9951`) | `anchorIsValid` → no-op |
+
+- ✅ Both converge on the **identical UX**: a stale click is a guarded no-op *checked at click time*. iTerm2 uses **eager exact recomputation**; xtty uses **lazy bump-and-validate** — opposite mechanisms, same result.
+- ✅ The structural difference is the **win for our design**: iTerm2 bakes `width` into the coordinate, so it **must rewrite every mark on every resize** (and reflow it through the line buffer). Our pure absolute row sidesteps that → an **epoch bump suffices** where iTerm2 needs a full recompute. `PaneController.validPromptRows` already *is* iTerm2's `containsMark:` gate by another name.
+- ❌ **No terminal documents stale-mark behavior on reflow/trim** (agent 1; agent 2 confirms it's source-only, undocumented). We're free to set the convention; "stale entry → guarded no-op" is prior-art-consistent.
+
+### Finding 3 — the one genuinely new tension P4b-3 surfaces ⚠️
+
+The asymmetry the source read exposed: **our `bumpEpoch`-on-resize invalidates *all* anchors at once**, whereas iTerm2 *recomputes* them so its list keeps working post-resize.
+
+- For **keyboard** jump this is invisible (no target → silent no-op). For a **persistent clickable list** it's visible: after any resize, *every* block row's jump/copy affordance goes dead until new commands run.
+- **Mitigation (accepted, not "match iTerm2"):** a block row needs the anchor only for the *actions* (jump, copy). Its **informational content — command text, exit code/status glyph, duration, cwd — is durable P4a data with no anchor** (`Block` fields, `SidebarStatusIndicator`). So even with all anchors dead post-resize the sidebar stays a useful **command-history record**; only jump/copy *dim*, and they re-arm as new commands run. Chasing iTerm2's eager reflow would grow the fork surface for a *secondary* feature — **not worth it**.
+- ⚠️ **Unbounded `blocks`:** `BlockTracker.blocks.append(...)` never trims (`Block.swift:157`). Rendering history makes this latent lean-memory smell load-bearing → P4b-3 likely needs a **cap/filter** (last-N, or failed+running), which arguably `BlockTracker` should carry regardless.
+
+### Net + decisions to lock (if/when proposed)
+
+P4b-3 moves from *"deferred, maybe never"* to a **cheap, prior-art-validated, well-templated *secondary* convenience** — most of the machinery already shipped (anchors, jump, copy, the `validPromptRows` validity filter, the sidebar, `SidebarStatusIndicator`); iTerm2 validates both the feature and our (leaner) invalidation model. Keyboard stays the **primary** surface (that part of D3 holds). Decisions to lock in a proposal:
+
+1. **Tree shape** — a 3rd disclosure level `Tab ▸ Pane ▸ Block` (reuse `GitReviewView`'s `DisclosureGroup` idiom), or blocks only under the *active* pane?
+2. **Blocks cap/filter** — last-N? failed+running only? (and should `BlockTracker` cap regardless, for lean-memory?)
+3. **Stale-row affordance** — dim jump/copy, keep the (durable) row — per Finding 3.
+4. **Double-click** — adopt iTerm2's "type the command" (re-run affordance), or single-action only?
+5. **Per-block context menu** — Copy output / Copy command / reveal cwd (the random-access complement to the keyboard one-shot).
+
+### Addendum sources
+- **WebSearch sweep (2026-06-29)** — iTerm2 [Captured Output](https://iterm2.com/documentation-captured-output.html) · [one-page docs](https://iterm2.com/3.0/documentation-one-page.html) · [Shell Integration](https://iterm2.com/shell_integration.html); [WezTerm `ScrollToPrompt`](https://wezterm.org/config/lua/keyassignment/ScrollToPrompt.html); [kitty shell integration](https://sw.kovidgoyal.net/kitty/shell-integration/); [Ghostty shell integration](https://ghostty.org/docs/features/shell-integration); [Warp Blocks](https://docs.warp.dev/terminal/blocks/); [Wave block system](https://deepwiki.com/wavetermdev/waveterm/3.2-block-system).
+- **iTerm2 source** (`gnachman/iTerm2` `main`, shallow clone to `/tmp`, 2026-06-29) — `sources/Toolbelt/ToolCommandHistoryView.m`, `sources/Toolbelt/CapturedOutput/ToolCapturedOutputView.m`, `sources/PTYSession.m` (`scrollToMark:` `:9950`), `sources/VT100Screen/VT100ScreenState.m` (`coordRangeForInterval:` `:526`), `sources/VT100Screen/VT100ScreenMutableState.m` (`removeInaccessibleIntervalTreeObjects` `:3187`; overflow `:689-700`), `sources/VT100Screen/VT100ScreenMutableState+Resizing.m` (`updateIntervalTreeWithWidth:` `:638-695`), `sources/DataStructuresAlgorithms/Interval+Additions.m` (`:63-68`), `sources/DataStructuresAlgorithms/MarkCache.swift` (line cites inline).
+- **xtty** (live code, 2026-06-29) — `App/SessionSidebar.swift`, `App/PaneController.swift` (`validPromptRows` `:298`, `jumpToPrompt` `:309`, `copyCommandOutput` `:329`), `XttyCore/Sources/XttyCore/{Block,BlockNavigation}.swift`.
