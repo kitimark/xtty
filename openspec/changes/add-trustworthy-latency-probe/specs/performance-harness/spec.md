@@ -71,14 +71,14 @@ The benchmark **result model** and the **scenario-set definitions** SHALL live i
 
 ### Requirement: Latency measurement trustworthiness safeguards
 
-So the renderer comparison is trustworthy rather than plausible-but-wrong, the latency probe SHALL apply measurement-validity safeguards beyond producing a distribution. (1) It SHALL perform a startup **timebase calibration** that confirms the keystroke-injection clock and the frame-presentation-timestamp clock reconcile into one domain; if they do not, it SHALL mark the latency results **untrustworthy** (and emit no absolute key-to-photon numbers) rather than report fabricated values. (2) For the renderer A/B it SHALL also measure a per-renderer **no-op / identical-content baseline** the same way, so that a constant offset arising from the capture or scheduling path — not the renderer — can be identified and subtracted rather than mistaken for a renderer difference. These safeguards exist because the expected CoreGraphics↔Metal delta is small (sub-frame to about one frame) and the measurement is frame-quantized, so an uncalibrated or un-baselined number could misrank the backends.
+So the renderer comparison is trustworthy rather than plausible-but-wrong, the latency probe SHALL apply measurement-validity safeguards beyond producing a distribution. (1) It SHALL perform a startup **timebase calibration** that confirms the keystroke-injection clock and the frame-presentation-timestamp clock reconcile into one domain; if they do not, it SHALL mark the latency results **untrustworthy** (and emit no absolute key-to-photon numbers) rather than report fabricated values. (2) For the renderer A/B it SHALL also measure a **renderer-independent reference-stimulus baseline** the same way — a known on-screen change produced outside the terminal renderer — so that the capture/compositor/scheduling floor common to both renderers can be identified and the renderer's own contribution distinguished, rather than the floor being mistaken for a renderer difference. These safeguards exist because the expected CoreGraphics↔Metal delta is small (sub-frame to about one frame) and the measurement is frame-quantized, so an uncalibrated or un-baselined number could misrank the backends.
 
 #### Scenario: Timebase calibration gates absolute results
 
 - **WHEN** the probe starts and the injection clock and the frame-presentation-timestamp clock cannot be reconciled into one domain
 - **THEN** the run marks the latency results untrustworthy and emits no absolute key-to-photon numbers, rather than reporting plausible-but-wrong values
 
-#### Scenario: A no-op baseline accompanies the renderer comparison
+#### Scenario: A reference-stimulus baseline accompanies the renderer comparison
 
 - **WHEN** the latency A/B is run for the two renderers
-- **THEN** each renderer also has a no-op / identical-content baseline measured identically, so a constant capture/scheduling offset can be distinguished from a genuine renderer difference
+- **THEN** each renderer also has a renderer-independent reference-stimulus baseline measured identically, so the common capture/compositor floor can be distinguished from a genuine renderer difference
