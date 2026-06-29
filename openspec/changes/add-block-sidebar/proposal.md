@@ -1,0 +1,31 @@
+## Why
+
+The P5 session sidebar shows each pane's *current* activity (running / failed / succeeded) and last command — but to act on an earlier command you must focus the pane and step there with the keyboard (`Cmd+Shift+↑/↓`, viewport-relative). For the agent-CLI use case xtty targets — long sessions with many commands — "which command failed eight prompts ago, and jump to it" is O(n) keyboard stepping. P4b-3 adds the **random-access** complement: a clickable per-command-block list under each pane. External research (explore `p4b-3`, captured in the [P4b-3 addendum](../../../research/03-analysis/p4b-2-spatial-blocks-decisions.md#addendum-2026-06-29--p4b-3-reframe-the-clickable-block-sidebar-the-d3-no-one-does-this-premise-is-overturned)) overturned the earlier premise that no keyboard-first terminal does this — iTerm2's Toolbelt does exactly it (click → scroll-to-mark) — and validated xtty's existing anchor/invalidation model as the leaner equivalent. The machinery (block model, anchors, jump, copy, validity filter, the sidebar) already shipped; this change is a new invocation surface, not new plumbing.
+
+## What Changes
+
+- **Per-pane block disclosure in the session sidebar.** Each pane row that has at least one block becomes an expandable `DisclosureGroup` (collapsed by default) — `Tab ▸ Pane ▸ Block`. Each block row shows a status glyph (reusing `SidebarStatusIndicator`), the command text, and a duration / live timer, newest-first. A pane with no captured blocks stays a plain, non-expandable row (no chevron).
+- **Click a block → focus its pane and scroll to it.** Single-click reuses `setActivePane` (focus, never steal keyboard focus from the terminal) and scrolls the focused pane's viewport to the block via the existing `BlockAnchor` → `scrollTo(row:)` path (absolute scroll-to-block, the random-access sibling of P4b-2's relative jump).
+- **Per-block context menu** — Copy output / Copy command / Reveal working dir. Copy reuses the engine-only `getText` → clipboard path generalized to a designated block. **No command re-run** (deliberately omitted — re-executing a captured command risks a destructive action).
+- **Graceful stale handling.** A block whose anchor is missing / epoch-stale (post-resize/reflow) / trimmed out of scrollback keeps its informational row (command, status, duration, cwd — all durable, anchor-free) but **dims** its jump/copy actions; they re-arm as new commands run. Matches the prior-art-consistent "stale entry → no-op" convention.
+- **Bounded block history.** `BlockTracker` now caps its retained `blocks` (drops oldest beyond a generous limit) so rendering history doesn't depend on an unbounded array — the lean-memory fix the addendum flagged. The sidebar shows the most recent N per pane.
+- **Harness observability.** The DEBUG state dump adds a per-block *usable jump/copy anchor* flag to the (already-exposed) focused-pane command-block list, plus a `lastBlockMenuAction` field for copy-command/reveal; sidebar-triggered selection/scroll and copy-output reuse the existing spatial `lastJumpTargetRow` (now also covering a designated-block scroll) / `lastCopiedOutput` fields — so an e2e can assert click→focus+scroll, copy, and stale-dimming.
+
+## Capabilities
+
+### New Capabilities
+<!-- none — this extends existing capabilities -->
+
+### Modified Capabilities
+- `session-sidebar`: the sidebar SHALL list each pane's recent command blocks (status + command + duration, newest-first, bounded); selecting a block SHALL focus its pane and scroll the viewport to it; a per-block menu SHALL copy the block's output/command and reveal its cwd; blocks with no usable anchor SHALL remain as records with their jump/copy actions disabled.
+- `terminal-spatial-blocks`: the spatial scroll + copy operations SHALL generalize to act on a **designated** (arbitrary) block — absolute scroll-to-block and copy-of-a-specified-block — not only the viewport-relative previous/next prompt or the last/current command.
+- `terminal-semantics`: a session's captured block history SHALL be bounded (oldest blocks dropped beyond a cap) for lean memory, while preserving the most-recent ordering and the running block.
+- `verification-harness`: the DEBUG state dump SHALL report, per focused-pane command block, whether it has a usable jump/copy anchor (for stale-dimming) and the last block menu action (copy-command/reveal); sidebar selection→focus+scroll and copy-output SHALL be observed via the existing spatial last-jump-target-row / last-copied-output fields — enabling end-to-end assertions of selection→focus+scroll, copy, and stale-row degradation.
+
+## Impact
+
+- **`XttyCore`** (view-free): `BlockTracker` gains a bounded-history cap; a small pure helper to resolve a *designated* block's display row + copy range (generalizing `BlockNavigation` usage). No new dependency; coordinate-free invariants and the existing block/anchor tests stay green.
+- **App layer**: `SessionSidebar.swift` gains the per-pane `DisclosureGroup` + block rows + context menu; `TerminalWindowController` extends the sidebar snapshot provider with per-pane blocks (each block's `isActionable` computed via a **live** engine check, not `anchorIsValid` alone) and wires a `selectBlock(paneID, target)` callback at the **coordinator** level (routing focus through the existing `focusPane(id)` bring-forward, then scrolling the resolved pane), with the running block addressed by a `running | index(Int)` descriptor. The snapshot refresh is wired to fire on anchor-epoch invalidation (a `noteActivityChange()` after `bumpEpoch()` on resize, and on a real `noteLiveTop` reset) so dimming updates after a resize. Reveal-cwd's `NSWorkspace.open` is skipped on the DEBUG/test path. New closures are `[weak]`. `UITestDump` gains the per-block usable-anchor flag and `lastBlockMenuAction`.
+- **No fork surface** — reuses the P4b-2 accessors already vendored via the pinned SwiftTerm checkout; no `patches/swiftterm` change, no new SwiftTerm API.
+- **No config key** in the first cut: the history cap and the per-pane display count are fixed, sensible constants (configurability is a trivial later add if wanted).
+- **Keyboard stays primary**; this is a secondary, opt-in surface inside the already-collapsible sidebar — no change to existing keybindings or default layout beyond the disclosure rows.
