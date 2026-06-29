@@ -110,6 +110,58 @@ final class XttyGitReviewUITests: XCTestCase {
         attachScreenshot("git-review")
     }
 
+    /// P6a+ intra-line emphasis: a partial single-line change must yield >=1
+    /// emphasis span in the selected diff (asserted via the gitReview dump, which
+    /// reports span counts only — never text).
+    func testIntraLineEmphasisSpansReported() {
+        let tmp = NSTemporaryDirectory()
+        let selectPath = (tmp as NSString).appendingPathComponent("xtty-git-emph-\(UUID().uuidString)")
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: selectPath) }
+
+        let app = launchConfigured(
+            config: "",
+            extraEnv: ["XTTY_TEST_GIT_SELECT": selectPath],
+            extraArgs: ["-UITestGitReview"]
+        )
+        guard StateDumpReader.waitForState(timeout: 10) != nil else {
+            attachScreenshot("no-state-dump (Release?)"); return
+        }
+        _ = GridDumpReader.waitForNonEmpty(timeout: 5)
+        type("true", into: app)
+        guard waitForCaptureActive(timeout: 8) else {
+            attachScreenshot("emphasis: capture inactive (host zsh config?)"); return
+        }
+
+        // Commit a line, then change *part* of it (a single-line substring edit).
+        let dir = "xtty-emphtest-\(UUID().uuidString.prefix(8))"
+        type("cd ~ && rm -rf \(dir) && mkdir \(dir) && cd \(dir) && git init -q && " +
+             "printf 'hello world\\n' > note.txt && git add note.txt && " +
+             "git -c user.email=t@e -c user.name=t commit -qm init && " +
+             "printf 'hello there\\n' > note.txt && true",
+             into: app)
+
+        guard StateDumpReader.waitForState(timeout: 20, where: {
+            let gr = ($0["gitReview"] as? [String: Any]) ?? [:]
+            let files = (gr["changedFiles"] as? [[String: Any]]) ?? []
+            return (gr["isRepo"] as? Bool) == true
+                && files.contains { ($0["path"] as? String) == "note.txt" }
+        }) != nil else {
+            attachScreenshot("emphasis: repo never surfaced"); return
+        }
+
+        // Select note.txt → its diff should report >=1 intra-line emphasis span
+        // (the "world" → "there" token on the single changed line).
+        try? "note.txt".write(toFile: selectPath, atomically: true, encoding: .utf8)
+        let emphasized = StateDumpReader.waitForState(timeout: 10) {
+            let gr = ($0["gitReview"] as? [String: Any]) ?? [:]
+            let sel = gr["selectedDiff"] as? [String: Any]
+            return (sel?["path"] as? String) == "note.txt"
+                && ((sel?["emphasisSpans"] as? Int) ?? 0) >= 1
+        }
+        StateDumpReader.attach(self, name: "git-review-emphasis")
+        XCTAssertNotNil(emphasized, "a single-line substring change should produce intra-line emphasis spans")
+    }
+
     func testNonRepositoryShowsEmptyState() {
         let app = launchConfigured(config: "", extraArgs: ["-UITestGitReview"])
         guard StateDumpReader.waitForState(timeout: 10) != nil else {

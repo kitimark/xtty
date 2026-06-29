@@ -10,10 +10,16 @@ struct GitReviewTarget {
     let isRemote: Bool
     /// Unified-diff context lines (from the focused pane's profile config).
     let diffContext: Int
+    /// The focused session's in-flight foreground command (OSC-133), if any —
+    /// used to pause the poll during the user's own git (design D5).
+    let runningCommand: String?
     /// Open an absolute file path in the user's editor (reuses the pane's
     /// `LinkRouter`/`FileOpener`).
     let openFile: (String) -> Void
 }
+
+/// Why a refresh fired — only `.poll` may be suppressed while the user runs git.
+enum RefreshTrigger { case poll, commandEnd, focus, manual }
 
 /// Owns one window's git-review state: the `@Observable` store the SwiftUI panel
 /// renders, plus the lean refresh policy (design D5). git work runs on a **serial**
@@ -51,13 +57,13 @@ final class GitReviewController {
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.debounceInterval) { [weak self] in
             guard let self else { return }
             self.debouncePending = false
-            self.performRefresh()
+            self.performRefresh(.commandEnd)
         }
     }
 
-    /// Immediate refresh (focus change / panel open / manual / poll). Still
-    /// serialized by the in-flight guard.
-    func refreshNow() { performRefresh() }
+    /// Immediate refresh (focus change / panel open / manual). Never suppressed;
+    /// still serialized by the in-flight guard.
+    func refreshNow() { performRefresh(.manual) }
 
     /// Start/stop the poll backstop (called when the panel shows/hides).
     func setPolling(_ on: Bool) {
@@ -65,15 +71,21 @@ final class GitReviewController {
         pollTimer = nil
         guard on else { return }
         pollTimer = Timer.scheduledTimer(withTimeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.performRefresh() }
+            MainActor.assumeIsolated { self?.performRefresh(.poll) }
         }
     }
 
     // MARK: Refresh core
 
-    private func performRefresh() {
+    private func performRefresh(_ trigger: RefreshTrigger = .manual) {
         guard isVisible() else { return }
         guard let target = targetProvider() else { store.clear(); return }
+        // D5: a poll tick does no work while the focused session's own git command
+        // runs (avoids a transient mid-operation read). Evaluated before the
+        // in-flight coalescing so a suppressed poll never sets `pending` and can't
+        // be resurrected by the pending-drain; `commandEnd`/`focus`/`manual` are
+        // never suppressed (the pending-drain re-runs with the default `.manual`).
+        if trigger == .poll, GitCommand.isGitInvocation(target.runningCommand) { return }
         if target.isRemote { store.apply(.remote); return }
         guard let dir = target.localDirectory else { store.clear(); return }
         if inFlight { pending = true; return }   // serialize: one git pass at a time

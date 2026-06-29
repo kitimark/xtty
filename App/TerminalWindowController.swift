@@ -288,6 +288,7 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             localDirectory: dir,
             isRemote: remote,
             diffContext: pane.profile.config.diffContext,
+            runningCommand: session.runningCommand,
             openFile: { [weak pane] absolutePath in pane?.openLink(absolutePath) }
         )
     }
@@ -728,6 +729,9 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
                 sel["removed"] = d.removedCount
                 sel["isBinary"] = d.isBinary
                 sel["truncated"] = d.truncated
+                // Intra-line emphasis (P6a+): total changed-span count across the
+                // diff — counts only, never text. Requires walking hunks→lines.
+                sel["emphasisSpans"] = d.hunks.reduce(0) { $0 + $1.lines.reduce(0) { $0 + $1.emphasis.count } }
             }
             dict["selectedDiff"] = sel
         }

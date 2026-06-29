@@ -16,11 +16,34 @@ public struct DiffLine: Equatable, Sendable {
     public let kind: DiffLineKind
     public let text: String
     public let truncated: Bool
+    /// Optional intra-line emphasis (P6a+): ranges of **Character (grapheme)
+    /// offsets into `content`** (the marker-stripped line) whose tokens changed vs
+    /// the paired line. Empty unless `DiffEmphasis.refine` annotated it.
+    /// Presentation only — never alters `text`/`kind`.
+    public let emphasis: [Range<Int>]
 
-    public init(kind: DiffLineKind, text: String, truncated: Bool = false) {
+    public init(kind: DiffLineKind, text: String, truncated: Bool = false, emphasis: [Range<Int>] = []) {
         self.kind = kind
         self.text = text
         self.truncated = truncated
+        self.emphasis = emphasis
+    }
+
+    /// The line content with its single leading diff marker (`+`/`-`/space)
+    /// removed — the **one source of truth** for "marker-stripped content" that
+    /// `emphasis` offsets, the renderer, and the DEBUG dump all measure against.
+    /// Header / no-newline lines (no marker) return `text` unchanged.
+    public var content: String {
+        guard !text.isEmpty else { return "" }
+        switch kind {
+        case .addition, .deletion, .context: return String(text.dropFirst())
+        default: return text
+        }
+    }
+
+    /// Copy with new emphasis ranges (used by `DiffEmphasis.refine`).
+    public func withEmphasis(_ ranges: [Range<Int>]) -> DiffLine {
+        DiffLine(kind: kind, text: text, truncated: truncated, emphasis: ranges)
     }
 }
 

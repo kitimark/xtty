@@ -232,12 +232,63 @@ struct DiffLineRow: View {
     let line: DiffLine
 
     var body: some View {
-        Text(line.text.isEmpty ? " " : line.text)
+        rowContent
             .font(.system(size: 11, design: .monospaced))
-            .foregroundStyle(foreground)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 8)
             .background(background)
+    }
+
+    /// Content/added/removed lines split the leading `+`/`-`/space marker into its
+    /// own run — so it is never tinted/emphasized, and the content's Character-offset
+    /// emphasis maps directly onto its own `Text` (no marker arithmetic). The shared
+    /// monospaced font keeps columns aligned. Header / no-newline lines render whole.
+    @ViewBuilder
+    private var rowContent: some View {
+        if isContentLine {
+            HStack(spacing: 0) {
+                Text(marker).foregroundStyle(.secondary)
+                Text(attributedContent).foregroundStyle(foreground)
+            }
+        } else {
+            Text(line.text.isEmpty ? " " : line.text).foregroundStyle(foreground)
+        }
+    }
+
+    private var isContentLine: Bool {
+        line.kind == .addition || line.kind == .deletion || line.kind == .context
+    }
+
+    private var marker: String { String(line.text.first ?? " ") }
+
+    /// `DiffLine.content` (the marker-stripped source of truth) with intra-line
+    /// emphasis applied as a darker per-run `.backgroundColor` over the whole-line
+    /// tint. Offsets are Character (grapheme) units; out-of-range ranges are clamped
+    /// and ignored (never traps — defensive against any future parser drift).
+    private var attributedContent: AttributedString {
+        let content = line.content
+        var attr = AttributedString(content.isEmpty ? " " : content)
+        guard !line.emphasis.isEmpty, !content.isEmpty else { return attr }
+        let chars = attr.characters
+        let n = chars.count
+        for r in line.emphasis {
+            let lo = max(0, min(r.lowerBound, n))
+            let hi = max(lo, min(r.upperBound, n))
+            guard lo < hi,
+                  let s = chars.index(chars.startIndex, offsetBy: lo, limitedBy: chars.endIndex),
+                  let e = chars.index(chars.startIndex, offsetBy: hi, limitedBy: chars.endIndex),
+                  s < e else { continue }
+            attr[s..<e].backgroundColor = emphasisColor
+        }
+        return attr
+    }
+
+    private var emphasisColor: Color {
+        switch line.kind {
+        case .addition: return Color.green.opacity(0.40)
+        case .deletion: return Color.red.opacity(0.40)
+        default: return Color.accentColor.opacity(0.30)
+        }
     }
 
     private var foreground: Color {

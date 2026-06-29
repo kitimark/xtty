@@ -114,17 +114,17 @@ enum GitRunner {
                          "--no-index", "--", "/dev/null", file.path])
             // --no-index: 0 = identical, 1 = differs (the normal case), >1 = error.
             guard r.launched, r.exitCode <= 1 else { return .empty }
-            return DiffParser.parse(r.stdout)
+            return DiffEmphasis.refine(DiffParser.parse(r.stdout))
         }
 
         let head = run(["-C", root, "--no-optional-locks", "diff", "HEAD", "--no-ext-diff",
                         "--no-color", unified, "--", file.path])
-        if head.launched && head.exitCode == 0 { return DiffParser.parse(head.stdout) }
+        if head.launched && head.exitCode == 0 { return DiffEmphasis.refine(DiffParser.parse(head.stdout)) }
         // No HEAD yet (fresh repo) → show what's staged.
         let staged = run(["-C", root, "--no-optional-locks", "diff", "--staged", "--no-ext-diff",
                           "--no-color", unified, "--", file.path])
         guard staged.launched, staged.exitCode == 0 else { return .empty }
-        return DiffParser.parse(staged.stdout)
+        return DiffEmphasis.refine(DiffParser.parse(staged.stdout))
     }
 
     // MARK: Login-shell PATH resolution (mirrors FileOpener's pattern)
