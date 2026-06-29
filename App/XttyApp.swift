@@ -213,6 +213,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
 
     // Terminate every child shell on quit so no orphan process is leaked.
     func applicationWillTerminate(_ notification: Notification) {
+        #if DEBUG
+        dumpTimer?.invalidate()  // stop the harness dump timer on quit (P7c hygiene)
+        dumpTimer = nil
+        #endif
         for controller in windowControllers { controller.terminate() }
         quickTerminal?.terminate()
         quickTerminalHotKey = nil  // deinit unregisters the global hotkey

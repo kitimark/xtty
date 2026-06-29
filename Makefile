@@ -33,7 +33,7 @@ ifdef XTTY_SIGN_IDENTITY
 SIGN_FLAGS := CODE_SIGN_IDENTITY="$(XTTY_SIGN_IDENTITY)" CODE_SIGN_STYLE=Manual CODE_SIGNING_ALLOWED=YES
 endif
 
-.PHONY: help doctor setup build run test test-core build-core bench bootstrap generate clean reset
+.PHONY: help doctor setup build run test test-core build-core bench audit-leaks bootstrap generate clean reset
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -92,6 +92,9 @@ bench: build ## Measure latency+memory for both renderers; writes JSON reports (
 
 build-core: $(SWIFTTERM_SENTINEL) ## Build XttyCore only
 	@swift build --package-path XttyCore
+
+audit-leaks: build ## P7c leak/allocation DIAGNOSTIC (leaks+vmmap; NOT a gate — the census churn test is)
+	@scripts/audit-leaks.sh
 
 # --- force / housekeeping -----------------------------------------------------
 

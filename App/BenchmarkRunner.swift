@@ -24,7 +24,7 @@ enum BenchmarkRunner {
             ?? NSScreen.main?.maximumFramesPerSecond ?? 60)
         let trials = trialCount()
 
-        Task { @MainActor in
+        Task { @MainActor [weak controller] in
             var latency: LatencyStats?
             var baseline: LatencyStats?
             var unavailableReason: String?
@@ -33,12 +33,12 @@ enum BenchmarkRunner {
             // Focus the pane (first-responder) and hide the caret so the probe
             // times the typed glyph, not the blinking caret (an independent
             // dirty-rect source).
-            controller.benchmarkPrepareForProbe()
-            controller.benchmarkSetCaretHidden(true)
+            controller?.benchmarkPrepareForProbe()
+            controller?.benchmarkSetCaretHidden(true)
             // A renderer-independent overlay stimulus for the common-path baseline
             // (design D5): the probe flips it and times it the same way.
             var overlay: ProbeOverlay?
-            if let contentView = controller.window.contentView {
+            if let contentView = controller?.window.contentView {
                 overlay = ProbeOverlay(in: contentView)
             }
             let baselineFlip: (@MainActor () -> Void)?
@@ -66,6 +66,9 @@ enum BenchmarkRunner {
                 NSLog("[xtty] benchmark: latency unavailable — %@", unavailableReason!)
             }
             overlay?.remove()
+            // Re-acquire after the probe's suspension point (P7c: `[weak controller]`
+            // means the controller isn't pinned alive across the long await).
+            guard let controller else { NSApp.terminate(nil); return }
             controller.benchmarkSetCaretHidden(false)
 
             // Memory scenarios mutate the window, so run them after the latency probe.

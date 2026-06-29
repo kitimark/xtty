@@ -77,6 +77,14 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
         return names
     }()
 
+    #if DEBUG
+    /// DEBUG-only live-instance count for the P7c lifecycle census (absent in
+    /// release). `nonisolated(unsafe)` so the nonisolated `deinit` can decrement
+    /// it; created/destroyed on the main thread, the same vouch `GlobalHotKey`
+    /// documents for its Carbon refs.
+    nonisolated(unsafe) static var liveCount = 0
+    #endif
+
     init(profile: XttyProfile, registry: SessionRegistry, frame: NSRect, startDirectory: String? = nil) {
         // Build everything via locals first — `self` is unavailable before super.init.
         let view = XttyTerminalView(frame: frame)
@@ -101,6 +109,13 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
         self.profile = profile
         self.registry = registry
         super.init()
+
+        #if DEBUG
+        // Lifecycle census (P7c): count this controller and its (view-free)
+        // session here, from the main actor, so XttyCore stays isolation-free (D2).
+        Self.liveCount += 1
+        TerminalSession.recordInit()
+        #endif
 
         view.processDelegate = self
         view.commands = self
@@ -169,6 +184,15 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
             execName: launch.execName,
             currentDirectory: launch.cwd
         )
+    }
+
+    deinit {
+        #if DEBUG
+        // Lifecycle census (P7c): mirror init — decrement on actual deallocation
+        // (not on `terminate()`, which is logical teardown, not dealloc).
+        Self.liveCount -= 1
+        TerminalSession.recordDeinit()
+        #endif
     }
 
     /// Terminate the child (unless already exited) and unregister from the model.

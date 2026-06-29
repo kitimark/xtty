@@ -44,6 +44,23 @@ public final class TerminalSession {
         self.launchConfig = launchConfig
     }
 
+    #if DEBUG
+    /// DEBUG-only live-instance count for the P7c lifecycle census (absent in
+    /// release). This type is view-free and non-isolated by design, so it does
+    /// **not** count itself in `init`/`deinit` (that would assume a thread). Its
+    /// owner (`PaneController`, `@MainActor`) drives the count via the two
+    /// `record…` hooks below — created and destroyed on the main thread alongside
+    /// the pane — so the `nonisolated(unsafe)` is vouched-for single-thread
+    /// access, the same contract `GlobalHotKey` documents for its Carbon refs (D2).
+    nonisolated(unsafe) public private(set) static var liveCount = 0
+
+    /// Record a session created (called by the owning main-actor controller).
+    public static func recordInit() { liveCount += 1 }
+
+    /// Record a session destroyed (called by the owning main-actor controller).
+    public static func recordDeinit() { liveCount -= 1 }
+    #endif
+
     /// Record the shell's exit code. Called by the app's process delegate when
     /// the child process terminates (drives the exit policy).
     public func recordExit(code: Int32?) {

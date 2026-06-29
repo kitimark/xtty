@@ -29,9 +29,25 @@ final class QuickTerminalController: NSObject, PaneControllerDelegate {
     /// Fraction of the target screen's visible height the panel occupies.
     private static let heightFraction: CGFloat = 0.4
 
+    #if DEBUG
+    /// DEBUG-only live-instance count for the P7c lifecycle census (absent in
+    /// release). `nonisolated(unsafe)` for the nonisolated `deinit` (the
+    /// `GlobalHotKey` main-thread vouch).
+    nonisolated(unsafe) static var liveCount = 0
+    #endif
+
     init(config: XttyConfig) {
         self.config = config
         super.init()
+        #if DEBUG
+        Self.liveCount += 1  // Lifecycle census (P7c)
+        #endif
+    }
+
+    deinit {
+        #if DEBUG
+        Self.liveCount -= 1  // Lifecycle census (P7c)
+        #endif
     }
 
     /// Whether the panel is currently the key window (used by the DEBUG harness).

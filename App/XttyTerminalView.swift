@@ -48,6 +48,26 @@ final class XttyTerminalView: LocalProcessTerminalView {
     /// Smallest/largest live font sizes, to keep the grid legible and bounded.
     private static let fontSizeRange: ClosedRange<CGFloat> = 6...72
 
+    #if DEBUG
+    /// DEBUG-only live-instance count for the P7c lifecycle census (absent in
+    /// release). Counts the view's **own** deinit (a view retained by a stale
+    /// superview is exactly the leak the census must catch), so the increment
+    /// lives in the view's initializers, not in the owning `PaneController`.
+    nonisolated(unsafe) static var liveCount = 0
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        Self.liveCount += 1
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        Self.liveCount += 1
+    }
+
+    deinit { Self.liveCount -= 1 }
+    #endif
+
     // MARK: Font size (ephemeral; responder-chain routed)
 
     @objc func increaseFontSize(_ sender: Any?) { adjustFontSize(by: +1) }

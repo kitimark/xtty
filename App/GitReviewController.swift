@@ -48,6 +48,16 @@ final class GitReviewController {
     /// Poll backstop cadence while visible.
     private static let pollInterval: TimeInterval = 5
 
+    #if DEBUG
+    /// DEBUG-only live-instance count for the P7c lifecycle census (absent in
+    /// release). `nonisolated(unsafe)` for the nonisolated `deinit` (the
+    /// `GlobalHotKey` main-thread vouch).
+    nonisolated(unsafe) static var liveCount = 0
+
+    init() { Self.liveCount += 1 }
+    deinit { Self.liveCount -= 1 }
+    #endif
+
     // MARK: Triggers
 
     /// Coalesced refresh (command-finish): collapses a burst into one git query.

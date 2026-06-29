@@ -102,6 +102,20 @@ A "does the floor rise after open/close×N?" footprint check is **too noisy to g
 
 ---
 
+## Addendum (2026-06-29) — apply result: census shipped, net proven, `leaks` clean
+
+`add-lifecycle-census` implemented (`/opsx:apply`). Outcomes:
+
+- ✅ **Live-instance census shipped** — `#if DEBUG nonisolated(unsafe) static var liveCount` (init `++` / deinit `--`) on `TerminalWindowController`, `PaneController`, `XttyTerminalView`, `GitReviewController`, `QuickTerminalController`, and (via the owning `PaneController`, main-actor) `TerminalSession`; surfaced as `liveInstanceCounts` in the state dump. **Mechanism note:** the design's D1/D2 aimed for a plain `@MainActor static Int` and *no* `nonisolated(unsafe)` in XttyCore, but Swift's `deinit` is **nonisolated** — mutating a `@MainActor` static from it doesn't compile, and a bare nonisolated static is flagged "not concurrency-safe." Resolved by using `nonisolated(unsafe)` with the documented single-owner/main-thread vouch (the same pattern `GlobalHotKey` already uses for its Carbon refs); design D1/D2 updated to match. DEBUG-only, so a worst-case miscount never touches shipping behavior.
+- ✅ **The churn net is proven, not just present.** The churn XCUITest (`XttyLifecycleCensusUITests`) drives split×4 + tab×3 create/close cycles and polls the census back to baseline. Sanity-checked by **injecting a deliberate `leakSelf = self` retain into `PaneController`** → the test failed loudly (`PaneController … baseline 1, final 8`, with `XttyTerminalView`/`TerminalSession` dragged along, while `TerminalWindowController` correctly stayed at baseline — per-type granularity works) → reverted. So the guard demonstrably catches a real cycle.
+- ✅ **In-process weak-sentinel tests green** — `LifecycleLeakTests` confirms `TerminalSession`, `SessionRegistry`, and `Pane` deallocate once released (229 XttyCore tests, +3).
+- ✅ **`leaks` is clean at idle** — `make audit-leaks` (`scripts/audit-leaks.sh`, the diagnostic-not-gate target) + a live snapshot: `Process: 0 leaks for 0 total leaked bytes` (rc 0). The `leaks --atExit` bench path writes a `.memgraph` but its summary is muffled under ad-hoc signing ("process is not in a debuggable environment" limits MallocStackLogging) — the live-`leaks <pid>` snapshot is the trustworthy read here; for full glyph-cache backtraces, a `XTTY_SIGN_IDENTITY=xtty-dev` build is the follow-up.
+- ❓ **SwiftTerm glyph/font caches remain the open watch-item** (unbounded, third-party, unnameable by the census) — not patched (fork-free); `vmmap`/`.memgraph` inspection under sustained unique-glyph load is the manual deep-dive when warranted. Bounded scrollback already caps the dominant term, and idle leaks are zero.
+
+Net: xtty's own lifecycle is leak-clean and now has a permanent, deterministic regression guard. Distribution remains the only deferred Phase-7 item.
+
+---
+
 ## Sources
 
 - Repo (read-only): `App/{GitReviewController,LinkRoutingTerminalDelegate,PaneController,TerminalWindowController,GlobalHotKey,XttyApp,BenchmarkRunner,MemorySampler,UITestDump}.swift`; `XttyCore/Sources/XttyCore/{SessionRegistry,TerminalSession,Pane}.swift`; `AppUITests/` (`StateDumpReader`); `external/SwiftTerm/Sources/SwiftTerm/{LocalProcess,Terminal,Mac/MacTerminalView,Mac/MacLocalTerminalView,Apple/Metal/MetalTerminalRenderer,Apple/Metal/GlyphAtlas}.swift`.

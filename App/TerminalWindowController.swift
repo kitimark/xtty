@@ -57,6 +57,13 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
     private var clickMonitor: Any?
     private var isTerminated = false
 
+    #if DEBUG
+    /// DEBUG-only live-instance count for the P7c lifecycle census (absent in
+    /// release). `nonisolated(unsafe)` so the nonisolated `deinit` can decrement
+    /// it (created/destroyed on the main thread — the `GlobalHotKey` vouch).
+    nonisolated(unsafe) static var liveCount = 0
+    #endif
+
     // MARK: Sidebar layout
     /// The default sidebar width when shown.
     private static let sidebarWidth: CGFloat = 220
@@ -100,6 +107,10 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         self.tree = .leaf(root.pane)
         self.activePaneID = root.pane.id
         super.init()
+
+        #if DEBUG
+        Self.liveCount += 1  // Lifecycle census (P7c)
+        #endif
 
         root.delegate = self
         panes[root.pane.id] = root
@@ -352,6 +363,12 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         }
         for pane in panes.values { pane.terminate() }
         panes.removeAll()
+    }
+
+    deinit {
+        #if DEBUG
+        Self.liveCount -= 1  // Lifecycle census (P7c): decrement on dealloc
+        #endif
     }
 
     /// Sync `activePaneID` to the pane the user clicked (the click itself makes
@@ -739,10 +756,28 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             // so the renderer toggle + memory sampler are e2e-assertable.
             "renderer": activeRenderer.rawValue,
             "memoryFootprintBytes": MemorySampler.currentFootprintBytes().map { NSNumber(value: $0) } ?? NSNull(),
+            // Lifecycle census (P7c): per-type live-instance counts (process-wide
+            // statics). The only channel an out-of-process XCUITest can read
+            // App-layer object lifetimes through, so the churn e2e can assert
+            // they return to baseline (a stuck count = a leaked instance).
+            "liveInstanceCounts": Self.liveInstanceCensus(),
         ]
         if let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]) {
             try? data.write(to: URL(fileURLWithPath: UITestDump.stateDumpPath))
         }
+    }
+
+    /// Per-type live-instance census for the DEBUG state dump (P7c). Reads the
+    /// process-wide `liveCount` statics on the lifecycle-bearing types.
+    private static func liveInstanceCensus() -> [String: Int] {
+        [
+            "TerminalWindowController": TerminalWindowController.liveCount,
+            "PaneController": PaneController.liveCount,
+            "XttyTerminalView": XttyTerminalView.liveCount,
+            "GitReviewController": GitReviewController.liveCount,
+            "QuickTerminalController": QuickTerminalController.liveCount,
+            "TerminalSession": TerminalSession.liveCount,
+        ]
     }
 
     /// Short name for a semantic action (for the DEBUG dump).
