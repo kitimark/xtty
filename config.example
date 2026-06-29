@@ -55,6 +55,11 @@
 # diff (it shells out to `git`; no extra setup). `diff-context` sets how many
 # unified-diff context lines are shown. Non-negative integer; default 3.
 # diff-context = 3
+#
+# `git-review-layout` sets the default changed-files list layout: `flat` (grouped
+# by status category) or `tree` (a collapsible directory tree of the same files).
+# The panel's header toggle switches it live. Default: flat.
+# git-review-layout = flat
 
 # --- Keybindings ---
 #

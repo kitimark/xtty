@@ -369,7 +369,7 @@ So: **P6b ≔ Scope A** (correct the milestone's "browse all files" wording, whi
 - **`git-review`** (MODIFIED) — the changed-files list MAY be presented either flat-by-category or as a collapsible directory tree of the same changed files; the tree is presentation only (no new files surfaced, no write op, read-only unchanged).
 - **`terminal-configuration`** (MODIFIED) — *only if* the layout is config-exposed (`git-review-layout`).
 - **`verification-harness`** (MODIFIED) — *only if* the dump needs the active layout mode.
-- ❓ **Open (user's call):** build P6b (Scope A) now as `add-git-review-tree`, or hold until after P7-measure. Not yet a change.
+- ✅ **Resolved:** built as `add-git-review-tree` (implemented; pending archive) — a view-free `GitFileTree` builder + a `GitReviewLayout` on `GitReviewStore`, a `git-review-layout = flat|tree` global config key (default `flat`), a SwiftUI `DisclosureGroup` tree branch + header toggle in `GitReviewView`, and a `layout` field on the `gitReview` dump. No new git/FS call, no new dep.
 
 ---
 

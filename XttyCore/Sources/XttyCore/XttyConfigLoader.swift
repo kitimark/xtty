@@ -195,6 +195,9 @@ public enum XttyConfigLoader {
             if pairs["confirm-close"] != nil {
                 warn("confirm-close is ignored inside profile '\(name)' (it is base-only)")
             }
+            if pairs["git-review-layout"] != nil {
+                warn("git-review-layout is ignored inside profile '\(name)' (it is base-only)")
+            }
             let config = resolve(from: pairs, base: baseConfig, warn: warn)
             profiles[name] = XttyProfile(name: name, config: config, launch: launchOverride(from: pairs, warn: warn))
         }
@@ -217,11 +220,21 @@ public enum XttyConfigLoader {
             }
         }
 
+        var gitReviewLayout: GitReviewLayout = .flat
+        if let raw = basePairs["git-review-layout"] {
+            if let value = GitReviewLayout(rawValue: raw.lowercased()) {
+                gitReviewLayout = value
+            } else {
+                warn("git-review-layout: '\(raw)' is not 'flat' or 'tree'; using \(gitReviewLayout.rawValue)")
+            }
+        }
+
         return XttyConfigSet(
             base: base,
             profiles: profiles,
             defaultProfileName: defaultProfileName,
-            confirmClose: confirmClose
+            confirmClose: confirmClose,
+            gitReviewLayout: gitReviewLayout
         )
     }
 

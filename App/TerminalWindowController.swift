@@ -77,6 +77,7 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
     let gitReview = GitReviewController()
 
     init(profile: XttyProfile, registry: SessionRegistry, confirmClose: Bool = true,
+         gitReviewLayout: GitReviewLayout = .flat,
          contentSize: NSSize = NSSize(width: 900, height: 560)) {
         self.registry = registry
         self.confirmCloseEnabled = confirmClose
@@ -110,6 +111,9 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         // Git-review panel (P6a): focused-pane-driven, only works when visible.
         gitReview.isVisible = { [weak self] in self?.gitReviewVisible ?? false }
         gitReview.targetProvider = { [weak self] in self?.currentGitReviewTarget() }
+        // Seed the configured default list layout (the header toggle overrides it
+        // per-window; not persisted back to config — like live font-size).
+        gitReview.store.setLayout(gitReviewLayout)
         #if DEBUG
         // Harness: start with the panel open so the e2e can drive it without a
         // (flaky) menu click; the file-poll trigger then drives selection.
@@ -721,6 +725,7 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             "branch": snap.branch ?? "",
             "changedFiles": files,
             "refreshCount": store.refreshCount,
+            "layout": store.layout.rawValue,
         ]
         if let path = snap.selectedPath {
             var sel: [String: Any] = ["path": path]

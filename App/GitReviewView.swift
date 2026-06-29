@@ -13,6 +13,11 @@ struct GitReviewView: View {
     let onOpen: (String) -> Void
     let onRefresh: () -> Void
 
+    /// Directories the user has collapsed in the tree layout, keyed by the node's
+    /// stable cumulative path. Empty = all expanded (default); the set only grows as
+    /// the user collapses, and persists across snapshot refreshes (stable ids).
+    @State private var collapsedDirs: Set<String> = []
+
     var body: some View {
         _ = store.revision   // observe → re-render on every published change
         let snap = store.snapshot
@@ -22,6 +27,9 @@ struct GitReviewView: View {
             content(snap)
         }
         .frame(minWidth: 240)
+        // Collapse intent is per-repository: reset when focus moves to a different
+        // repo so the tree starts all-expanded there (and stale paths don't linger).
+        .onChange(of: snap.repoRoot) { collapsedDirs.removeAll() }
     }
 
     // MARK: Header
@@ -34,6 +42,15 @@ struct GitReviewView: View {
                 .foregroundStyle(.secondary)
             Text(snap.branch ?? "Changes").font(.caption).fontWeight(.semibold).lineLimit(1)
             Spacer(minLength: 0)
+            Button {
+                store.setLayout(store.layout == .tree ? .flat : .tree)
+            } label: {
+                Image(systemName: store.layout == .tree ? "list.bullet.indent" : "list.bullet")
+                    .font(.system(size: 11))
+            }
+            .buttonStyle(.plain)
+            .help(store.layout == .tree ? "Show as a flat list" : "Show as a directory tree")
+            .accessibilityIdentifier("gitReview.layoutToggle")
             Button(action: onRefresh) {
                 Image(systemName: "arrow.clockwise").font(.system(size: 11))
             }
@@ -85,19 +102,24 @@ struct GitReviewView: View {
         let hasDiff = snap.selectedDiff != nil
         VStack(spacing: 0) {
             List {
-                ForEach(GitStatusCategory.allCases, id: \.self) { category in
-                    let files = snap.files(in: category)
-                    if !files.isEmpty {
-                        Section(sectionTitle(category)) {
-                            ForEach(files) { file in
-                                Button { onSelect(file.path) } label: {
-                                    GitFileRow(file: file)
-                                }
-                                .buttonStyle(.plain)
-                                .listRowBackground(file.path == snap.selectedPath
-                                                   ? Color.accentColor.opacity(0.18) : Color.clear)
-                                .contextMenu {
-                                    Button("Open in Editor") { onOpen(file.path) }
+                if store.layout == .tree {
+                    // Same changed files, grouped into a collapsible directory tree
+                    // (P6b). Pure transform over the cached snapshot — no git call.
+                    GitFileTreeView(
+                        nodes: GitFileTree.build(snap.files),
+                        selectedPath: snap.selectedPath,
+                        collapsedDirs: $collapsedDirs,
+                        onSelect: onSelect, onOpen: onOpen
+                    )
+                } else {
+                    ForEach(GitStatusCategory.allCases, id: \.self) { category in
+                        let files = snap.files(in: category)
+                        if !files.isEmpty {
+                            Section(sectionTitle(category)) {
+                                ForEach(files) { file in
+                                    GitFileButton(file: file,
+                                                  isSelected: file.path == snap.selectedPath,
+                                                  onSelect: onSelect, onOpen: onOpen)
                                 }
                             }
                         }
@@ -170,6 +192,70 @@ struct GitFileRow: View {
         case .untracked: return .secondary
         case .conflicted: return .red
         }
+    }
+}
+
+/// One selectable changed-file row, shared by the flat and tree layouts: the
+/// `GitFileRow` content wrapped in the selection button + open-in-editor context
+/// menu. Identical behavior in either layout (spec: select/open are layout-agnostic).
+@MainActor
+struct GitFileButton: View {
+    let file: GitChangedFile
+    let isSelected: Bool
+    let onSelect: (String) -> Void
+    let onOpen: (String) -> Void
+
+    var body: some View {
+        Button { onSelect(file.path) } label: {
+            GitFileRow(file: file)
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
+        .contextMenu {
+            Button("Open in Editor") { onOpen(file.path) }
+        }
+    }
+}
+
+/// The directory-tree layout (P6b): renders `[GitTreeNode]` as nested
+/// `DisclosureGroup`s (directories) with `GitFileButton` leaves (files). Expansion
+/// is tracked as a *collapsed* set so the default (empty) is all-expanded and new
+/// directories appear expanded; collapsed state persists across refreshes via the
+/// nodes' stable path ids.
+@MainActor
+struct GitFileTreeView: View {
+    let nodes: [GitTreeNode]
+    let selectedPath: String?
+    @Binding var collapsedDirs: Set<String>
+    let onSelect: (String) -> Void
+    let onOpen: (String) -> Void
+
+    var body: some View {
+        ForEach(nodes) { node in
+            switch node {
+            case let .file(file):
+                GitFileButton(file: file, isSelected: file.path == selectedPath,
+                              onSelect: onSelect, onOpen: onOpen)
+            case let .directory(path, name, children):
+                DisclosureGroup(isExpanded: expansion(for: path)) {
+                    GitFileTreeView(nodes: children, selectedPath: selectedPath,
+                                    collapsedDirs: $collapsedDirs,
+                                    onSelect: onSelect, onOpen: onOpen)
+                } label: {
+                    Label(name, systemImage: "folder")
+                        .lineLimit(1).truncationMode(.middle)
+                }
+            }
+        }
+    }
+
+    private func expansion(for path: String) -> Binding<Bool> {
+        Binding(
+            get: { !collapsedDirs.contains(path) },
+            set: { expanded in
+                if expanded { collapsedDirs.remove(path) } else { collapsedDirs.insert(path) }
+            }
+        )
     }
 }
 

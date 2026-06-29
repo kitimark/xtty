@@ -312,6 +312,35 @@ final class XttyConfigTests: XCTestCase {
         XCTAssertEqual(XttyConfigLoader.resolveSet(from: "confirm-close = true").confirmClose, true)
     }
 
+    func testResolveSetParsesGitReviewLayout() {
+        XCTAssertEqual(XttyConfigLoader.resolveSet(from: "git-review-layout = tree").gitReviewLayout, .tree)
+        XCTAssertEqual(XttyConfigLoader.resolveSet(from: "git-review-layout = flat").gitReviewLayout, .flat)
+        // Case-insensitive value (the key itself is already lowercased by parsing).
+        XCTAssertEqual(XttyConfigLoader.resolveSet(from: "git-review-layout = TREE").gitReviewLayout, .tree)
+    }
+
+    func testResolveSetGitReviewLayoutDefaultsToFlat() {
+        XCTAssertEqual(XttyConfigLoader.resolveSet(from: "").gitReviewLayout, .flat)
+    }
+
+    func testResolveSetInvalidGitReviewLayoutFallsBackAndWarns() {
+        var warnings: [String] = []
+        let set = XttyConfigLoader.resolveSet(from: "git-review-layout = grid") { warnings.append($0) }
+        XCTAssertEqual(set.gitReviewLayout, .flat)
+        XCTAssertTrue(warnings.contains { $0.contains("git-review-layout") })
+    }
+
+    func testResolveSetGitReviewLayoutInsideBlockIsIgnoredWithWarning() {
+        var warnings: [String] = []
+        let set = XttyConfigLoader.resolveSet(from: """
+        git-review-layout = tree
+        [profile "work"]
+        git-review-layout = flat
+        """) { warnings.append($0) }
+        XCTAssertEqual(set.gitReviewLayout, .tree, "the base value wins; the profile copy is ignored")
+        XCTAssertTrue(warnings.contains { $0.contains("git-review-layout") })
+    }
+
     func testResolveSetDefaultProfileInsideBlockIsIgnoredWithWarning() {
         var warnings: [String] = []
         let set = XttyConfigLoader.resolveSet(from: """

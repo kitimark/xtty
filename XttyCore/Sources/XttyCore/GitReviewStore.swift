@@ -1,6 +1,15 @@
 import Foundation
 import Observation
 
+/// How the git-review panel presents its changed-files list (P6b, Scope A):
+/// `flat` is the status-category grouping; `tree` is a collapsible directory tree
+/// of the **same** changed files. UI state (not git data), so it lives on
+/// `GitReviewStore`, never on the off-main `GitReviewSnapshot`.
+public enum GitReviewLayout: String, Equatable, Sendable, CaseIterable {
+    case flat
+    case tree
+}
+
 /// A cached, toolkit-independent snapshot of a session's git-review state — what
 /// the panel renders and what the DEBUG harness dumps. Computed off the main
 /// thread by the app's git runner and published into `GitReviewStore`.
@@ -70,8 +79,20 @@ public final class GitReviewStore {
     public private(set) var revision: Int = 0
     /// How many full refreshes have been applied (harness assertion hook).
     public private(set) var refreshCount: Int = 0
+    /// The active changed-files list layout (flat grouping vs directory tree). A
+    /// per-window UI preference, seeded from config and flipped by the panel's
+    /// header toggle; not persisted back to the config file.
+    public private(set) var layout: GitReviewLayout = .flat
 
     public init() {}
+
+    /// Switch the list layout (no-op when unchanged); bumps `revision` so the panel
+    /// re-renders.
+    public func setLayout(_ newLayout: GitReviewLayout) {
+        guard newLayout != layout else { return }
+        layout = newLayout
+        revision &+= 1
+    }
 
     /// Publish a freshly computed snapshot (preserving an in-range selection).
     public func apply(_ new: GitReviewSnapshot) {

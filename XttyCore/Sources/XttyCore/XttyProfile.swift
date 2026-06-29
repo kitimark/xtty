@@ -55,17 +55,22 @@ public struct XttyConfigSet: Equatable, Sendable {
     /// Whether to confirm closing a pane with a running foreground job (global,
     /// base-only). Defaults to `true`.
     public let confirmClose: Bool
+    /// The git-review panel's default changed-files list layout (global, base-only).
+    /// Defaults to `.flat` (the status-category grouping).
+    public let gitReviewLayout: GitReviewLayout
 
     public init(
         base: XttyProfile,
         profiles: [String: XttyProfile] = [:],
         defaultProfileName: String? = nil,
-        confirmClose: Bool = true
+        confirmClose: Bool = true,
+        gitReviewLayout: GitReviewLayout = .flat
     ) {
         self.base = base
         self.profiles = profiles
         self.defaultProfileName = defaultProfileName
         self.confirmClose = confirmClose
+        self.gitReviewLayout = gitReviewLayout
     }
 
     /// The profile new sessions use: the `default-profile` if it resolves, else base.

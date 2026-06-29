@@ -162,6 +162,22 @@ final class XttyGitReviewUITests: XCTestCase {
         XCTAssertNotNil(emphasized, "a single-line substring change should produce intra-line emphasis spans")
     }
 
+    /// P6b: the `git-review-layout = tree` config default is reported by the state
+    /// dump as the active list layout. Layout is config-seeded at window creation,
+    /// independent of repo state, so this needs no injected shell.
+    func testConfiguredTreeLayoutIsReported() {
+        _ = launchConfigured(config: "git-review-layout = tree", extraArgs: ["-UITestGitReview"])
+        guard StateDumpReader.waitForState(timeout: 10) != nil else {
+            attachScreenshot("no-state-dump (Release?)"); return
+        }
+        let state = StateDumpReader.waitForState(timeout: 5) {
+            let gr = ($0["gitReview"] as? [String: Any]) ?? [:]
+            return (gr["layout"] as? String) == "tree"
+        }
+        StateDumpReader.attach(self, name: "git-review-tree-layout")
+        XCTAssertNotNil(state, "git-review-layout = tree should be reported as the tree layout in the dump")
+    }
+
     func testNonRepositoryShowsEmptyState() {
         let app = launchConfigured(config: "", extraArgs: ["-UITestGitReview"])
         guard StateDumpReader.waitForState(timeout: 10) != nil else {
