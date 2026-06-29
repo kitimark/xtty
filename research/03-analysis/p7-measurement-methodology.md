@@ -173,7 +173,7 @@ CoreGraphics wins on every axis that matters: **faster median** (~31 vs ~33 ms),
 - **The throttle reframe holds — and the probe sharpened it.** The median ~31 ms ≈ overlay floor ~8.5 ms + the shared ~16.7 ms `queuePendingDisplay` coalescer + ~6 ms render/echo, which is why CG≈Metal at p50. But the trustworthy probe revealed what the "pure wash" hypothesis missed: **Metal's *tail* is materially worse.** The real future latency lever remains the **coalescing throttle** (engine/patch concern), not the renderer.
 - **Caveats (honest):** software-on-glass excludes the constant ~20 ms+ hardware tail (cancels in the renderer delta); resolution is frame-quantized (~8.3 ms); the built-in display was not force-pinned to a fixed refresh this run, yet results were stable across 3 runs (calibration passed each time), so VRR did not corrupt the comparison. A photodiode cross-check remains a nice-to-have, not decision-critical.
 
-**Next:** **P7c** (Instruments leak/retain pass) and the deferred **distribution** (Hardened Runtime + Developer ID + notarization) remain. The renderer question is **settled**.
+**Next:** **P7c** (leak/retain pass) and the deferred **distribution** (Hardened Runtime + Developer ID + notarization) remain. The renderer question is **settled**. → **P7c is now researched in its own doc — see [P7c leak / retain-cycle audit](p7c-leak-retain-audit.md)** (2026-06-29: no leak to hunt; the deliverable is a DEBUG live-instance census + a one-time SwiftTerm-focused `leaks`/Instruments pass; recommended change `add-lifecycle-census`).
 
 ## Sources
 
