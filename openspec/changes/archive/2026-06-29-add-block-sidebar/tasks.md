@@ -43,4 +43,4 @@
 - [x] 7.2 `make build-core` + `make test-core` green (incl. the new cap + epoch-signal tests).
 - [x] 7.3 `make build` + `make test` green (XCUITests incl. the new block-sidebar e2e); confirm a Release build compiles (DEBUG dump/trigger compile out cleanly).
 - [x] 7.4 Reconcile trackers on completion: AGENTS **Current status** + the milestones P4b-3 bullet (reframed → implemented), per the capture-and-reconcile workflow.
-- [ ] 7.5 At archive, hand-edit the two established-spec `Purpose` blocks the deltas can't touch: `session-sidebar` (replace the blanket "focus only, never scroll-to-row" — distinguish pane-row click from block-row select) and `terminal-spatial-blocks` (soften "a clickable per-block sidebar" out-of-scope now that the designated-block scroll primitive serves it).
+- [x] 7.5 At archive, hand-edit the two established-spec `Purpose` blocks the deltas can't touch: `session-sidebar` (replace the blanket "focus only, never scroll-to-row" — distinguish pane-row click from block-row select) and `terminal-spatial-blocks` (soften "a clickable per-block sidebar" out-of-scope now that the designated-block scroll primitive serves it).
