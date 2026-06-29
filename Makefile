@@ -20,7 +20,20 @@ XCODEPROJ         := xtty.xcodeproj/project.pbxproj
 SWIFTTERM_SENTINEL := external/SwiftTerm/Sources/SwiftTerm/XttyAccessors.swift
 SWIFTTERM_INPUTS   := patches/swiftterm/xtty-accessors.diff patches/swiftterm/UPSTREAM_CONFIG.sh
 
-.PHONY: help doctor setup build run test test-core build-core bootstrap generate clean reset
+BENCH_DIR         := $(DERIVED)/bench
+BENCH_BIN         := $(APP)/Contents/MacOS/xtty
+
+# Optional stable code-signing identity for local builds (see
+# scripts/create-signing-cert.sh). When XTTY_SIGN_IDENTITY is set in the
+# environment, builds sign with it so TCC grants (e.g. Screen Recording for the
+# latency probe) persist across rebuilds instead of re-prompting; unset = the
+# default ad-hoc "Sign to Run Locally" (portable, what CI/other devs use).
+SIGN_FLAGS :=
+ifdef XTTY_SIGN_IDENTITY
+SIGN_FLAGS := CODE_SIGN_IDENTITY="$(XTTY_SIGN_IDENTITY)" CODE_SIGN_STYLE=Manual CODE_SIGNING_ALLOWED=YES
+endif
+
+.PHONY: help doctor setup build run test test-core build-core bench bootstrap generate clean reset
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -53,16 +66,28 @@ $(XCODEPROJ): project.yml
 # --- build / run / test ------------------------------------------------------
 
 build: $(SWIFTTERM_SENTINEL) $(XCODEPROJ) ## Build the app (auto-bootstraps + generates if stale)
-	@xcodebuild -project xtty.xcodeproj -scheme $(SCHEME) -derivedDataPath $(DERIVED) build
+	@xcodebuild -project xtty.xcodeproj -scheme $(SCHEME) -derivedDataPath $(DERIVED) build $(SIGN_FLAGS)
 
 run: build ## Build then launch the app
 	@open $(APP)
 
 test: $(SWIFTTERM_SENTINEL) $(XCODEPROJ) ## Run the app UI tests (XCUITests)
-	@xcodebuild test -project xtty.xcodeproj -scheme $(SCHEME) -destination 'platform=macOS' -derivedDataPath $(DERIVED)
+	@xcodebuild test -project xtty.xcodeproj -scheme $(SCHEME) -destination 'platform=macOS' -derivedDataPath $(DERIVED) $(SIGN_FLAGS)
 
 test-core: $(SWIFTTERM_SENTINEL) ## Run the fast XttyCore unit tests (no app build)
 	@swift test --package-path XttyCore
+
+bench: build ## Measure latency+memory for both renderers; writes JSON reports (P7a)
+	@mkdir -p $(BENCH_DIR)
+	@echo "Running benchmark (CoreGraphics)…"
+	@"$(BENCH_BIN)" -Benchmark -UITestRenderer coregraphics -BenchmarkReport "$(BENCH_DIR)/coregraphics.json" || true
+	@echo "Running benchmark (Metal)…"
+	@"$(BENCH_BIN)" -Benchmark -UITestRenderer metal -BenchmarkReport "$(BENCH_DIR)/metal.json" || true
+	@echo "Reports written to:"; echo "  $(BENCH_DIR)/coregraphics.json"; echo "  $(BENCH_DIR)/metal.json"
+	@echo "Note: latency needs the Screen Recording grant (System Settings ▸ Privacy & Security) + a visible display;"
+	@echo "      without it the report still records memory + renderer, with latency marked unavailable."
+	@echo "Caveat: the latency probe is COARSE (each capture ~20ms > the key-to-photon signal) — memory is the"
+	@echo "        trustworthy result; a finer latency probe (SCStream timestamps / engine hook) is P7b work."
 
 build-core: $(SWIFTTERM_SENTINEL) ## Build XttyCore only
 	@swift build --package-path XttyCore
