@@ -26,18 +26,46 @@ enum BenchmarkRunner {
 
         Task { @MainActor in
             var latency: LatencyStats?
+            var baseline: LatencyStats?
             var unavailableReason: String?
-            // Focus the pane (D3 first-responder) and hide the caret (D4) so the
-            // probe times the typed glyph, not the blinking caret.
+            var calibration: TimebaseCalibration?
+            var frameQuantizationMs: Double?
+            // Focus the pane (first-responder) and hide the caret so the probe
+            // times the typed glyph, not the blinking caret (an independent
+            // dirty-rect source).
             controller.benchmarkPrepareForProbe()
             controller.benchmarkSetCaretHidden(true)
+            // A renderer-independent overlay stimulus for the common-path baseline
+            // (design D5): the probe flips it and times it the same way.
+            var overlay: ProbeOverlay?
+            if let contentView = controller.window.contentView {
+                overlay = ProbeOverlay(in: contentView)
+            }
+            let baselineFlip: (@MainActor () -> Void)?
+            if let overlay {
+                baselineFlip = { overlay.flip() }
+            } else {
+                baselineFlip = nil
+            }
             do {
-                let samples = try await probe.run(trials: trials)
-                latency = LatencyStats(samplesMs: samples)
+                let probeRun = try await probe.run(trials: trials, baselineFlip: baselineFlip)
+                calibration = probeRun.calibration
+                frameQuantizationMs = probeRun.frameIntervalMs
+                if probeRun.calibration.passed, let stats = LatencyStats(samplesMs: probeRun.samplesMs) {
+                    latency = stats
+                } else {
+                    // Calibration failed → untrustworthy; emit no absolute numbers
+                    // (distinct from missing-permission: calibration is non-nil here).
+                    unavailableReason = String(format: "timebase calibration failed (offset %.4gs)",
+                                               probeRun.calibration.offsetSeconds)
+                    NSLog("[xtty] benchmark: latency untrustworthy — %@", unavailableReason!)
+                }
+                baseline = LatencyStats(samplesMs: probeRun.baselineSamplesMs)
             } catch {
                 unavailableReason = String(describing: error)
                 NSLog("[xtty] benchmark: latency unavailable — %@", unavailableReason!)
             }
+            overlay?.remove()
             controller.benchmarkSetCaretHidden(false)
 
             // Memory scenarios mutate the window, so run them after the latency probe.
@@ -53,6 +81,9 @@ enum BenchmarkRunner {
                 latency: latency,
                 latencyUnavailableReason: latency == nil ? (unavailableReason ?? "unavailable") : nil,
                 captureFrameRate: latency != nil ? displayHz : nil,
+                frameQuantizationMs: latency != nil ? frameQuantizationMs : nil,
+                timebaseCalibration: calibration,
+                noOpBaseline: baseline,   // overlay-stimulus common-path baseline (D5)
                 memory: memory,
                 environment: BenchEnvironment(
                     machine: hwModel(),
@@ -91,5 +122,43 @@ enum BenchmarkRunner {
         sysctlbyname("hw.model", &bytes, &size, nil, 0)
         return String(cString: bytes)
     }
+}
+
+/// A renderer-independent on-screen stimulus for the latency baseline pass (P7b /
+/// design D5): a full-width strip at the bottom of the window (guaranteed visible in
+/// the downscaled capture, clear of the prompt/cursor) whose layer color the probe
+/// toggles. Because it is a plain AppKit/CoreAnimation layer — not the SwiftTerm
+/// renderer — its keystroke-free flip→glass latency is the capture/compositor floor
+/// common to both CoreGraphics and Metal, so it contextualizes how much of the
+/// glyph latency is the compositor floor vs. the terminal pipeline.
+@MainActor
+final class ProbeOverlay {
+    private let view: NSView
+    private var toggled = false
+    private let colorA = NSColor.black.cgColor
+    private let colorB = NSColor.white.cgColor
+
+    init(in contentView: NSView) {
+        let stripHeight: CGFloat = 24
+        let frame = NSRect(x: 0, y: 0, width: contentView.bounds.width, height: stripHeight)
+        let v = NSView(frame: frame)
+        v.autoresizingMask = [.width, .maxYMargin]
+        v.wantsLayer = true
+        v.layer?.backgroundColor = colorA
+        contentView.addSubview(v, positioned: .above, relativeTo: nil)
+        self.view = v
+    }
+
+    /// Toggle the strip color — a snap change (implicit animation disabled) so the
+    /// captured frame is unambiguous.
+    func flip() {
+        toggled.toggle()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        view.layer?.backgroundColor = toggled ? colorB : colorA
+        CATransaction.commit()
+    }
+
+    func remove() { view.removeFromSuperview() }
 }
 #endif

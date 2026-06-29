@@ -79,10 +79,22 @@ final class XttyPerformanceHarnessUITests: XCTestCase {
         let memory = try XCTUnwrap(report["memory"] as? [[String: Any]])
         XCTAssertFalse(memory.isEmpty, "expected at least one memory scenario sample")
         XCTAssertTrue(memory.allSatisfy { ($0["footprintBytes"] as? NSNumber)?.uint64Value ?? 0 > 0 })
-        // Latency: either a stats object, or the explicit unavailable marker.
+        // Latency: either a stats object, or the explicit unavailable/untrustworthy marker.
         let hasLatency = report["latency"] is [String: Any]
         let hasUnavailable = (report["latencyUnavailableReason"] as? String)?.isEmpty == false
         XCTAssertTrue(hasLatency || hasUnavailable,
-                      "report must carry latency stats or an explicit unavailable marker")
+                      "report must carry latency stats or an explicit unavailable/untrustworthy marker")
+
+        // P7b provenance: when latency is present the timebase calibration passed
+        // and the frame-quantized resolution is recorded (no implied sub-frame
+        // precision). When latency ran at all, the calibration outcome is present.
+        if hasLatency {
+            let calibration = try XCTUnwrap(report["timebaseCalibration"] as? [String: Any],
+                                            "a trustworthy latency run records the timebase calibration")
+            XCTAssertEqual(calibration["passed"] as? Bool, true,
+                           "latency stats are only emitted when calibration passed")
+            XCTAssertNotNil(report["frameQuantizationMs"] as? NSNumber,
+                            "the frame-quantized resolution must be recorded")
+        }
     }
 }

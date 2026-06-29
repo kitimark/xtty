@@ -85,9 +85,10 @@ bench: build ## Measure latency+memory for both renderers; writes JSON reports (
 	@"$(BENCH_BIN)" -Benchmark -UITestRenderer metal -BenchmarkReport "$(BENCH_DIR)/metal.json" || true
 	@echo "Reports written to:"; echo "  $(BENCH_DIR)/coregraphics.json"; echo "  $(BENCH_DIR)/metal.json"
 	@echo "Note: latency needs the Screen Recording grant (System Settings ▸ Privacy & Security) + a visible display;"
-	@echo "      without it the report still records memory + renderer, with latency marked unavailable."
-	@echo "Caveat: the latency probe is COARSE (each capture ~20ms > the key-to-photon signal) — memory is the"
-	@echo "        trustworthy result; a finer latency probe (SCStream timestamps / engine hook) is P7b work."
+	@echo "      without it the report still records memory + renderer, with latency marked unavailable/untrustworthy."
+	@echo "Latency (P7b): an SCStream per-frame-displayTime probe, gated by a startup timebase calibration; resolution"
+	@echo "      is frame-quantized (~one refresh interval), valid for the renderer delta. Pin the display refresh for"
+	@echo "      the steadiest cadence. Verdict (2026-06-29): keep CoreGraphics — see research/03-analysis/p7-measurement-methodology.md."
 
 build-core: $(SWIFTTERM_SENTINEL) ## Build XttyCore only
 	@swift build --package-path XttyCore

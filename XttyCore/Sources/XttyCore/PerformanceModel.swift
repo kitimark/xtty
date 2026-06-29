@@ -79,6 +79,23 @@ public struct LatencyStats: Equatable, Sendable, Codable {
     }
 }
 
+/// The outcome of the latency probe's startup timebase calibration (P7b): whether
+/// the keystroke-injection clock and the frame-presentation-timestamp clock
+/// reconcile into one domain. When `passed` is false the absolute latency numbers
+/// are untrustworthy and SHALL NOT be emitted (the report carries the marker
+/// instead) — see `BenchResult.latencyUnavailableReason`.
+public struct TimebaseCalibration: Equatable, Sendable, Codable {
+    public let passed: Bool
+    /// Measured offset (seconds) between the two clocks at startup; ~0 and stable
+    /// when they reconcile. A large or unstable value fails the gate.
+    public let offsetSeconds: Double
+
+    public init(passed: Bool, offsetSeconds: Double) {
+        self.passed = passed
+        self.offsetSeconds = offsetSeconds
+    }
+}
+
 /// The run environment, so a report is interpretable on its own (and comparable
 /// only to runs from the same machine/display, per the relative-bar method).
 public struct BenchEnvironment: Equatable, Sendable, Codable {
@@ -95,16 +112,35 @@ public struct BenchEnvironment: Equatable, Sendable, Codable {
 
 /// The full benchmark result — the artifact for the P7 renderer decision and a
 /// performance-regression baseline. `latency` is nil when the probe could not run
-/// (no screen-capture permission or no visible display), in which case
-/// `latencyUnavailableReason` explains why; memory is always measured.
+/// (no screen-capture permission or no visible display) **or** the timebase
+/// calibration failed (untrustworthy), in which case `latencyUnavailableReason`
+/// explains why; memory is always measured.
+///
+/// P7b latency-measurement provenance makes the latency numbers' trustworthiness
+/// and time-resolution explicit rather than implying sub-frame precision:
+/// `timebaseCalibration` (did the clocks reconcile), `frameQuantizationMs` (the
+/// achieved resolution — one display-refresh interval), and `noOpBaseline` (a
+/// per-renderer identical-content baseline measured the same way, so a constant
+/// capture/scheduling offset can be distinguished from a real renderer difference).
 public struct BenchResult: Equatable, Sendable, Codable {
     public let renderer: RendererBackend
     public let latency: LatencyStats?
-    /// Set iff `latency` is nil — an explicit "unavailable" marker, never silent.
+    /// Set iff `latency` is nil — an explicit "unavailable / untrustworthy" marker,
+    /// never silent (missing permission, no display, or a failed timebase gate).
     public let latencyUnavailableReason: String?
-    /// The capture frame rate (fps) the latency was measured at — the latency
-    /// time-resolution is one frame; nil when latency is unavailable.
+    /// The capture frame rate (fps) the latency was measured at; nil when latency
+    /// is unavailable. See `frameQuantizationMs` for the resolution in ms.
     public let captureFrameRate: Double?
+    /// The achieved frame-quantized time-resolution (ms) of the latency
+    /// measurement — one display-refresh interval (variable on a ProMotion panel);
+    /// nil when latency is unavailable. Records that latency is NOT sub-frame.
+    public let frameQuantizationMs: Double?
+    /// The startup timebase-calibration outcome (P7b); nil when calibration was
+    /// not reached (e.g. capture unavailable before it could run).
+    public let timebaseCalibration: TimebaseCalibration?
+    /// The per-renderer no-op / identical-content baseline distribution, measured
+    /// identically, so a constant offset can be subtracted in P7b; nil when not run.
+    public let noOpBaseline: LatencyStats?
     public let memory: [MemorySample]
     public let environment: BenchEnvironment
 
@@ -113,6 +149,9 @@ public struct BenchResult: Equatable, Sendable, Codable {
         latency: LatencyStats?,
         latencyUnavailableReason: String? = nil,
         captureFrameRate: Double? = nil,
+        frameQuantizationMs: Double? = nil,
+        timebaseCalibration: TimebaseCalibration? = nil,
+        noOpBaseline: LatencyStats? = nil,
         memory: [MemorySample],
         environment: BenchEnvironment
     ) {
@@ -120,6 +159,9 @@ public struct BenchResult: Equatable, Sendable, Codable {
         self.latency = latency
         self.latencyUnavailableReason = latencyUnavailableReason
         self.captureFrameRate = captureFrameRate
+        self.frameQuantizationMs = frameQuantizationMs
+        self.timebaseCalibration = timebaseCalibration
+        self.noOpBaseline = noOpBaseline
         self.memory = memory
         self.environment = environment
     }
