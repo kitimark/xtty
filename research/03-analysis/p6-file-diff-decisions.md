@@ -198,7 +198,7 @@ Follow the DEBUG state-dump convention, **not** AX (the P5 sidebar is SwiftUI ye
 - Inline comments-to-agent; merge/rebase tooling.
 
 **Deferred increments:**
-- **P6b** — full file-tree browser (lazy-load, expand/collapse, flat-vs-tree toggle).
+- **P6b** — full file-tree browser (lazy-load, expand/collapse, flat-vs-tree toggle). **Scope narrowed; see the "P6b addendum" below** — P6b is the *flat↔tree toggle over the changed-files list* (Scope A); the *full project* file-tree browser (Scope B) is rejected as off-mission IDE-creep.
 - **P6a+** — gated word-level diff overlay (zed/delta gates) — **now decided as token-level emphasis; see the "P6a+ addendum" below** (`add-git-review-polish`) — and syntax highlighting (forces the tree-sitter-vs-Highlightr dep choice); ahead/behind via `rev-list --count`.
 - **P6a+** — FSEvents auto-refresh (only if the 5 s poll proves too slow mid-agent-session; scoped to worktree root + VS Code ignore-set).
 - **Indefinite** — staging/commit (pair with lazygit; model kept forward-compatible).
@@ -333,6 +333,46 @@ It stays *in* the change only because it is ≈free **and** it reconciles an ove
 
 ---
 
+## P6b addendum — file-tree scope decided (Scope A; Scope B rejected)
+
+> **Provenance.** Authored 2026-06-29, a 4th pass on this doc — codebase-grounded `/opsx:explore p6b` (read the shipped `GitReviewStore`/`GitStatus`/`GitReviewController`/`GitRunner`/`GitReviewView` + both trackers), no new OSS clone. Resolves a contradiction *between this doc and the milestone* over what "P6b" means. Confidence legend unchanged (✅ confirmed · ❌ corrected · ❓ open).
+
+P6a deferred "the full file-tree browser" to P6b, but the two trackers described **two different features** under that one name. This addendum picks one.
+
+### The contradiction
+
+- `02-milestones.md:76` framed P6b as **"browse *all* files (lazy tree, expand/collapse)"** — a full project Explorer (**Scope B**).
+- This doc (`:50`, `:135`) framed P6b as **"a flat-vs-tree toggle"** citing zed `git_panel_settings.rs:30-37` — a tree *view of the changed files we already list* (**Scope A**).
+
+These are not two sizes of one feature: **Scope B is a new data source** (filesystem walk + lazy children + a watcher story, wanting the still-deferred FSEvents), **Scope A is a presentation transform** over the existing `git status → [GitChangedFile]` list.
+
+### Decision
+
+| Option | Call | Confidence | Why |
+|---|---|---|---|
+| **Scope B — full project file-tree browser** | ❌ **reject** | ✅ High | Phase 6's hard non-goal is *"not a full IDE"*; a standing browse-every-file pane is the most IDE-ish thing left. It **duplicates the shell** (`ls`/`eza --tree`/`cd`/`fzf`/`zoxide`) and the **⌘-click-any-`path:line`** opener (P4b-1 `terminal-links`) xtty already ships, at a persistent-memory + chrome cost that fights M1 (lean). Off-mission. |
+| **Scope A — flat↔tree toggle over the *changed* files** | ✅ **this is P6b** | ✅ High | Pure **view-free transform** over the existing flat `[GitChangedFile]` (split each path on `/`, fold into nodes). On-mission precisely for the **agent-host keystone**: a large agent-generated refactor (40 files across 15 dirs) makes the flat Changes/Untracked/Conflicts list a long scroll; a collapsible directory tree makes it reviewable. Literally zed's cited tree-toggle. |
+| **Defer P6b until after P7-measure** | 🟡 **recommended default** | ✅ High | P6b is "convenience, not the keystone" (this doc, `:50`); the git-review keystone already shipped (P6a/P6a+). **P7 (measure) is the actual gate.** Nothing here is urgent. |
+
+So: **P6b ≔ Scope A** (correct the milestone's "browse all files" wording, which overstates it), **sequenced after P7** unless dogfooding a big agent changeset makes the flat list painful sooner.
+
+### Build shape if/when P6b lands (mechanism notes, not a spec)
+
+- ❌ **Model-honesty correction.** This doc earlier claimed the model was kept "forward-compatible with a `GitListEntry` enum (Status/Header, later Directory)" (`:135`). **That enum was never built** — the shipped `GitChangedFile` (`XttyCore/.../GitStatus.swift:33`) is a flat struct, and `GitReviewView` groups by category in the *view* via `snapshot.files(in:)` + `GitStatusCategory.allCases`. **It doesn't matter:** Scope A needs **no model reshape** — a directory tree is a pure function over the flat list.
+- ✅ Add a view-free, unit-testable `XttyCore` helper (e.g. `GitFileTree.build(_ files: [GitChangedFile]) -> [TreeNode]`) — paths → nested nodes, leaves carry the `GitChangedFile` (status glyph + numstat badges unchanged). Tested like the other parsers, no app/view.
+- ✅ App layer: a SwiftUI `OutlineGroup`/`DisclosureGroup` swap in `GitReviewView` behind a header toggle (and/or a `git-review-layout: flat|tree` `terminal-configuration` key — zed has the setting; a UI toggle alone is also fine). **No `GitRunner` change, no new git invocation, no FSEvents, no filesystem walk.**
+- Harness: tree is presentation over the same `gitReview` dump (`changedFiles` already reported); at most assert the layout mode — minimal `verification-harness` surface.
+- Effort: ~a day, low risk (Scope A). Scope B would be multi-day + a whole FS-enumeration side-effect layer — another reason it stays rejected.
+
+### Spec surface if proposed (mechanism-neutral)
+
+- **`git-review`** (MODIFIED) — the changed-files list MAY be presented either flat-by-category or as a collapsible directory tree of the same changed files; the tree is presentation only (no new files surfaced, no write op, read-only unchanged).
+- **`terminal-configuration`** (MODIFIED) — *only if* the layout is config-exposed (`git-review-layout`).
+- **`verification-harness`** (MODIFIED) — *only if* the dump needs the active layout mode.
+- ❓ **Open (user's call):** build P6b (Scope A) now as `add-git-review-tree`, or hold until after P7-measure. Not yet a change.
+
+---
+
 ## Sources
 
 - **xtty codebase** (re-verified `main`@`902f41a`): `App/TerminalWindowController.swift`, `App/PaneController.swift`, `App/FileOpener.swift`, `App/XttyApp.swift`, `XttyCore/Sources/XttyCore/{OSC133,TerminalSession,XttyConfigLoader}.swift`, `XttyCore/Package.swift`.
@@ -350,3 +390,8 @@ It stays *in* the change only because it is ≈free **and** it reconciles an ove
 - **Apple Developer docs**: `AttributeScopes.SwiftUIAttributes.backgroundColor` (macOS 12.0+); the "AttributedString is not there yet" survey exempting `backgroundColor`; `AttributedString.index(_:offsetByCharacters:)`.
 - **lazygit** (Go): `pkg/gui/background.go` `pauseRefreshesCount` — confirmed *not* lock-related (brackets lazygit's own multi-step ops), so it does not transfer to xtty's read-only poller.
 - **Method:** 6-reader source-grounded workflow (`wf_11d118f8-14c`) → 4 adversarial verifications → synthesis, cross-checked against hand-reads of delta/zed/diff-match-patch (delta dropped from the workflow on a tool error and was supplied by hand-read).
+
+**P6b addendum, additional sources** (2026-06-29 file-tree-scope pass):
+- **xtty codebase** (shipped P6a/P6a+): `XttyCore/Sources/XttyCore/{GitStatus,GitReviewStore,GitDiff}.swift` (flat `GitChangedFile`, no `GitListEntry` enum — confirms the model-honesty correction), `App/{GitReviewView,GitReviewController,GitRunner}.swift`.
+- **zed** (Rust): `crates/git_ui/src/git_panel_settings.rs:30-37` (the flat-vs-tree toggle = Scope A) vs `crates/project_panel/src/project_panel.rs` (the full Explorer = Scope B, rejected).
+- **Method:** codebase-grounded `/opsx:explore p6b` resolving a milestone-vs-decisions-doc contradiction; no new OSS clone.
