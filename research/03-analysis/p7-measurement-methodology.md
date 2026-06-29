@@ -144,6 +144,37 @@ feed(text:)  ← PTY output, incl. the echo of what you typed
 
 **GO**, scoped tight. Both linchpins survived adversarial verification (the clock fix is a single shared conversion; the continuous stream genuinely escapes the 20 ms floor). No hard blockers; the must-validate-first item is the **startup epoch calibration**. The verdict the probe yields is *empirical* — needs many-trial distribution comparison + a no-op baseline — but it's a focused build on ~90 % reuse. **Expected outcome: keep CoreGraphics, skip Phase 8** (no renderer latency win to justify Metal's +7–20 MB and experimental-code cost), with the throttle noted as the real latency lever for any future work. **P7c** (Instruments leak/retain pass) and **distribution** (Hardened Runtime + Developer ID + notarization) remain separately deferred.
 
+## Addendum (2026-06-29) — P7b apply result: the trustworthy probe works; **verdict = keep CoreGraphics, skip Phase 8**
+
+> **Provenance:** Implementing + running `add-trustworthy-latency-probe` (the P7b probe) on the dev machine (MacBookPro18,3, macOS 26.2, built-in 120 Hz). `XTTY_SIGN_IDENTITY=xtty-dev make bench` run **3× per renderer** (~50+ trials each), glyph pass + overlay-baseline pass. This is the **gate output** the P7b methodology addendum (above) set up.
+
+### The instrument now resolves the renderers (P7a couldn't)
+
+- ✅ **Timebase calibration PASSED every run** — offset **0.7–3.2 ms** (well under the 100 ms gate); the Apple-Forum-785046 epoch anomaly did **not** manifest on macOS 26.2, so the absolute numbers are trustworthy (not just the delta). The must-validate-first risk cleared.
+- ✅ **Latency is resolved, not floored.** P7a's screenshot-polling probe floored at ~54 ms identical across renderers; the `SCStream`-`displayTime` probe yields differentiated, sensible key-to-photon numbers. The continuous-stream approach escaped the ~20 ms capture floor exactly as designed.
+- ✅ **The overlay baseline validates the floor** — ~8.5–9.6 ms (≈ one 120 Hz frame), renderer-independent across all runs, confirming it measures the common capture/compositor floor.
+
+### Results (3 runs each; ms; software-on-glass, excludes the constant hardware tail)
+
+| Metric | CoreGraphics | Metal |
+| --- | --- | --- |
+| Latency p50 (×3) | **31.6 / 30.2 / 31.4** | 34.7 / 33.8 / 32.9 |
+| Latency p95 (×3) | 35.7 / 35.4 / 38.7 | 48.9 / 48.5 / 41.3 |
+| Latency p99 (×3) | **37.0 / 47.9 / 39.7** | **100.2 / 49.5 / 119.5** |
+| Overlay baseline p50 | ~8.5 | ~9.0 |
+| Idle footprint | **~55 MB** | ~62 MB |
+| Scrollback-flood footprint | ~127 MB | ~143 MB |
+| Calibration offset | 0.7–3.2 ms (passed) | 0.7–3.2 ms (passed) |
+
+### Verdict — **keep CoreGraphics; skip Phase 8**
+
+CoreGraphics wins on every axis that matters: **faster median** (~31 vs ~33 ms), a **much tighter, more stable tail** (p99 ~40 vs ~50–120 ms — Metal spikes to >100 ms in 2 of 3 runs), **leaner memory** (~55 vs ~62 MB idle; ~127 vs ~143 MB flooded), identical idle CPU (P7a), and it is the **non-experimental** path (SwiftTerm marks its Metal renderer evolving). There is no latency benefit to pay Metal's memory + tail-latency + experimental-code cost for. **The P7 gate closes: stay on CoreGraphics, do not build a custom Phase-8 Metal renderer.**
+
+- **The throttle reframe holds — and the probe sharpened it.** The median ~31 ms ≈ overlay floor ~8.5 ms + the shared ~16.7 ms `queuePendingDisplay` coalescer + ~6 ms render/echo, which is why CG≈Metal at p50. But the trustworthy probe revealed what the "pure wash" hypothesis missed: **Metal's *tail* is materially worse.** The real future latency lever remains the **coalescing throttle** (engine/patch concern), not the renderer.
+- **Caveats (honest):** software-on-glass excludes the constant ~20 ms+ hardware tail (cancels in the renderer delta); resolution is frame-quantized (~8.3 ms); the built-in display was not force-pinned to a fixed refresh this run, yet results were stable across 3 runs (calibration passed each time), so VRR did not corrupt the comparison. A photodiode cross-check remains a nice-to-have, not decision-critical.
+
+**Next:** **P7c** (Instruments leak/retain pass) and the deferred **distribution** (Hardened Runtime + Developer ID + notarization) remain. The renderer question is **settled**.
+
 ## Sources
 
 - Explore session 2026-06-29 (`/opsx:explore p7b`) — 14-agent research workflow (7 questions → adversarial verify → synthesis) + 2 backfill agents + a SwiftTerm-checkout deep-read. Earlier: explore session 2026-06-29 (`/opsx:explore p7`) + codebase survey (Explore subagent, medium depth).

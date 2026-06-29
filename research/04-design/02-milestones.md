@@ -79,7 +79,7 @@ Requirement tags reference [xtty-requirements](../03-analysis/xtty-requirements.
 **Done when (P6a):** you can glance at what changed in the focused pane's repo and read each file's diff without leaving xtty — and ⌘-click a changed file to open it at the line.
 **Refs:** [p6 file/diff decisions](../03-analysis/p6-file-diff-decisions.md); reuses P4a cwd + P4b-1 click-to-open.
 
-## Phase 7 — Polish + MEASURE (decision gate)  ·  M1, M4 *(old P10)*  *(🔬 P7a `add-latency-memory-harness` implemented & archived 2026-06-29; P7b methodology researched & decided 2026-06-29 — not yet proposed; P7c remains)*
+## Phase 7 — Polish + MEASURE (decision gate)  ·  M1, M4 *(old P10)*  *(🔬 P7a `add-latency-memory-harness` ✅ archived; P7b `add-trustworthy-latency-probe` ✅ implemented & benched 2026-06-29 → **renderer decided: keep CoreGraphics, skip Phase 8** (pending archive); P7c remains)*
 **Goal:** verify the lean + fast requirements with data — this gates Phase 8.
 - **Measure** key-to-photon latency and memory (scrollback + atlas + panes) against M1/M4.
 - If short: first flip `useMetalRenderer` + tune frame pacing (cheap); re-measure.
@@ -92,7 +92,9 @@ Requirement tags reference [xtty-requirements](../03-analysis/xtty-requirements.
 
 **P7b methodology researched & decided (2026-06-29 — explore `p7b`; [P7b addendum](../03-analysis/p7-measurement-methodology.md#addendum-2026-06-29--p7b-the-trustworthy-probe-methodology-the-renderer-is-a-wash-the-throttle-is-the-lever); not yet proposed):** a 14-agent research workflow + a SwiftTerm-checkout deep-read resolved all 7 open questions. The trustworthy probe = a continuous **`SCStream` reading per-frame `displayTime`** (on-glass, fork-free, ~90 % P7a reuse; the next `.complete` frame after t0 *is* the keystroke), with a load-bearing **clock-unit fix** (`displayTime` is mach *ticks* not ns) + a **startup epoch-calibration gate**. ⚠️ **Headline reframe:** both renderers sit behind a **shared ~16.67 ms output-coalescing throttle** (`queuePendingDisplay`) → the A/B is a **wash**, and that throttle (not the renderer) is xtty's latency lever. **Go = build it; expected verdict = keep CoreGraphics, skip Phase 8** (no latency win to justify Metal's +7–20 MB + experimental code). Comparators = Terminal.app-first stretch (iTerm2 Secure-Event-Input blocks injection); no hardware rig needed (omitted tail cancels in the delta).
 
-**Done when:** footprint is lean and typing feels instant — OR you've decided Phase 8 is needed.
+**P7b decided (2026-06-29 — `add-trustworthy-latency-probe`, implemented & benched 3×/renderer; [apply-result addendum](../03-analysis/p7-measurement-methodology.md#addendum-2026-06-29--p7b-apply-result-the-trustworthy-probe-works-verdict--keep-coregraphics-skip-phase-8)):** the `SCStream`-`displayTime` probe (clock-fixed, calibration-gated — passed, offset <4 ms) resolved the renderers P7a couldn't. **Verdict: keep CoreGraphics, skip Phase 8** — CG measured faster median (~31 vs ~33 ms), much tighter tail (p99 ~40 vs ~50–120 ms), and leaner memory (~55 vs ~62 MB idle) than SwiftTerm's experimental Metal path. The shared ~16.7 ms `queuePendingDisplay` throttle dominates the median (the real future latency lever); the probe also exposed Metal's worse tail. **Phase 8 is therefore NOT needed.** Remaining: **P7c** (Instruments leak/retain pass), distribution deferred.
+
+**Done when:** footprint is lean and typing feels instant — OR you've decided Phase 8 is needed. ✅ **Met: footprint lean (idle ~55 MB), typing latency CG-best, Phase 8 ruled out.**
 **Refs:** [p7 measurement methodology](../03-analysis/p7-measurement-methodology.md), [06-performance](../02-internals/06-performance-latency.md), [Metal spike](../03-analysis/swiftterm-metal-renderer-spike.md), [xtty-requirements](../03-analysis/xtty-requirements.md)
 
 ## Phase 8 — *(conditional)* Drop to Level 1: own Metal renderer  ·  M4
