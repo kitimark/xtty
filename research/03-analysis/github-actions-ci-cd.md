@@ -142,6 +142,61 @@ Tag-triggered (`on: push: tags: ['v*']`), **$0 ad-hoc now** — ties to [`distri
 
 ---
 
+## 10. Addendum (2026-06-30) — the 7 GUI failures: diagnosis, the "headless" correction, and the hybrid hardening plan (`harden-xcuitests-for-ci`)
+
+*Two follow-on workflows: (a) a per-test diagnosis of the 7 failures against the test sources + the env-trigger infra; (b) a per-project deep read of 8 real OSS macOS apps + Apple/GitHub docs to **verify or break** the "can't run on CI" framing (one agent per repo). Critic verdicts: both **usable-with-caveats**.*
+
+### 10a. Terminology correction — "headless" was imprecise ❌→✅
+
+The earlier framing (§9 and prior) leaned on the word **"headless."** That's **wrong** and is corrected here: GitHub-hosted macOS runners run a **real interactive auto-login Aqua/WindowServer session** with UI automation pre-enabled (`automationmodetool enable-automationmode-without-authentication`) on a low-res emulated display — no Xvfb-style virtual display needed. ✅ The accurate description is **"a single *shared*, auto-login GUI session with no human to arbitrate focus,"** not "headless." The real defect is **not absence of a GUI** — it's that a native AppKit app **cannot *reliably* own the shared host session** (key-window + first-responder + the one system menu bar + the one `NSPasteboard`) at the instant XCUITest synthesizes input. So it is **unreliable, not impossible** (✅ confirmed by `testBasicTypedEcho` passing — the app *can* be frontmost-typable; the pass/fail split vs `testFocusTyping…` is a focus *race*, mechanism unconfirmed — the earlier alphabetical-ordering guess is **dropped** as ❓ speculation since every test relaunches the app).
+
+### 10b. iOS-sim vs macOS-native — the inference is invalid ✅
+
+"GitHub supports iOS Simulators for UI testing, therefore macOS-native UI testing works too" **does not hold**. An iOS-sim XCUITest runs inside CoreSimulator's **own isolated window server** (no shared menu bar, no frontmost contention, no shared pasteboard); a native macOS XCUITest runs on the **shared host** session where all of that is contended. They share only the runner image + Xcode toolchain. (`automationmodetool` exists *only* for macOS-host automation — iOS-sim doesn't need it.)
+
+### 10c. OSS evidence — "impossible on hosted CI" is refuted, but the field avoids it
+
+Per-repo reads (one agent each): **1 robust · 1 flaky · 6 avoid · 1 explicit opt-out.**
+
+| Project | macOS UITests on hosted CI? | Drives menu/kbd/clipboard? | Verdict |
+|---|---|---|---|
+| **DuckDuckGo `apple-browsers`** | ✅ yes (`macos-26-xlarge`) | ✅ **robustly** — `test_findInPage_canBeOpenedWithMenuBarItem` (the analogue of xtty's failing Find), `NSPasteboard`+Cmd+V, Cmd-key-equiv tab/window | **the genuine counter-example** |
+| **Maccy** (clipboard mgr) | ⚠️ fork only | yes (Cmd+V, hotkeys) | ~54% red, every mitigation knob on — *not* robust |
+| alt-tab / Rectangle / NetNewsWire / stats / Ice | ❌ no | — | avoid: hostless logic unit tests |
+| Automattic Simplenote | ❌ (self-hosted BuildKite) | — | avoids hosted |
+| **Ghostty** (native terminal — closest peer) | ❌ **deliberately excludes** XCUITests from CI | (IDE only) | runs only `zig build test` |
+
+So your challenge is **technically vindicated by DuckDuckGo** (✅ refutes "impossible") — but DDG **pays for it**: a11y-identifiers on every NSMenuItem, click-first + wait-for-focus, `typeKey` over `typeText`, existence-first timeouts, `-retry-tests-on-failure -test-iterations 2`, fixed 1920×1080, **an `xlarge` runner + a notarized build**. The prevailing practice among comparable peers (especially Ghostty, a native macOS terminal) is to **avoid hosted-CI GUI testing**.
+
+### 10d. Per-test diagnosis (all `file:line`-grounded; verified against the real run `28425122861`)
+
+| Test | Root cause | Fix |
+|---|---|---|
+| split / directional-focus / churn | Cmd+D/W/Opt-arrow menu key-equivs need frontmost → never land (churn: a landed Cmd+W closes the sole pane → quit-escalation → "Application not running") | one **`XTTY_TEST_MUX_OP`** env-trigger through the real `paneRequestsSplit/Close/FocusMove`; DEBUG-only last-pane-close guard |
+| find bar | `menuItems["Find…"].click()` — menu bar belongs to the frontmost app | **a11y-identifier on the NSMenuItem + `menuItems[id].click()`** (DDG primitive — keeps it a real menu test) ‖ or an `XTTY_TEST_FIND` trigger through SwiftTerm's real `performFindPanelAction` |
+| multi-line paste | Cmd+V (Edit▸Paste key-equiv) doesn't fire | **`XTTY_TEST_PASTE_PATH`** trigger seeds pasteboard in-app + `view.paste(self)` (real bracketed-paste path) |
+| truecolor/emoji | emoji block arrived via Cmd+V | test-only: typed `printf '\xf0\x9f\x9a\x80'` hex bytes (mirrors the passing ASCII printf) |
+| focus-on-activate | asserts activate-without-click reliably focuses — genuinely unreliable on the shared session | **rewrite** (click-first + rename) or move IDE/local-only; *not* a tautology-trigger |
+
+### 10e. The refined recommendation — a **hybrid**, not "env-triggers everywhere"
+
+The decisive xtty-specific constraint: **xtty's terminal content view is custom-drawn and exposes nothing to accessibility** — so for terminal *content* assertions, xtty *cannot* use DDG's a11y-element approach; the grid/state-dump side channel is the **only** path there (this is also why Ghostty's side-channel posture fits a terminal). But menu items live in the menu bar (separate from the content view), so **a11y-IDs work for those**.
+
+1. ✅ **Keep the env-trigger + grid-dump side channel as the primary gate** (mainstream-correct for a custom-drawn terminal; the only option for content/no-a11y).
+2. ✅ **Adopt DDG's primitives for the few must-drive-real-GUI tests** — a11y-identifiers on the NSMenuItems + `menuItems[id].click()` (Find), a click-first + wait-for-focus helper, `typeKey` > `typeText`. Keeps Find/paste *real*.
+3. ✅ **Rewrite `testFocusTypingOnActivateWithoutClicking`** (asserts an unreliable property) — click-first+rename or IDE/local-only.
+4. ✅ **Keep the GUI job non-blocking + `-retry-tests-on-failure`**; `test-core` stays the only required gate. Add `paths-ignore` (`research/**`, `openspec/**`, `**/*.md`) so docs-only pushes don't burn the ~8-min GUI run.
+5. ❌ **Don't** declare hosted-CI menu/clipboard testing impossible (DDG refutes it), and **don't** make the full GUI suite a hard hosted-CI gate (every peer except DDG avoids that, and DDG pays an `xlarge`+notarized+retry tax).
+
+### 10f. OpenSpec mapping + caveats
+
+- **Change shape:** a single `harden-xcuitests-for-ci` with **one `verification-harness` spec delta** (the new DEBUG triggers + dump fields + a11y-IDs are harness observability; no product-capability behavior changes). Effort small–medium; sequence high-confidence cluster first.
+- **Iteration tax:** the frontmost condition **can't be reproduced locally** — but the env-trigger fixes are frontmost-*independent*, so a local `make test` pass faithfully predicts CI for those; **batch all fixes into one push**; make the repo public first. A faithful local headless mirror would need a **Tart** macOS VM (heavyweight; `act` can't do macOS).
+- **Verify-before-acting (critic):** confirm a11y-IDs added to xtty's NSMenuItems actually make `menuItems[id]` resolve on the runner; the quake `NSPanel` may focus differently than a normal window (check `XttyQuickTerminalUITests` separately); DDG's robustness used an `xlarge`+notarized build at 1920×1080 — the delta to xtty's ad-hoc/default-runner posture may matter; the churn "Application not running" is a contention/lifecycle symptom (confirmed from the log) but the exact chain is inferred; re-run `testBasicTypedEcho` N× to confirm its pass is reliable, not itself intermittent.
+- **Status:** planned, **not yet proposed** (`add-ci-pipeline` stays open; this is its follow-up).
+
+---
+
 ## Sources
 
 - **xtty repo:** `Makefile`, `project.yml`, `scripts/bootstrap-swiftterm.sh`, `patches/swiftterm/UPSTREAM_CONFIG.sh` + `xtty-accessors.diff`, `.gitignore`, `XttyCore/Package.{swift,resolved}`, `AppUITests/*` (StateDumpReader/GridDumpReader, `XTTY_*` triggers), `AGENTS.md`
