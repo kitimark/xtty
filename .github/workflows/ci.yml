@@ -1,0 +1,96 @@
+name: ci
+
+# $0, secret-free CI. xtty's committed default is ad-hoc "Sign to Run Locally"
+# (CODE_SIGN_IDENTITY="-"), so build + test need no Apple credentials. Standard
+# macOS runners are free + unlimited on public repos.
+#
+# Runner: macos-26 (pinned — `macos-latest` is mid-flip macos-15 -> macos-26).
+# Xcode: the image's DEFAULT release Xcode is used deliberately (no xcode-select):
+#   the Metal toolchain is preinstalled for release Xcode >=26 but EXCLUDED for
+#   RCs, so pinning a specific Xcode_26.x.app risks pinning an RC without Metal.
+#   The Metal guard below makes the build correct even if the toolchain is absent.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-core:
+    name: test-core (XttyCore unit tests — required gate)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure Metal toolchain (no-op when preinstalled)
+        run: xcrun -f metal >/dev/null 2>&1 || sudo xcodebuild -downloadComponent MetalToolchain
+
+      - name: Cache patched SwiftTerm checkout
+        uses: actions/cache@v4
+        with:
+          path: external/SwiftTerm
+          key: swiftterm-${{ runner.os }}-${{ hashFiles('patches/swiftterm/UPSTREAM_CONFIG.sh', 'patches/swiftterm/xtty-accessors.diff') }}
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: spm-${{ runner.os }}-${{ hashFiles('XttyCore/Package.swift') }}
+
+      - name: Reconstitute SwiftTerm
+        run: scripts/bootstrap-swiftterm.sh   # call the script directly, not `make` (avoids the post-cache mtime re-trigger)
+
+      - name: Run XttyCore unit tests
+        run: swift test --package-path XttyCore
+
+  build-and-test:
+    name: build-and-test (app + XCUITests — non-blocking)
+    runs-on: macos-26
+    # NON-BLOCKING by design: this exercises the GUI XCUITests on CI so we learn
+    # whether the synthesized-input drive path is reliable on hosted runners.
+    # Keep it OUT of required status checks (branch protection) until proven —
+    # only `test-core` should be a required check.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure Metal toolchain (no-op when preinstalled)
+        run: xcrun -f metal >/dev/null 2>&1 || sudo xcodebuild -downloadComponent MetalToolchain
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Cache patched SwiftTerm checkout
+        uses: actions/cache@v4
+        with:
+          path: external/SwiftTerm
+          key: swiftterm-${{ runner.os }}-${{ hashFiles('patches/swiftterm/UPSTREAM_CONFIG.sh', 'patches/swiftterm/xtty-accessors.diff') }}
+
+      - name: Cache Swift packages (Xcode-resolved)
+        uses: actions/cache@v4
+        with:
+          path: build/SourcePackages
+          key: spm-xcode-${{ runner.os }}-${{ hashFiles('XttyCore/Package.swift') }}
+
+      - name: Reconstitute SwiftTerm and generate the Xcode project
+        run: |
+          scripts/bootstrap-swiftterm.sh
+          xcodegen generate
+
+      - name: Build and run the app UI tests (retry-tolerant)
+        run: |
+          xcodebuild test \
+            -project xtty.xcodeproj \
+            -scheme xtty \
+            -destination 'platform=macOS' \
+            -derivedDataPath build \
+            -retry-tests-on-failure \
+            -resultBundlePath build/TestResults.xcresult
+        # Ad-hoc signing (no SIGN_FLAGS); leave XTTY_SIGN_IDENTITY and
+        # XTTY_RUN_BENCH_E2E unset so CI needs no Screen Recording / secrets.
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult
+          path: build/TestResults.xcresult
+          if-no-files-found: ignore

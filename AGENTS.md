@@ -87,6 +87,15 @@ Signing posture (P0): **App Sandbox OFF** (`App/xtty.entitlements`), **Sign to R
 
 - **Optional stable local signing (dev convenience):** ad-hoc signing changes the app's code identity every rebuild, so any TCC grant (notably **Screen Recording**, which `make bench`'s latency probe needs) re-prompts on each build. To make a grant persist, create a self-signed code-signing cert once with **`scripts/create-signing-cert.sh`** (→ `xtty-dev`) and build with **`XTTY_SIGN_IDENTITY=xtty-dev make build|test|bench`**; unset, builds stay ad-hoc/portable (CI + other contributors unaffected). This is the lightweight slice of the deferred P7-distribution signing work — *not* Developer ID/notarization. Formalized as the **`add-local-signing-identity`** OpenSpec change (a `build-workflow` spec delta). Details + the experiment write-up: `research/03-analysis/p7-measurement-methodology.md` (2026-06-29 addendum). The **full distribution** (Developer ID + Hardened Runtime + notarization) is researched in `research/03-analysis/distribution-signing-research.md` (2026-06-30) — **technically green, gated only on a ~$99/yr Apple Developer Program decision**: the HR-exception entitlement set is empty (HR doesn't break exec'ing unsigned user binaries — child processes get independent AMFI evaluation), nothing xtty built breaks (one build-config change, not code), recommended change `add-distribution-signing`; captured, not yet proposed.
 
+### Continuous integration (GitHub Actions)
+
+CI runs on every push and pull request via `.github/workflows/` — **$0 and secret-free** (the ad-hoc default needs no Apple credentials; standard `macos-26` runners are free + unlimited on public repos). Two jobs in `ci.yml`:
+
+- **`test-core`** (the **required gate**) — reconstitutes SwiftTerm and runs the fast view-free `XttyCore` unit tests (`swift test`, no app build). Deterministic; this is the check to require in branch protection.
+- **`build-and-test`** (**non-blocking**) — `xcodegen generate` + `xcodebuild test` (the app XCUITests), retry-tolerant, uploads the `.xcresult` on failure. Kept out of required checks while hosted-runner XCUITest reliability is being proven.
+
+Both jobs guard the Metal toolchain (`xcrun -f metal || sudo xcodebuild -downloadComponent MetalToolchain`) and cache the reconstituted `external/SwiftTerm` (keyed on the pin + patch). `pr-lint.yml` enforces Conventional Commit **PR titles** (`amannn/action-semantic-pull-request`, on pull requests only). The workflows call `scripts/bootstrap-swiftterm.sh` directly (not `make`, whose `doctor` only advises). Release/notarization are **not** in CI (deferred). **Prerequisites the maintainer must do once:** wire the git remote, push, and make the repo public; optionally mark `test-core` a required status check. Formalized as the **`add-ci-pipeline`** OpenSpec change (a `build-workflow` spec delta). Methodology: `research/03-analysis/github-actions-ci-cd.md`.
+
 ## Product values (hard requirements)
 
 - **Lean memory** — nowhere near Warp; bound scrollback, manage the glyph atlas, avoid retain cycles.

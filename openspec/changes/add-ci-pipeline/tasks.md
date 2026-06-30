@@ -5,18 +5,18 @@
 
 ## 2. CI workflow (`.github/workflows/ci.yml`)
 
-- [ ] 2.1 Create the workflow triggered on `push` and `pull_request`, both jobs `runs-on: macos-26`, no secrets
-- [ ] 2.2 Add the **`test-core`** job (required gate): checkout → select Xcode (prefer the image release default; pin a specific `Xcode_26.x.app` only if needed) → Metal guard (`xcrun -f metal >/dev/null 2>&1 || sudo xcodebuild -downloadComponent MetalToolchain`) → cache `external/SwiftTerm` (key on `hashFiles('patches/swiftterm/UPSTREAM_CONFIG.sh','patches/swiftterm/xtty-accessors.diff')`) → cache SPM (key on `XttyCore/Package.resolved`) → `scripts/bootstrap-swiftterm.sh` (call directly, not via `make`) → `swift test --package-path XttyCore`
-- [ ] 2.3 Add the **`build-and-test`** job (non-blocking / best-effort): same setup + `brew install xcodegen` → `scripts/bootstrap-swiftterm.sh && xcodegen generate` → `xcodebuild test -project xtty.xcodeproj -scheme xtty -destination 'platform=macOS' -derivedDataPath build -retry-tests-on-failure -resultBundlePath build/TestResults.xcresult`; upload the `.xcresult` as an artifact on failure
-- [ ] 2.4 Ensure `build-and-test` does not block merges (e.g. `continue-on-error: true` or left out of required checks) while its hosted-runner reliability is unproven; leave `XTTY_SIGN_IDENTITY` and `XTTY_RUN_BENCH_E2E` unset (ad-hoc, no bench/Screen-Recording)
+- [x] 2.1 Create the workflow triggered on `push` and `pull_request`, both jobs `runs-on: macos-26`, no secrets
+- [x] 2.2 Add the **`test-core`** job (required gate): checkout → select Xcode (prefer the image release default; pin a specific `Xcode_26.x.app` only if needed) → Metal guard (`xcrun -f metal >/dev/null 2>&1 || sudo xcodebuild -downloadComponent MetalToolchain`) → cache `external/SwiftTerm` (key on `hashFiles('patches/swiftterm/UPSTREAM_CONFIG.sh','patches/swiftterm/xtty-accessors.diff')`) → cache SPM (key on `XttyCore/Package.swift` — no `Package.resolved` is committed) → `scripts/bootstrap-swiftterm.sh` (call directly, not via `make`) → `swift test --package-path XttyCore`. *(Used the image's default release Xcode — no `xcode-select` — to avoid pinning an RC that lacks preinstalled Metal.)*
+- [x] 2.3 Add the **`build-and-test`** job (non-blocking / best-effort): same setup + `brew install xcodegen` → `scripts/bootstrap-swiftterm.sh && xcodegen generate` → `xcodebuild test -project xtty.xcodeproj -scheme xtty -destination 'platform=macOS' -derivedDataPath build -retry-tests-on-failure -resultBundlePath build/TestResults.xcresult`; upload the `.xcresult` as an artifact on failure
+- [x] 2.4 Ensure `build-and-test` does not block merges (left out of required checks via a documented comment — honest red/green signal, kept non-required in branch protection) while its hosted-runner reliability is unproven; left `XTTY_SIGN_IDENTITY` and `XTTY_RUN_BENCH_E2E` unset (ad-hoc, no bench/Screen-Recording)
 
 ## 3. PR-title lint workflow (`.github/workflows/pr-lint.yml`)
 
-- [ ] 3.1 Add a `pull_request`-triggered job using `amannn/action-semantic-pull-request` that enforces Conventional Commit PR titles (allowed types: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`, `perf`, `style`, `ci`, `build`, `revert`; scope optional)
+- [x] 3.1 Add a `pull_request`-triggered job using `amannn/action-semantic-pull-request` that enforces Conventional Commit PR titles (allowed types: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`, `perf`, `style`, `ci`, `build`, `revert`; scope optional). *(Runs on `ubuntu-latest` — no macOS needed — with the auto-provided `GITHUB_TOKEN`, no custom secret.)*
 
 ## 4. Documentation
 
-- [ ] 4.1 Add a short **CI** section to the canonical build docs (AGENTS.md → Building): what the two jobs do, the required-vs-non-blocking split, that it's secret-free/ad-hoc, and the human prerequisites — keeping the "build documentation is accurate and current" requirement satisfied
+- [x] 4.1 Add a short **CI** section to the canonical build docs (AGENTS.md → Building): what the two jobs do, the required-vs-non-blocking split, that it's secret-free/ad-hoc, and the human prerequisites — keeping the "build documentation is accurate and current" requirement satisfied
 
 ## 5. Verify on the first real runs (resolve the researched unknowns)
 
