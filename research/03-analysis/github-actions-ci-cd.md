@@ -148,7 +148,7 @@ Tag-triggered (`on: push: tags: ['v*']`), **$0 ad-hoc now** — ties to [`distri
 
 *Two follow-on workflows: (a) a per-test diagnosis of the 7 failures against the test sources + the env-trigger infra; (b) a per-project deep read of 8 real OSS macOS apps + Apple/GitHub docs to **verify or break** the "can't run on CI" framing (one agent per repo). Critic verdicts: both **usable-with-caveats**.*
 
-> **Update (§11, 2026-07-01):** §10 was logs-only. **§11** reads the actual `.xcresult` artifacts and **confirms the Bucket-B / Cmd-key thesis with screenshots** while correcting two per-test calls: **focus-on-activate is a *false negative*** (the marker reaches the grid; the bash banner splits the string — §11b, keep the test, don't rewrite it), and **find-bar — xtty *does* own its menu bar** (§11e). The §10e/§10f hybrid plan stands, re-sequenced to **fix the shell first** (§11f).
+> **Update (§11, 2026-07-01):** §10 was logs-only. **§11** reads the actual `.xcresult` artifacts and **confirms the Bucket-B / Cmd-key thesis with screenshots** while correcting two per-test calls: **focus-on-activate is a *false negative*** (the marker reaches the grid; the bash banner splits the string — §11b, keep the test, don't rewrite it), and **find-bar — xtty *does* own its menu bar** (§11e). The §10e/§10f hybrid plan stands, re-sequenced to **fix the shell first** (§11f). **→ §12 (2026-07-01) then measured "fix the shell first" in CI: the banner is gone but focus-typing *still* fails — its split is the long CI prompt wrapping the marker, not the banner — so that prediction is REFUTED and the fix becomes a wrap-tolerant assertion.**
 
 ### 10a. Terminology correction — "headless" was imprecise ❌→✅
 
@@ -228,6 +228,8 @@ Consequences, all visible in the artifacts: it (a) **corrupts the grid** (comman
 
 ### 11b. CORRECTION to §10e/§10g — `testFocusTypingOnActivateWithoutClicking` is a **false negative**, not an "unreliable property" ❌→✅
 
+> **Mechanism corrected by §12 (2026-07-01):** the conclusion below (focus works; false negative; keep the test) is **confirmed and strengthened**, but the *cause* of the marker split is **not** the banner — the post-fix run is banner-free and the marker **still wraps** (the long ~72-char CI hostname prompt pushes it across a row boundary). So the fix is a **wrap-tolerant assertion**, not "silence the banner." See §12b.
+
 §10e/§10g concluded focus-on-activate is "genuinely unreliable on the shared session" and recommended **rewrite/abandon**. The artifacts **refute** that. The test `app.activate()` then `app.typeText("XTTYFOCUS<n>")` and asserts `GridDumpReader.waitForContains(marker)` (`AppUITests/XttyUITests.swift:36–47`). Evidence (`focus-typing-typed` png + grid dumps):
 - The marker **reaches the terminal and is visible on-screen** — focus-on-activate **works**.
 - It fails in att1 **only** because the async bash banner **splits the marker across a line wrap**: `runner$ X` then `TTYFOCUS6366interactive shell is now zsh.` — so the contiguous substring `XTTYFOCUS6366` doesn't exist → `.contains()` fails.
@@ -261,7 +263,45 @@ The failure UI hierarchy shows xtty's own `MenuBarItem`s present — **`xtty / V
 
 **Revised sequencing for `harden-xcuitests-for-ci`:** (1) **fix the shell first** — flips focus-typing, kills the flaky membership, restores semantic-capture coverage, removes banner noise from every grid; then (2) the residual is **pure Bucket B** — scope the hybrid hardening to Cmd-key/menu delivery (env-triggers + a11y-IDs), **not** fonts, locale, pasteboard *content*, or menu-bar *ownership* (all three ruled out here). Keep the GUI job non-blocking; `test-core` stays the only required gate.
 
-> **Update (2026-07-01) — step (1) shipped as `silence-bash-deprecation`.** A follow-on `/opsx:explore` corrected the "one CI env line" assumption above: `ShellResolver.seedEnvironment` hands the child shell a **curated** env (only `TERM`/`COLORTERM`/`LANG`/`HOME`/`USER`/`LOGNAME`), so a `ci.yml`/`launchEnvironment` setting is **stripped before the shell starts** and silently no-ops. The fix is a **product** one-liner — seed `BASH_SILENCE_DEPRECATION_WARNING=1` for bash login shells (gated to `base == "bash"`, before the `override.env` merge so a profile `env` still wins) — which *also* fixes the same banner for every real bash user, not just CI. Implemented + unit-tested in `ShellResolver`/`ShellResolverTests` (235 `XttyCore` tests green); modifies the `terminal-session` "Shell resolution and launch configuration" requirement. Step (2) — the Bucket-B `harden-xcuitests-for-ci` — remains the separate, harder follow-up.
+> **Update (2026-07-01) — step (1) shipped as `silence-bash-deprecation`.** A follow-on `/opsx:explore` corrected the "one CI env line" assumption above: `ShellResolver.seedEnvironment` hands the child shell a **curated** env (only `TERM`/`COLORTERM`/`LANG`/`HOME`/`USER`/`LOGNAME`), so a `ci.yml`/`launchEnvironment` setting is **stripped before the shell starts** and silently no-ops. The fix is a **product** one-liner — seed `BASH_SILENCE_DEPRECATION_WARNING=1` for bash login shells (gated to `base == "bash"`, before the `override.env` merge so a profile `env` still wins) — which *also* fixes the same banner for every real bash user, not just CI. Implemented + unit-tested in `ShellResolver`/`ShellResolverTests` (235 `XttyCore` tests green); modifies the `terminal-session` "Shell resolution and launch configuration" requirement. Step (2) — the Bucket-B `harden-xcuitests-for-ci` — remains the separate, harder follow-up. **The post-merge CI run measured the actual effect of step (1) → §12 (it de-noised every grid but flipped *zero* tests green; the §11f "fix the shell first → focus-typing flips green" prediction is REFUTED).**
+
+---
+
+## 12. Addendum (2026-07-01) — `silence-bash-deprecation` measured in CI: banner gone, but focus-typing still fails (the §11f prediction refuted)
+
+> **Provenance:** 2026-07-01. Empirical — read the `.xcresult` artifact of the **post-merge** run **`28467944762`** (head = the `silence-bash-deprecation` archive commit, `macos-26`, Apple VM 26.4/25E246), the first CI to include the fix. `gh run download 28467944762`; unpacked with `xcrun xcresulttool get test-results summary` + `… export attachments`; grepped all **221** attachments for the banner text; cross-read `AppUITests/XttyUITestSupport.swift` (`GridDumpReader.waitForContains`).
+
+**Result: the fix works — and it flips zero tests green.** Counts are unchanged at **30 pass / 7 fail / 1 skip** (same as `28425122861`). `test-core` stays green (the required gate); `build-and-test` stays non-blocking red.
+
+### 12a. ✅ The banner is gone from **100%** of grids
+`grep` for `default interactive shell is now zsh` / `chsh -s /bin/zsh` / `HT208050` across all 221 exported attachments → **0 hits** (was pervasive in `28425122861`). Bucket A's **grid corruption is resolved**; every grid dump is now clean (e.g. the paste grid is a bare `…runner$` with no banner above it). This is the real, durable win — and it lands for **every** bash user, not just CI.
+
+### 12b. ❌→ The §11b *mechanism* was wrong, and the §11f *prediction* is REFUTED — focus-typing still fails
+§11b attributed the focus-typing false negative to **the banner** splitting the marker, and §11f predicted "fix the shell first → focus-typing flips green." **Both are refuted by the banner-free run:** `testFocusTypingOnActivateWithoutClicking` **still fails**, and the grid dump shows why —
+```
+sjc22-be113-ee403fcc-402e-4029-abb6-4b1aad69eb0d-E68CD1ABBBB3:/ runner$ X
+TTYFOCUS331
+```
+The marker `XTTYFOCUS331…` **does** reach the grid (the `focus-typing-typed` screenshot shows it on-screen — **focus-on-activate genuinely works**), but the runner's **~72-char hostname prompt** (`\h:\w \u\$` with a long virtual-host name) fills the row, so the marker wraps at the terminal's right edge: `X` ends the prompt row, `TTYFOCUS331…` spills to the next. `GridDumpReader.waitForContains` does a raw `text.contains(needle)` over rows joined by `\n`, so `X\nTTYFOCUS331…` can never match the contiguous `XTTYFOCUS331…`. **The split was never the banner — it's the long CI prompt wrapping the marker.** The banner *also* split it in `28425122861` (hence the att1/att2 flip §11b saw), which masked the real, independent cause.
+
+So the §11b **conclusion stands and is strengthened** (focus works; it's a false negative; keep the test) but its **cause is corrected**, and the **fix changes**: not "silence the banner" (done, didn't help here) but **make the assertion wrap-tolerant** — strip newlines/whitespace before the `contains` check (or add a `waitForContainsIgnoringWraps`). This is a tiny harness-robustness fix, independent of the Cmd/menu work, and belongs to `harden-xcuitests-for-ci`.
+
+### 12c. Residual, re-bucketed against the banner-free baseline
+The 7 failures are now cleanly **6 Bucket-B + 1 false-negative-wrap** (Bucket A retired):
+
+| # | Test | Bucket | Cause (banner-free run) |
+|---|---|---|---|
+| 1 | `testFocusTypingOnActivateWithoutClicking` | wrap (false neg) | long CI prompt wraps the typed marker across rows → 12b |
+| 2 | `testDirectionalFocusMovesBetweenPanes` | B | Cmd+arrow / Cmd+D split didn't fire (`nil ≠ Optional(2)`) |
+| 3 | `testNewTabOpensAndLastPaneCloseEscalates` | B | Cmd+T didn't open a 2nd tab |
+| 4 | `testLifecycleChurnReturnsCensusToBaseline` | B | Cmd+T/D churn → "Application not running" |
+| 5 | `testMultiLinePasteIsNotAutoExecuted` | B | Cmd+V paste didn't land (paste grid empty) |
+| 6 | `testTruecolorEmojiAndWideChars` | B | non-BMP/CJK line is Cmd+V-pasted → didn't land (truecolor's *typed* half passes) |
+| 7 | `testFindBarOpensLocatesAndDismisses` | B | Edit▸Find menu item not clickable |
+
+### 12d. Net + revised sequencing for `harden-xcuitests-for-ci`
+- **Step (1) `silence-bash-deprecation` was still the right call** — it de-noised 100% of CI grids and fixes a real papercut for all bash users — but it is **not sufficient to green any CI test**. The §11f framing of it as "the cheapest win that flips focus-typing" overstated its CI effect; its true CI value is **de-noising + restoring zsh shell-integration coverage** (the runner shell is `bash`, so the ZDOTDIR injection still won't run there — that needs a step that actually launches zsh under test).
+- **The residual `harden-xcuitests-for-ci` is two independent fixes:** (a) **focus-typing** → a one-line wrap-tolerant assertion (cheap, do first now that its true cause is known); (b) **the 6 Bucket-B** → the §10e/§11f hybrid (env-triggers through real handlers + a11y-IDs on NSMenuItems + click-first + `typeKey`) for Cmd-key/menu delivery on the shared VM session. Keep the GUI job non-blocking; `test-core` stays the only required gate.
 
 ---
 
@@ -269,6 +309,7 @@ The failure UI hierarchy shows xtty's own `MenuBarItem`s present — **`xtty / V
 
 - **xtty repo:** `Makefile`, `project.yml`, `scripts/bootstrap-swiftterm.sh`, `patches/swiftterm/UPSTREAM_CONFIG.sh` + `xtty-accessors.diff`, `.gitignore`, `XttyCore/Package.{swift,resolved}`, `AppUITests/*` (StateDumpReader/GridDumpReader, `XTTY_*` triggers), `AGENTS.md`
 - **§11 artifact evidence (2026-07-01):** the two `.xcresult` artifacts of run `28425122861` (`gh api repos/kitimark/xtty/actions/runs/28425122861/artifacts`, ids `7972842439`/`7987195834`), unpacked + read with `xcrun xcresulttool get test-results summary` and `… export attachments` (screenshots, grid dumps, `App UI hierarchy`, screen recordings); cross-checked against `AppUITests/XttyUITests.swift` + `XttyMultiplexingUITests.swift` + `XttyUITestSupport.swift`
+- **§12 artifact evidence (2026-07-01):** the `.xcresult` of the **post-merge** run `28467944762` (head = the `silence-bash-deprecation` archive commit), `gh run download`; `xcrun xcresulttool … summary` + `… export attachments`; `grep` of all 221 attachments for the banner text (0 hits); `focus-typing-grid`/`focus-typing-typed`/`paste-grid` dumps + `GridDumpReader.waitForContains` (`XttyUITestSupport.swift:117–121`)
 - **GitHub:** docs.github.com (Actions billing for public repos, standard vs larger runners, `macos-*` labels), the **`actions/runner-images`** repo (macos-26 README + software manifest, `Install-Xcode.ps1` Metal `-ge 26` gate, runner-image issues #13014 / #13080 / #13094), `actions/cache`, `maxim-lobanov/setup-xcode`, `irgaly/xcode-cache`, `softprops/action-gh-release`, `ncipollo/release-action`, `amannn/action-semantic-pull-request`
 - **OSS workflows (read):** Ghostty `.github/workflows/release-tip.yml` (Namespace runners + codesign/notarize), `MrKai77/Loop` `dev-build.yml` (GitHub-hosted full notarize), `FlashSpace` `ci.yml`/`pr.yml` (XcodeGen + Conventional-Commit lint), Americano/Thaw/Mythic/Stats (cache keys + secret-free `CODE_SIGNING_ALLOWED=NO`)
 - **Companion:** [`distribution-signing-research.md`](distribution-signing-research.md) (the $0/Homebrew/$99 distribution arc this CI release seam plugs into)
