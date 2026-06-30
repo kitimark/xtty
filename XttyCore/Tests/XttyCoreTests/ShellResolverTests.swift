@@ -108,6 +108,36 @@ final class ShellResolverTests: XCTestCase {
         XCTAssertNil(config.environment["USER"])
     }
 
+    // MARK: launchConfig — bash deprecation banner
+
+    func testBashSeedSilencesDeprecationBanner() {
+        let config = ShellResolver.launchConfig(forShell: "/bin/bash", environment: [:])
+        XCTAssertEqual(config.environment["BASH_SILENCE_DEPRECATION_WARNING"], "1",
+                       "a bash login shell's seed must silence the macOS deprecation banner")
+    }
+
+    func testNonBashSeedOmitsDeprecationVar() {
+        let zsh = ShellResolver.launchConfig(forShell: "/bin/zsh", environment: [:])
+        XCTAssertNil(zsh.environment["BASH_SILENCE_DEPRECATION_WARNING"],
+                     "the deprecation var is bash-gated; zsh must not carry it")
+        // The established zsh seed-env contract is unaffected.
+        XCTAssertEqual(zsh.execName, "-zsh")
+        XCTAssertEqual(zsh.environment["TERM"], "xterm-256color")
+        XCTAssertEqual(zsh.environment["COLORTERM"], "truecolor")
+        XCTAssertEqual(zsh.environment["LANG"], "en_US.UTF-8")
+    }
+
+    func testProfileEnvCanOverrideBashDeprecationVar() {
+        // The var is a seed default applied before the override.env merge, so an
+        // explicit profile `env` still wins (consistent with TERM/LANG).
+        let config = ShellResolver.launchConfig(
+            override: LaunchOverride(env: ["BASH_SILENCE_DEPRECATION_WARNING": "0"]),
+            forShell: "/bin/bash",
+            environment: [:]
+        )
+        XCTAssertEqual(config.environment["BASH_SILENCE_DEPRECATION_WARNING"], "0")
+    }
+
     // MARK: launchConfig — profile launch overrides
 
     func testCommandRunsViaLoginInteractiveShellWrap() {

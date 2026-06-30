@@ -111,7 +111,10 @@
 # ~/.zshrc:
 #   source "/Applications/xtty.app/Contents/Resources/shell-integration/zsh/xtty-integration"
 # (Adjust the path if xtty is installed elsewhere.) bash/fish are not yet
-# auto-integrated.
+# auto-integrated. When your shell is bash, xtty sets
+# BASH_SILENCE_DEPRECATION_WARNING so macOS's "the default interactive shell is
+# now zsh" banner doesn't print on every launch (set it yourself via a profile
+# `env` to change that).
 
 # --- Close confirmation ---
 #

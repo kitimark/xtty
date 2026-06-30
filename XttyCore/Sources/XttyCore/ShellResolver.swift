@@ -143,6 +143,12 @@ public enum ShellResolver {
         let execName = "-" + base
 
         var seed = seedEnvironment(environment: environment)
+        // Silence the macOS bash deprecation banner ("The default interactive
+        // shell is now zsh…"), which the system `/etc/bashrc` prints into the
+        // terminal unless this var is set. A seed default (set before the
+        // `override.env` merge, so a profile `env` can still override it); gated
+        // to bash so it is a no-op for zsh and other shells.
+        if base == "bash" { seed["BASH_SILENCE_DEPRECATION_WARNING"] = "1" }
         for (key, value) in override.env { seed[key] = value }
 
         // Shell-integration injection (zsh only): redirect ZDOTDIR to xtty's
