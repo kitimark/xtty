@@ -195,6 +195,15 @@ The decisive xtty-specific constraint: **xtty's terminal content view is custom-
 - **Verify-before-acting (critic):** confirm a11y-IDs added to xtty's NSMenuItems actually make `menuItems[id]` resolve on the runner; the quake `NSPanel` may focus differently than a normal window (check `XttyQuickTerminalUITests` separately); DDG's robustness used an `xlarge`+notarized build at 1920×1080 — the delta to xtty's ad-hoc/default-runner posture may matter; the churn "Application not running" is a contention/lifecycle symptom (confirmed from the log) but the exact chain is inferred; re-run `testBasicTypedEcho` N× to confirm its pass is reliable, not itself intermittent.
 - **Status:** planned, **not yet proposed** (`add-ci-pipeline` stays open; this is its follow-up).
 
+### 10g. Primary sources for the focus-on-activate / frontmost mechanism (sourced 2026-06-30)
+
+The claim that a native macOS app **can't reliably self-activate on a CI runner** (so menu key-equivalents, the menu bar, and focus-on-activate are unreliable) is a synthesis of documented mechanisms + community evidence — there is **no single official "CI can't run macOS UI tests" statement**:
+- ✅ **macOS 14 made activation *cooperative*** — the load-bearing anchor. `activate(ignoringOtherApps:)` is **deprecated**; only the *currently-active* app can `yieldActivation(to:)` another, so a test-launched/background app **cannot force itself frontmost**. On a CI session there's no cooperating active app to yield → activation isn't guaranteed. ([activate(ignoringOtherApps:) — deprecated](https://developer.apple.com/documentation/appkit/nsapplication/activate(ignoringotherapps:)), [WWDC23 "What's new in AppKit"](https://developer.apple.com/videos/play/wwdc2023/10054/), [yieldActivation(to:)](https://developer.apple.com/documentation/appkit/nsapplication/yieldactivation(to:)))
+- ✅ **XCUITest typing requires keyboard focus** — the *"Neither element nor any descendant has keyboard focus"* error, cured by **click/tap-first**. ([typeText(_:)](https://developer.apple.com/documentation/xctest/xcuielement/1500968-typetext), [forum 11520](https://developer.apple.com/forums/thread/11520), [forum 5910](https://developer.apple.com/forums/thread/5910)) — *(caveat: some threads are iOS-Simulator context; the focus requirement is general, the "Connect Hardware Keyboard" fix is simulator-only.)*
+- ✅ **The system menu bar shows the *active* app's `mainMenu`** — so a non-active app's menu items aren't queryable (why `menuItems["Find…"]` returned "No matches"). A consequence of the activation point above. ([NSApplication](https://developer.apple.com/documentation/appkit/nsapplication))
+- ❓ **"It's flaky on hosted CI" is community-reported + empirical (our run + the §10c field study), not officially specified.** ([GitHub community discussion #65667](https://github.com/orgs/community/discussions/65667), [Apple XCTest forums](https://developer.apple.com/forums/tags/xctest))
+- The **"run it locally/IDE-only, skip on CI"** conclusion is a practice recommendation following peer behavior (Ghostty), not a spec.
+
 ---
 
 ## Sources
