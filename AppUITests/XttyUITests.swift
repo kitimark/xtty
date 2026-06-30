@@ -43,7 +43,11 @@ final class XttyUITests: XCTestCase {
         attachGridDump("focus-typing-grid")
 
         if GridDumpReader.isAvailable {
-            XCTAssertTrue(GridDumpReader.waitForContains(marker, timeout: 5),
+            // Wrap-tolerant: on CI a long shell prompt soft-wraps the marker
+            // across physical rows, which the dump joins with "\n". The marker
+            // still reached the focused pane (focus works), so match across the
+            // wrap; a genuinely absent marker still fails the assertion.
+            XCTAssertTrue(GridDumpReader.waitForContains(marker, timeout: 5, ignoringLineWraps: true),
                           "typed marker never reached the grid - focus-on-activate failed")
         } else {
             XCTAssertTrue(app.mainWindow.exists)

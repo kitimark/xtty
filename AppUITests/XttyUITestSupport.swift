@@ -114,10 +114,27 @@ enum GridDumpReader {
         poll(timeout: timeout) { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
-    /// Poll until the grid contains `needle` or timeout.
+    /// Poll until the grid contains `needle` or timeout. With `ignoringLineWraps:
+    /// true`, a token split across a soft-wrap row boundary in the dump still
+    /// matches; a genuinely absent token still fails. The default stays strict
+    /// (physical-row exact), so existing callers are unaffected.
     @discardableResult
-    static func waitForContains(_ needle: String, timeout: TimeInterval) -> Bool {
-        poll(timeout: timeout) { $0.contains(needle) }
+    static func waitForContains(_ needle: String, timeout: TimeInterval, ignoringLineWraps: Bool = false) -> Bool {
+        poll(timeout: timeout) { gridContains($0, needle, ignoringLineWraps: ignoringLineWraps) }
+    }
+
+    /// Substring check over a grid-dump string. The dump joins the terminal's
+    /// physical rows with "\n" (see App/UITestDump.swift), so a logical line the
+    /// terminal soft-wrapped — e.g. text typed at a long prompt — is split by a
+    /// "\n" mid-token. With `ignoringLineWraps`, those row boundaries are removed
+    /// before matching so a unique token is still found; without it the match is
+    /// exact. It never fabricates a match (an absent needle stays absent), so the
+    /// negative assertion still holds. Use the wrap-tolerant mode only with tokens
+    /// that cannot legitimately span a hard line break.
+    static func gridContains(_ haystack: String, _ needle: String, ignoringLineWraps: Bool) -> Bool {
+        if haystack.contains(needle) { return true }
+        guard ignoringLineWraps else { return false }
+        return haystack.replacingOccurrences(of: "\n", with: "").contains(needle)
     }
 
     private static func poll(timeout: TimeInterval, _ predicate: (String) -> Bool) -> Bool {

@@ -28,6 +28,10 @@ enum UITestDump {
                 characterProvider: { engine.getCharacter(for: $0) }
             ) ?? "")
         }
+        // The dump is the terminal's *physical* rows joined with "\n", so a
+        // logical line the terminal soft-wrapped (e.g. text typed at a long
+        // prompt) is split across rows. Out-of-process readers asserting on such
+        // content use GridDumpReader's wrap-tolerant matcher (ignoringLineWraps).
         do {
             try lines.joined(separator: "\n").write(
                 toFile: gridDumpPath, atomically: true, encoding: .utf8)
