@@ -128,6 +128,20 @@ Tag-triggered (`on: push: tags: ['v*']`), **$0 ad-hoc now** — ties to [`distri
 
 ---
 
+## 9. Addendum (2026-06-30) — first CI run results (the two unknowns, resolved)
+
+*The pipeline was implemented (`add-ci-pipeline`) and the remote wired + pushed; the first run (`ci` · `28425122861`, push to `main`, `macos-26`) settled both researched unknowns — both favorably.*
+
+- ✅ **Metal toolchain — RESOLVED: preinstalled** (the 2-2 split collapses to "preinstalled for the release default"). The image's default release Xcode is **26.5** (a release, not an RC); the build used the preinstalled `MetalToolchain-v17.6.42.0` cryptex (`/var/run/com.apple.security.cryptexd/…/Metal.xctoolchain/usr/bin/metal`) and compiled SwiftTerm's `Shaders.metal` → `default.metallib` with **no download** — the idempotent guard was a no-op. (Updates §1/§2/§8: the guard stays as cheap insurance for a future RC-default or metal-less image, but the release default has Metal.)
+- ✅ **`test-core` (required gate) — PASSED in 1m6s.** Reconstituted SwiftTerm + `swift test --package-path XttyCore` green on a stock runner. The deterministic gate works; this is the check to require in branch protection.
+- ✅ **XCUITest on a hosted runner — the predicted drive-path risk is REFUTED.** **34 of 41** UI tests pass (`build-and-test`, 8m35s). The synthesized-input drive path works on the auto-login runner: typing, key chords, **Cmd+V**, real **zsh injection**, and both the `/tmp` **grid-dump and state-dump** assertions all function (the complex semantic-capture, spatial-blocks, block-sidebar, git-review, profiles, quick-terminal, performance-harness suites are green; `testBasicTypedEcho` passes, proving basic typed input reaches the window).
+- ⚠️ **7 deterministic CI-environment failures** (each failed all 3 `-retry-tests-on-failure` attempts, so not flaky): `testTruecolorEmojiAndWideChars`, `testMultiLinePasteIsNotAutoExecuted`, `testFocusTypingOnActivateWithoutClicking`, `testFindBarOpensLocatesAndDismisses`, `testSplitCreatesAndClosesPanes`, `testDirectionalFocusMovesBetweenPanes`, `testLifecycleChurnReturnsCensusToBaseline`. **Hypothesised cluster:** window **focus/key-activation** on the headless auto-login session (focus-on-activate-without-clicking, split-keybind delivery, directional focus, and the churn test that needs splits to form — note basic typing *works*, so it's activation/keybind-delivery, not blanket focus loss), plus two outliers — **clipboard** (`NSPasteboard` likely empty on CI → paste no-op) and **rendering/locale** (truecolor/emoji/wide grid-dump content). All fixable with per-test hardening (explicit window activation, the `XTTY_TEST_*` env-trigger pattern instead of synthesized focus/keybinds, clipboard seeding, a locale env) — but that's **iterative CI debugging** (push → ~8 min → repeat), genuinely separate from standing up CI.
+- 🟢 **Net:** the CI pipeline is sound and does its job — `test-core` is the green gate, and the **non-blocking `build-and-test` correctly *surfaced* the CI-sensitivities instead of blocking merges** (exactly its design intent). The 7-test hardening is **follow-up** (a candidate `harden-xcuitests-for-ci` change), not a defect in `add-ci-pipeline`.
+- 🔧 **Minor nit:** a run annotation flags `actions/checkout@v4` + `actions/cache@v4` forced onto Node 24 (Node 20 deprecation) — harmless now; bump to `@v5` when convenient.
+- **Status:** `add-ci-pipeline` left **OPEN** (per decision) — done: 1.1 (push), 5.1 (Metal), 5.2 (test-core), 5.3 (smoke); remaining: 1.2 (make repo public — and note that while private each ~8-min run burns ~80 metered macOS-minutes at the 10× multiplier), 5.4 (pr-lint — needs a PR to fire), 5.5 (optional branch protection), 6.1 (archive). The 7-test hardening is the open question before promoting `build-and-test` toward a required gate.
+
+---
+
 ## Sources
 
 - **xtty repo:** `Makefile`, `project.yml`, `scripts/bootstrap-swiftterm.sh`, `patches/swiftterm/UPSTREAM_CONFIG.sh` + `xtty-accessors.diff`, `.gitignore`, `XttyCore/Package.{swift,resolved}`, `AppUITests/*` (StateDumpReader/GridDumpReader, `XTTY_*` triggers), `AGENTS.md`

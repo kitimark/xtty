@@ -1,6 +1,6 @@
 ## 1. Prerequisites (human-gated — cannot be done by a committed file)
 
-- [ ] 1.1 Wire the git remote and push: `git remote add origin git@github.com:kitimark/xtty.git` and push `main`
+- [x] 1.1 Wire the git remote and push: `git remote add origin git@github.com:kitimark/xtty.git` and push `main` *(done; first CI run `28425122861` triggered)*
 - [ ] 1.2 Make the repository **public** (so GitHub-hosted macOS runner minutes are free + unlimited)
 
 ## 2. CI workflow (`.github/workflows/ci.yml`)
@@ -20,9 +20,9 @@
 
 ## 5. Verify on the first real runs (resolve the researched unknowns)
 
-- [ ] 5.1 Confirm the **Metal** situation: on the actually-scheduled `macos-26` image for the selected Xcode, verify `xcrun -f metal` resolves (guard is a no-op) — or that the guard's download succeeds; record release-vs-RC of the chosen Xcode
-- [ ] 5.2 Confirm the **`test-core`** job is green on CI (the required gate)
-- [ ] 5.3 Smoke-test the **`build-and-test`** (XCUITest) job on a real run; keep it non-blocking; capture the `.xcresult` if it fails to judge drive-path reliability
+- [x] 5.1 Confirm the **Metal** situation — **RESOLVED: preinstalled.** The image's default release Xcode is **26.5** (a release, not an RC); the build used the preinstalled `MetalToolchain-v17.6.42.0` cryptex and compiled SwiftTerm's `Shaders.metal` with no download. The guard was a no-op. (The 2-2 research split resolves to "preinstalled for the release default.")
+- [x] 5.2 Confirm the **`test-core`** job is green on CI (the required gate) — **PASSED in 1m6s** (run `28425122861`)
+- [x] 5.3 Smoke-test the **`build-and-test`** (XCUITest) job — **DONE: infra works, drive-path risk REFUTED.** 34/41 XCUITests pass on the hosted runner (typing, keys, Cmd+V, zsh injection, grid+state dumps all functional). **7 CI-environment-sensitive tests fail** (each retried 3×): `testTruecolorEmojiAndWideChars`, `testMultiLinePasteIsNotAutoExecuted`, `testFocusTypingOnActivateWithoutClicking`, `testFindBarOpensLocatesAndDismisses`, `testSplitCreatesAndClosesPanes`, `testDirectionalFocusMovesBetweenPanes`, `testLifecycleChurnReturnsCensusToBaseline` (likely cluster: window focus/activation on the auto-login session + clipboard for paste + rendering/locale for truecolor). Job correctly **non-blocking**; hardening these is **follow-up**, not v1.
 - [ ] 5.4 Confirm **`pr-lint`** fires correctly on a test PR (rejects a bad title, accepts a Conventional one)
 - [ ] 5.5 (Optional) Configure branch protection so `test-core` is a required status check (GitHub repo setting, not a committed file)
 
