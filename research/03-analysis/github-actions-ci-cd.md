@@ -132,6 +132,8 @@ Tag-triggered (`on: push: tags: ['v*']`), **$0 ad-hoc now** — ties to [`distri
 
 *The pipeline was implemented (`add-ci-pipeline`) and the remote wired + pushed; the first run (`ci` · `28425122861`, push to `main`, `macos-26`) settled both researched unknowns — both favorably.*
 
+> **Update (§11, 2026-07-01):** the per-test reading below (esp. the "focus/activation cluster + clipboard + **rendering/locale**" framing) was logs-only; **§11** re-investigates the actual `.xcresult` screenshots/grid-dumps and **corrects it** — the truecolor/emoji failure is **Cmd+V**, not locale; the runner shell is **`/bin/bash`** (a missed factor); authoritative counts are **30/7/1**, not 34/41.
+
 - ✅ **Metal toolchain — RESOLVED: preinstalled** (the 2-2 split collapses to "preinstalled for the release default"). The image's default release Xcode is **26.5** (a release, not an RC); the build used the preinstalled `MetalToolchain-v17.6.42.0` cryptex (`/var/run/com.apple.security.cryptexd/…/Metal.xctoolchain/usr/bin/metal`) and compiled SwiftTerm's `Shaders.metal` → `default.metallib` with **no download** — the idempotent guard was a no-op. (Updates §1/§2/§8: the guard stays as cheap insurance for a future RC-default or metal-less image, but the release default has Metal.)
 - ✅ **`test-core` (required gate) — PASSED in 1m6s.** Reconstituted SwiftTerm + `swift test --package-path XttyCore` green on a stock runner. The deterministic gate works; this is the check to require in branch protection.
 - ✅ **XCUITest on a hosted runner — the predicted drive-path risk is REFUTED.** **34 of 41** UI tests pass (`build-and-test`, 8m35s). The synthesized-input drive path works on the auto-login runner: typing, key chords, **Cmd+V**, real **zsh injection**, and both the `/tmp` **grid-dump and state-dump** assertions all function (the complex semantic-capture, spatial-blocks, block-sidebar, git-review, profiles, quick-terminal, performance-harness suites are green; `testBasicTypedEcho` passes, proving basic typed input reaches the window).
@@ -145,6 +147,8 @@ Tag-triggered (`on: push: tags: ['v*']`), **$0 ad-hoc now** — ties to [`distri
 ## 10. Addendum (2026-06-30) — the 7 GUI failures: diagnosis, the "headless" correction, and the hybrid hardening plan (`harden-xcuitests-for-ci`)
 
 *Two follow-on workflows: (a) a per-test diagnosis of the 7 failures against the test sources + the env-trigger infra; (b) a per-project deep read of 8 real OSS macOS apps + Apple/GitHub docs to **verify or break** the "can't run on CI" framing (one agent per repo). Critic verdicts: both **usable-with-caveats**.*
+
+> **Update (§11, 2026-07-01):** §10 was logs-only. **§11** reads the actual `.xcresult` artifacts and **confirms the Bucket-B / Cmd-key thesis with screenshots** while correcting two per-test calls: **focus-on-activate is a *false negative*** (the marker reaches the grid; the bash banner splits the string — §11b, keep the test, don't rewrite it), and **find-bar — xtty *does* own its menu bar** (§11e). The §10e/§10f hybrid plan stands, re-sequenced to **fix the shell first** (§11f).
 
 ### 10a. Terminology correction — "headless" was imprecise ❌→✅
 
@@ -206,9 +210,65 @@ The claim that a native macOS app **can't reliably self-activate on a CI runner*
 
 ---
 
+## 11. Addendum (2026-07-01) — artifact-level re-investigation of run `28425122861` (first read of the actual screenshots/grid-dumps; corrects §9–§10)
+
+*Method: downloaded **both** `.xcresult` artifacts (attempt 1 `7972842439` + attempt 2 `7987195834`, ~137 MB each) and exported all ~210 attachments per attempt with `xcrun xcresulttool export attachments` — screenshots, grid dumps, UI hierarchies, screen recordings. §9/§10 reasoned from the **text logs only**; this is the first read of the on-screen evidence. Env (both attempts): **Apple Virtual Machine, macOS 26.4 (25E246)**, on two **different** VM hosts (att1 `sjc22-bt143…`, att2 `iad20-eo1205…`) → host-reproducible, not a one-off.*
+
+**Authoritative per-test counts** (from the xcresult, both attempts identical): **30 passed / 7 failed / 1 skipped** = 38 distinct tests; **52 runs** incl. `-retry-tests-on-failure` (each failure failed all 3 attempts → deterministic, not flaky-within-a-run). Refines §9's "34/41" framing (counted differently). The failing **set** flips by one between attempts — att1 fails `testFocusTypingOnActivateWithoutClicking`, att2 fails `testNewTabOpensAndLastPaneCloseEscalates`; the other 6 are common — the signature of two independent timing races (below).
+
+### 11a. NEW factor §9/§10 missed — the runner's login shell is `/bin/bash` ✅
+
+Every grid dump + screenshot shows the macOS bash deprecation banner (prompt is `runner$`, not zsh `%`):
+```
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.
+```
+Consequences, all visible in the artifacts: it (a) **corrupts the grid** (command output overwrites the banner mid-line — e.g. `ORANGE5724your account to use zsh…`), (b) **races the test's typed input**, and (c) leaves the app's **zsh OSC shell-integration inert** — passing tests carry attachments literally named `semantic-capture-inactive (host zsh config?)`. None of §9/§10 mention the shell; it is a distinct, cheap-to-fix environmental factor (`BASH_SILENCE_DEPRECATION_WARNING=1`, `~/.hushlogin`, or force a clean zsh for the test session).
+
+### 11b. CORRECTION to §10e/§10g — `testFocusTypingOnActivateWithoutClicking` is a **false negative**, not an "unreliable property" ❌→✅
+
+§10e/§10g concluded focus-on-activate is "genuinely unreliable on the shared session" and recommended **rewrite/abandon**. The artifacts **refute** that. The test `app.activate()` then `app.typeText("XTTYFOCUS<n>")` and asserts `GridDumpReader.waitForContains(marker)` (`AppUITests/XttyUITests.swift:36–47`). Evidence (`focus-typing-typed` png + grid dumps):
+- The marker **reaches the terminal and is visible on-screen** — focus-on-activate **works**.
+- It fails in att1 **only** because the async bash banner **splits the marker across a line wrap**: `runner$ X` then `TTYFOCUS6366interactive shell is now zsh.` — so the contiguous substring `XTTYFOCUS6366` doesn't exist → `.contains()` fails.
+- In att2 the same marker lands contiguous (`XTTYFOCUS3141nteractive…`) → **passes**.
+
+So the correct fix is **silence the shell banner** (11a) and keep the test — it is a *valid* focus test defeated by grid noise, not a tautology to delete. (This also explains why this specific test flips between attempts.)
+
+### 11c. CONFIRMS §10d's Cmd+V diagnosis — paste + emoji, with screenshots (and corrects §9's "rendering/locale") ✅
+
+Both `testMultiLinePasteIsNotAutoExecuted` and the i18n half of `testTruecolorEmojiAndWideChars` deliver content via **`NSPasteboard` + `typeKey("v", .command)`** (Cmd+V = Edit▸Paste key-equiv) — `AppUITests/XttyUITests.swift:65` and `:206–210`. On the VM the paste **doesn't fire**, so `alpha…/beta…` and `echo … 🚀 日本語 ✅` never land:
+- **truecolor passes its own assertion** — `printf …ORANGE<tag>` is *typed* (ASCII) and `ORANGE<tag>` is in the grid; only the **Cmd+V-pasted** 🚀/CJK line is missing. → **not a font/`characterProvider` or locale gap** (corrects §9's "rendering/locale" outlier and the test's own `characterProvider not applied?` message); it's the same Cmd+V failure as the paste test.
+- This **vindicates §10d** ("emoji block arrived via Cmd+V") with direct evidence — and supersedes the looser "bash race ate the emoji" hypothesis floated mid-investigation.
+
+### 11d. CONFIRMS Bucket B (Cmd-key menu key-equivalents) for mux/churn — with screenshots ✅
+
+- `testDirectionalFocusMovesBetweenPanes` end-state (`after-focus-left` png): xtty **active + frontmost** (menu bar = xtty) but still **one pane** — `Cmd+D` produced no split. `paneCount` stays 1 → `waitForState{==2}` returns nil → the `"nil" ≠ "Optional(2)"` assert. (So the `nil` is "state never changed," and the dump mechanism itself works — the launch-guard `waitForState != nil` passed.)
+- `testSplitCreatesAndClosesPanes` `after-close` png: **Finder desktop, no xtty window** — a later `Cmd+W` closed the sole pane → window → **app quit** (and `testLifecycleChurn…` likewise reports "Application not running"). The quit-escalation chain §10d inferred is confirmed on-screen.
+
+### 11e. REFINES find-bar (§10d/§10g) — xtty **does** own its menu bar
+
+The failure UI hierarchy shows xtty's own `MenuBarItem`s present — **`xtty / View / Window / Help`** — so "the menu bar belongs to the frontmost app / a non-active app's items aren't queryable" is too strong as stated for xtty. What's actually true in the failing snapshot: the whole app element is `Disabled` (not key/active) and there is **no Edit menu**, so the `menuItems["Find…"]` query finds nothing. Still Bucket B (menu-command/activation), but the precise mechanism is "menu won't open / app not key," not "xtty doesn't own the bar."
+
+### 11f. Re-bucketed, evidence-grounded — and the revised `harden-xcuitests-for-ci` sequencing
+
+| Bucket | Tests | Cause | Fix |
+|---|---|---|---|
+| **A — bash banner grid corruption** (environmental) | `focus-typing` (proven false neg) + grid noise + dead zsh shell-integration | runner login shell = `/bin/bash` | **silence/replace the shell** — fixes focus-typing + de-flakes + re-enables semantic capture; cheapest win |
+| **B — Cmd-key menu key-equivalents don't fire on the shared VM session** (genuine, the §10 thesis — now visually confirmed) | paste, truecolor-emoji (both Cmd+V); split, directional, new-tab (Cmd+D/T/Opt-arrow); churn; find-bar (menu click) | a native app can't *reliably* own the shared host session's key-window/menu-bar the instant XCUITest fires (§10a/§10g mechanism) | §10e hybrid: env-triggers through the real handlers + a11y-IDs on NSMenuItems + click-first + `typeKey` |
+
+**Honest correction to the mid-investigation summary:** the dominant factor **by count** is **Bucket B** (6 of 7 failures involve a Cmd-key/menu key-equivalent) — §10's core thesis stands and is now screenshot-confirmed. The bash shell (Bucket A) is a **real but smaller** addition: it cleanly explains exactly **one** hard failure (focus-typing) plus the flaky membership and the inert shell-integration. Earlier in this investigation the bash race was over-credited for truecolor/paste; the test source shows those are Cmd+V (Bucket B).
+
+**Revised sequencing for `harden-xcuitests-for-ci`:** (1) **fix the shell first** — flips focus-typing, kills the flaky membership, restores semantic-capture coverage, removes banner noise from every grid; then (2) the residual is **pure Bucket B** — scope the hybrid hardening to Cmd-key/menu delivery (env-triggers + a11y-IDs), **not** fonts, locale, pasteboard *content*, or menu-bar *ownership* (all three ruled out here). Keep the GUI job non-blocking; `test-core` stays the only required gate.
+
+> **Update (2026-07-01) — step (1) shipped as `silence-bash-deprecation`.** A follow-on `/opsx:explore` corrected the "one CI env line" assumption above: `ShellResolver.seedEnvironment` hands the child shell a **curated** env (only `TERM`/`COLORTERM`/`LANG`/`HOME`/`USER`/`LOGNAME`), so a `ci.yml`/`launchEnvironment` setting is **stripped before the shell starts** and silently no-ops. The fix is a **product** one-liner — seed `BASH_SILENCE_DEPRECATION_WARNING=1` for bash login shells (gated to `base == "bash"`, before the `override.env` merge so a profile `env` still wins) — which *also* fixes the same banner for every real bash user, not just CI. Implemented + unit-tested in `ShellResolver`/`ShellResolverTests` (235 `XttyCore` tests green); modifies the `terminal-session` "Shell resolution and launch configuration" requirement. Step (2) — the Bucket-B `harden-xcuitests-for-ci` — remains the separate, harder follow-up.
+
+---
+
 ## Sources
 
 - **xtty repo:** `Makefile`, `project.yml`, `scripts/bootstrap-swiftterm.sh`, `patches/swiftterm/UPSTREAM_CONFIG.sh` + `xtty-accessors.diff`, `.gitignore`, `XttyCore/Package.{swift,resolved}`, `AppUITests/*` (StateDumpReader/GridDumpReader, `XTTY_*` triggers), `AGENTS.md`
+- **§11 artifact evidence (2026-07-01):** the two `.xcresult` artifacts of run `28425122861` (`gh api repos/kitimark/xtty/actions/runs/28425122861/artifacts`, ids `7972842439`/`7987195834`), unpacked + read with `xcrun xcresulttool get test-results summary` and `… export attachments` (screenshots, grid dumps, `App UI hierarchy`, screen recordings); cross-checked against `AppUITests/XttyUITests.swift` + `XttyMultiplexingUITests.swift` + `XttyUITestSupport.swift`
 - **GitHub:** docs.github.com (Actions billing for public repos, standard vs larger runners, `macos-*` labels), the **`actions/runner-images`** repo (macos-26 README + software manifest, `Install-Xcode.ps1` Metal `-ge 26` gate, runner-image issues #13014 / #13080 / #13094), `actions/cache`, `maxim-lobanov/setup-xcode`, `irgaly/xcode-cache`, `softprops/action-gh-release`, `ncipollo/release-action`, `amannn/action-semantic-pull-request`
 - **OSS workflows (read):** Ghostty `.github/workflows/release-tip.yml` (Namespace runners + codesign/notarize), `MrKai77/Loop` `dev-build.yml` (GitHub-hosted full notarize), `FlashSpace` `ci.yml`/`pr.yml` (XcodeGen + Conventional-Commit lint), Americano/Thaw/Mythic/Stats (cache keys + secret-free `CODE_SIGNING_ALLOWED=NO`)
 - **Companion:** [`distribution-signing-research.md`](distribution-signing-research.md) (the $0/Homebrew/$99 distribution arc this CI release seam plugs into)
