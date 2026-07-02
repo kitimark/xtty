@@ -303,7 +303,7 @@ The 7 failures are now cleanly **6 Bucket-B + 1 false-negative-wrap** (Bucket A 
 - **Step (1) `silence-bash-deprecation` was still the right call** — it de-noised 100% of CI grids and fixes a real papercut for all bash users — but it is **not sufficient to green any CI test**. The §11f framing of it as "the cheapest win that flips focus-typing" overstated its CI effect; its true CI value is **de-noising + restoring zsh shell-integration coverage** (the runner shell is `bash`, so the ZDOTDIR injection still won't run there — that needs a step that actually launches zsh under test).
 - **The residual `harden-xcuitests-for-ci` is two independent fixes:** (a) **focus-typing** → a one-line wrap-tolerant assertion (cheap, do first now that its true cause is known); (b) **the 6 Bucket-B** → the §10e/§11f hybrid (env-triggers through real handlers + a11y-IDs on NSMenuItems + click-first + `typeKey`) for Cmd-key/menu delivery on the shared VM session. Keep the GUI job non-blocking; `test-core` stays the only required gate.
 
-> **Update (2026-07-01) — focus-typing (#1) carved out and implemented as `harden-focus-typing-assertion`.** The cheap fix (a) shipped as its own change: a scoped, opt-in wrap-tolerant matcher (`GridDumpReader.gridContains(_,_,ignoringLineWraps:)` + `waitForContains(…, ignoringLineWraps:)`) used only by the focus test; test-only, no product code, no SwiftTerm patch; one `verification-harness` ADDED requirement. Local `make test` confirmed `testFocusTypingOnActivateWithoutClicking` passes (the local prompt is short → trivial path) and no strict-default caller regressed. The 6 **Bucket-B** failures remain the harder follow-up — and that same local run surfaced the concrete mechanics of one of them (the churn test #4) → **§13**.
+> **Update (2026-07-01) — focus-typing (#1) carved out and implemented as `harden-focus-typing-assertion`.** The cheap fix (a) shipped as its own change: a scoped, opt-in wrap-tolerant matcher (`GridDumpReader.gridContains(_,_,ignoringLineWraps:)` + `waitForContains(…, ignoringLineWraps:)`) used only by the focus test; test-only, no product code, no SwiftTerm patch; one `verification-harness` ADDED requirement. Local `make test` confirmed `testFocusTypingOnActivateWithoutClicking` passes (the local prompt is short → trivial path) and no strict-default caller regressed. The 6 **Bucket-B** failures remain the harder follow-up — and that same local run surfaced the concrete mechanics of one of them (the churn test #4) → **§13**. **The CI green-flip is now CONFIRMED → §14a** (run `28472076179`).
 
 ---
 
@@ -315,7 +315,7 @@ The 7 failures are now cleanly **6 Bucket-B + 1 false-negative-wrap** (Bucket A 
 
 The churn test splits then closes immediately, waiting only for `paneCount == 2` (the pane is **registered**), not for the new shell to reach its prompt (`XttyLifecycleCensusUITests.swift:42-46`). When `Cmd+W` fires, the new pane's shell is still **sourcing its startup files**, so `hasForegroundJob` (`TerminalWindowController.swift:474`, `tcgetpgrp(fd) != shellPid`) is **true** — a startup child owns the PTY foreground — and `confirmClose()` (`:483`) puts up an `NSAlert` ("Close this pane? / A process is still running"). `runModal()` **blocks the main thread**, the close never completes, the pane survives → census `final 2` (one extra `PaneController` + `XttyTerminalView` + `TerminalSession`, exactly one pane's worth). Locally the user's `~/.zshrc` makes the startup window wide (`go env $(…)`, `eval "$(zoxide init zsh)"`, `. $(pack completion)`, oh-my-zsh, `compinit`, nvm — each a foreground child). Corroborating artifact evidence: the Synthesized-Event **timeline** shows the early churn ops firing fast (02.35.16-18) then four ~5 s gaps (02.35.24/29/34/40) = four `waitForState(timeout: 5)` timeouts after the app froze behind the modal.
 
-**Relation to CI #4:** on CI the same test fails as "Application not running" — a *different* symptom (there the `Cmd+W` escalation quit the app) but the same family (a synthesized-close drive-path hazard on a not-yet-settled shell). The local run gives the precise modal mechanism.
+**Relation to CI #4:** on CI the same test fails as "Application not running" — a *different* symptom (there the `Cmd+W` escalation quit the app) but the same family (a synthesized-close drive-path hazard on a not-yet-settled shell). The local run gives the precise modal mechanism. **Update (2026-07-02): the CI mechanism is now pinned too (→ §14b) — dropped Cmd+D (Bucket B), not this modal — so the fix below greens only the *local* flake.**
 
 **Fix (test-side, for `harden-xcuitests-for-ci`):** the churn test exercises *lifecycle teardown*, not the confirm dialog, so it should opt out — **`launchConfigured(config: "confirm-close = false")`** (cleanest, deterministic) or wait for the split pane's shell-prompt-ready before `Cmd+W`. A **product** angle exists but is **rejected as the fix**: confirm-close firing during a pane's *own* shell startup is a false positive, but distinguishing a startup child from a real foreground job cleanly is hard — fix the test, not the product.
 
@@ -327,11 +327,44 @@ The screen-recording `.mp4` and the `after-churn` screenshot showed the **editor
 
 ---
 
+## 14. Addendum (2026-07-02) — `harden-focus-typing-assertion` measured in CI: the green-flip is CONFIRMED; the churn test's CI mode is pure Bucket-B (the §13 fix won't green it there)
+
+> **Provenance:** 2026-07-02. Empirical — read the **post-merge** run **`28472076179`** (head = the `harden-focus-typing-assertion` archive commit `069fd30`, `macos-26`), the first `build-and-test` to carry the wrap-tolerant matcher, via `gh run view --log-failed` (log-level per-test verdicts + failure messages sufficed; no `.xcresult` download this time); diffed against §12's baseline run `28467944762`; cross-read `AppUITests/XttyLifecycleCensusUITests.swift` and `.github/workflows/ci.yml`.
+
+**Result: the fix works in CI — `testFocusTypingOnActivateWithoutClicking` flipped fail→pass.** Counts: **34 pass / 7 fail / 1 skip** (42 tests now that the 4 in-bundle `GridDumpReaderTests` joined; 56 executions with retries — each of the 7 failed 3/3). `test-core` stays green (the required gate); the run is red only because `build-and-test` has no `continue-on-error` — "non-blocking" is branch-protection policy, by design.
+
+### 14a. ✅ The §12b diagnosis + fix are CONFIRMED end-to-end — focus-typing is green in CI
+
+`testFocusTypingOnActivateWithoutClicking` **passed (5.48 s)** — it was fail-3/3 in `28467944762`. The wrap-tolerant `ignoringLineWraps` matcher greens the test against the runner's ~72-char wrapping prompt, closing the §12 arc: the "wrap" bucket is **retired**. (The pass count moved 30 → 34 because the 4 new no-app-launch `GridDumpReaderTests` also pass.)
+
+### 14b. ✅ The churn test's **CI** failure mode ≠ the **local** §13 race — the §13 fix alone won't green it in CI
+
+The CI log pins the mechanism: all 3 retries fail at `XttyLifecycleCensusUITests.swift:43` (`app.typeKey("d", .command)`) with **"Application com.xtty.app is not running."** Chain: **Cmd+D never registers (Bucket B)** → `paneCount` stays 1 → the test's `Cmd+W` closes the *only* pane → the close-escalation (pane → tab/window → quit) **quits the app** → the next churn iteration finds no app. So the churn test fails **two different ways**: locally via the §13a confirm-close modal (census `final 2`), in CI via dropped Cmd-key delivery (app gone). **Consequence for `harden-xcuitests-for-ci`:** the §13a fix (`confirm-close = false` / wait-for-shell-ready) greens only the **local** flake; in CI the test stays red until **Cmd-key delivery** is fixed (the same fix as the rest of Bucket B). A cheap companion: a `paneCount == 2` **precondition-abort** after the split (fail fast with "split never landed" instead of churning on) would stop the two modes aliasing each other in artifacts.
+
+### 14c. ✅ Bucket B is per-keystroke flaky, not absolute — residual now a clean **7 Bucket-B, 0 wrap**
+
+Two direct observations: (1) in the churn chain, **Cmd+W fired while Cmd+D didn't** — the app quit *because* the close landed; (2) `testSplitCreatesAndClosesPanes` **flaky-passed on its 3rd retry** in `28467944762` (2 fails, then green → counted pass, which is why it's absent from §12c's table) but **failed 3/3** in `28472076179`. Cmd-key delivery on the shared VM session drops keystrokes probabilistically — a test can luck through retries, so retry-tolerance masks rather than fixes. The §12c re-bucket, updated:
+
+| # | Test | Bucket | Cause |
+|---|---|---|---|
+| 1 | `testDirectionalFocusMovesBetweenPanes` | B | Cmd+D split never fired |
+| 2 | `testNewTabOpensAndLastPaneCloseEscalates` | B | Cmd+T never fired |
+| 3 | `testSplitCreatesAndClosesPanes` | B | Cmd+D — flaked green in §12's run, 3/3 red here |
+| 4 | `testLifecycleChurnReturnsCensusToBaseline` | B | Cmd+D dropped → Cmd+W quits the app → "not running" (→ 14b) |
+| 5 | `testMultiLinePasteIsNotAutoExecuted` | B | Cmd+V paste never landed |
+| 6 | `testTruecolorEmojiAndWideChars` | B | Cmd+V paste never landed |
+| 7 | `testFindBarOpensLocatesAndDismisses` | B | Edit ▸ Find menu item not clickable |
+
+**Net:** `harden-xcuitests-for-ci` is now a **single-bucket** change — the §10e/§11f hybrid (env-triggers through real handlers + a11y-IDs on NSMenuItems + click-first + `typeKey`) for Cmd-key/menu delivery — plus the churn test's §13a local-race opt-out and the 14b precondition-abort as companions. Keep the GUI job non-blocking; `test-core` stays the only required gate.
+
+---
+
 ## Sources
 
 - **xtty repo:** `Makefile`, `project.yml`, `scripts/bootstrap-swiftterm.sh`, `patches/swiftterm/UPSTREAM_CONFIG.sh` + `xtty-accessors.diff`, `.gitignore`, `XttyCore/Package.{swift,resolved}`, `AppUITests/*` (StateDumpReader/GridDumpReader, `XTTY_*` triggers), `AGENTS.md`
 - **§11 artifact evidence (2026-07-01):** the two `.xcresult` artifacts of run `28425122861` (`gh api repos/kitimark/xtty/actions/runs/28425122861/artifacts`, ids `7972842439`/`7987195834`), unpacked + read with `xcrun xcresulttool get test-results summary` and `… export attachments` (screenshots, grid dumps, `App UI hierarchy`, screen recordings); cross-checked against `AppUITests/XttyUITests.swift` + `XttyMultiplexingUITests.swift` + `XttyUITestSupport.swift`
 - **§12 artifact evidence (2026-07-01):** the `.xcresult` of the **post-merge** run `28467944762` (head = the `silence-bash-deprecation` archive commit), `gh run download`; `xcrun xcresulttool … summary` + `… export attachments`; `grep` of all 221 attachments for the banner text (0 hits); `focus-typing-grid`/`focus-typing-typed`/`paste-grid` dumps + `GridDumpReader.waitForContains` (`XttyUITestSupport.swift:117–121`)
+- **§14 evidence (2026-07-02):** the **log** of the post-merge run `28472076179` (head = the `harden-focus-typing-assertion` archive commit `069fd30`) via `gh run view --log-failed` — per-test verdicts, failure messages, `Failing tests:` summary, `Executed N tests` totals — diffed against run `28467944762`; `AppUITests/XttyLifecycleCensusUITests.swift` (`:42-53` churn loops, `:43` the failing `typeKey`); `.github/workflows/ci.yml` (no `continue-on-error` on `build-and-test`)
 - **§13 evidence (2026-07-01):** the **local** `make test` `.xcresult` (`build/Logs/Test/…xcresult`) — `export attachments` + the per-test attachment timeline (Synthesized Events / UI Snapshots) + the churn screen-recording `.mp4` (frames via `ffmpeg`); the user's eyewitness of the modal; `AppUITests/XttyLifecycleCensusUITests.swift`, `App/TerminalWindowController.swift` (`hasForegroundJob`/`confirmClose`/`positionOnBuiltInDisplay`), and `~/.zshrc` startup commands
 - **GitHub:** docs.github.com (Actions billing for public repos, standard vs larger runners, `macos-*` labels), the **`actions/runner-images`** repo (macos-26 README + software manifest, `Install-Xcode.ps1` Metal `-ge 26` gate, runner-image issues #13014 / #13080 / #13094), `actions/cache`, `maxim-lobanov/setup-xcode`, `irgaly/xcode-cache`, `softprops/action-gh-release`, `ncipollo/release-action`, `amannn/action-semantic-pull-request`
 - **OSS workflows (read):** Ghostty `.github/workflows/release-tip.yml` (Namespace runners + codesign/notarize), `MrKai77/Loop` `dev-build.yml` (GitHub-hosted full notarize), `FlashSpace` `ci.yml`/`pr.yml` (XcodeGen + Conventional-Commit lint), Americano/Thaw/Mythic/Stats (cache keys + secret-free `CODE_SIGNING_ALLOWED=NO`)
