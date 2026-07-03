@@ -54,8 +54,20 @@ The §15 SwiftUI **menu-clobber race** is locally unreproducible: the GitHub `ma
 4. **Sequencing**: the experiment needs the fix's diagnostics implemented first (observe-only build) — fold into `fix-main-menu-clobber`'s implementation order.
 5. **Guest scope**: 26.4-only first (one VM answers "does a slow VM clobber"); add a 26.2-slow guest later only if speed-vs-version needs separating.
 
+## 7. Addendum (2026-07-03) — ❌ `nektos/act` cannot simulate the macOS runner (source-verified)
+
+> **Provenance:** same day — user question "can act simulate the macOS run?"; shallow-cloned `nektos/act` to `/tmp` and read the runner.
+
+act has exactly **two execution modes**, neither of which reaches a macOS runner environment:
+
+- **Container mode** (`startJobContainer()`, `pkg/runner/run_context.go:672`) — Docker/Podman containers, **Linux-only**; no macOS image type exists anywhere in act (macOS cannot be containerized). The only `darwin` code in the runner is host-side cosmetics: a `:delegated` bind-mount flag for Docker Desktop on Mac hosts (`run_context.go:172`) and an arm64 container-arch default for M-series hosts (`cmd/root.go:417`).
+- **Host mode** (`-P macos-26=-self-hosted` → `IsHostEnv` → `startHostEnvironment()`, `run_context.go:186`) — creates temp dirs and runs the job's steps **directly on the host**: no VM, no isolation, no runner image. For this investigation that is worse than useless — it executes `ci.yml`'s steps in exactly the environment that always **wins** the §15 menu race (the fast dev Mac), so a green act run proves nothing about CI.
+
+This source-confirms [`github-actions-ci-cd.md`](github-actions-ci-cd.md) §10f's previously-uncited one-liner ("`act` can't do macOS"). **The faithful "act for macOS" is already in this PoC plan:** Tart's images ship the real `actions/runner` preinstalled, so the VM can register as an ephemeral self-hosted runner and execute the actual `ci.yml` inside an environment that resembles the one that loses the race.
+
 ## Sources
 
 - **Per-project source reads (2026-07-03, `/tmp` clones + live registry/API queries):** openai/tart (Sources/tart/Commands/{Run,Exec}.swift, VM.swift; cirruslabs/macos-image-templates `vanilla-tahoe.pkr.hcl` — auto-login/TCC/GHA-runner provisioning; ghcr.io tag/manifest API for `macos-tahoe-{vanilla,base,xcode}` + `macos-runner:tahoe` sizes), trycua/cua `libs/lume` (CommandRegistry, DarwinVirtualizationService, unattended-presets/tahoe.yml, ghcr.io/trycua tags), utmapp/UTM (utmctl scope, VZ backend), s-u/macosvm, insidegui/VirtualBuddy (incl. its Apple-catalog listing 25E246), Veertu Anka docs/pricing.
 - **Fidelity (2026-07-03):** ipsw.me signing status for `VirtualMac2,1` (25E246/25E253/25F71/25F80/25F84); Apple VZ docs + motionbug.com major-boundary restore failure; `actions/runner-images` source (`configure-autologin.sh`, `configure-shell.sh`, `configure-tccdb-macos.sh`, PR #5417); host measurements (`sysctl hw.ncpu hw.memsize`, `df -h`); `/Users/markmark/source/contribute/xtty/.github/workflows/ci.yml` (the parity checklist).
+- **§7 act verification (2026-07-03):** `nektos/act` shallow-cloned to `/tmp` — `pkg/runner/run_context.go` (`:172` darwin bind-mount flag, `:186` `startHostEnvironment`, `:672` `startJobContainer`, `:675-679` `IsHostEnv`/`-self-hosted`), `cmd/root.go:417`.
 - **Companions:** [`github-actions-ci-cd.md`](github-actions-ci-cd.md) §15 (menu clobber — the target), §15f (second-order matrix — the rehearsal floor), §16 + [`confirm-close-shell-readiness.md`](confirm-close-shell-readiness.md) (the marker roundtrip the bash guest validates).
