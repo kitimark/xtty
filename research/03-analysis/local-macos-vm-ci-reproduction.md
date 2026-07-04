@@ -111,7 +111,7 @@ Two native runs of the same Tart VM, same binary, nothing changed between them:
 - **Tart run 1: 36 pass / 5 fail / 1 skip** — `testSplitCreatesAndClosesPanes` + `testDirectionalFocusMovesBetweenPanes` **FLAKY-PASSED** (a `-retry-tests-on-failure` retry caught an app-launch that *won* the menu race).
 - **Tart run 2: 34 / 7 / 1** — those **same 2 tests FAILED** (all seven down), an **exact match to CI run `28472076179` and lume §8**.
 
-Same VM, same binary, **different result** → the SwiftUI main-menu clobber is a **NON-DETERMINISTIC per-launch race, proven live** — not merely inferred from CI's single flaky pass (as §15a had to). Four-way, all macOS 26.4/25E246:
+Same VM, same binary, **different result** → the SwiftUI main-menu clobber is a **NON-DETERMINISTIC per-launch race, proven live** — not merely inferred from CI's single flaky pass (as §15a had to). Five results, all macOS 26.4/25E246 (a **third** Tart run — watched live in the graphics-window VM — landed 34/7/1, confirming the base rate):
 
 | Run | Result | The 2 Cmd+D split tests |
 |---|---|---|
@@ -119,6 +119,9 @@ Same VM, same binary, **different result** → the SwiftUI main-menu clobber is 
 | lume (host-built) | 34 / 7 / 1 | failed |
 | **Tart run 1** (native) | **36 / 5 / 1** | **flaky-passed** (retry won the race) |
 | **Tart run 2** (native) | **34 / 7 / 1** | failed |
+| **Tart run 3** (native, watched live) | **34 / 7 / 1** | failed |
+
+Base rate across the 3 Tart runs: **2× fully clobbered (34/7/1) + 1× a race-winning retry (36/5/1)** — consistent with CI's ~98 % per-launch clobber. Run 3 was driven in a `tart run` **graphics window**, visually confirming the clobber (Cmd+D produced no split, Cmd+T no tab, the find bar never opened).
 
 ### 9e. Fix implication reinforced
 Because a **retry-tolerant suite can MASK the race** (Tart run 1 *passed* two genuinely-broken tests), the fix must **eliminate** the race — **`NSApplicationMain` / drop the SwiftUI App lifecycle** (§15e / §8d) — **not** add test retry tolerance. The reproduction rig also makes the fix **directly provable**: build the fix branch, re-run, expect a clean 42/0/1 across repeated runs.
@@ -126,7 +129,21 @@ Because a **retry-tolerant suite can MASK the race** (Tart run 1 *passed* two ge
 ### 9f. Tool verdict for the rig
 **Tart (prebuilt `-xcode` image → native build, zero workarounds) is the cleaner, more-reproducible rig than lume** — at the cost of a **64 GiB download + the external disk**. **lume is viable on the internal disk** but needs the Setup-Assistant OCR wrangling + the Metal-toolchain host-build workaround. For repeated CI-parity work, Tart-on-external wins; for a one-off on a full internal disk, lume works.
 
-Evidence: `~/Downloads/xtty-vm-poc/artifacts/` — `TART-native-CI-parity.xcresult` (run 1) + `TART-native-run2.xcresult` (run 2) + the lume `FULL-SUITE-CI-parity.xcresult`, all with `.log`s, and README.txt with the four-way comparison. The Tart VM `xtty-tart` (external `TART_HOME`) and all VM artifacts are **external to the repo**; only the spike branch `spike/menu-clobber-diagnostics` carries the instrumentation.
+Evidence: `~/Downloads/xtty-vm-poc/artifacts/` — `TART-native-CI-parity.xcresult` (run 1) + `TART-native-run2.xcresult` (run 2) + `TART-native-run3-visible.xcresult` (run 3) + the lume `FULL-SUITE-CI-parity.xcresult`, all with `.log`s, and README.txt with the full comparison. The Tart VM `xtty-tart` (external `TART_HOME`) and all VM artifacts are **external to the repo**; only the spike branch `spike/menu-clobber-diagnostics` carries the instrumentation.
+
+### 9g. Disk footprint — Tart vs lume (measured 2026-07-04)
+| | Tart | lume |
+|---|---|---|
+| Download | **64 GB** image (~2 h with `--concurrency 64`) | **18 GB** IPSW (~hours single-stream) |
+| Actual disk consumed | **~81 GB** (image); the running clone is **near-free** | ~62 GB for **2 VMs** (full copies) + 18 GB IPSW |
+| Extra VMs | **~free** — APFS copy-on-write clones | **full copy** (the lume golden clone cost a real 24 GB) |
+| Fits internal disk? | **No** — the ~90–125 GB image needs the external volume | **Yes** — ~38 GB per VM |
+| Setup effort | **none** (Xcode/Metal/runner preinstalled) | Setup-Assistant OCR + Xcode + Metal + host-build workarounds |
+
+⚠️ **`du` double-counts Tart's CoW clones:** `du -sh $TART_HOME` reported **165 GB**, but the clone shares blocks with the image, so the **actual** consumption was **~81 GB** (savepoint free dropped 851 → 770 GiB = 81 GiB). Measure Tart real usage by `df` delta, not `du`. Net: similar total (~80 GB) but opposite shape — Tart front-loads a big download + external disk then extra VMs are ~free (CoW); lume is a small download that fits internal but every clone is a full copy and every VM pays the setup tax.
+
+### 9h. ❌ lume has NO prebuilt macOS-26 + Xcode image (the structural reason lume was painful)
+Queried `ghcr.io/trycua` (lume's registry) 2026-07-04: `macos-tahoe-xcode` **does not exist**; only `macos-tahoe-vanilla:26.2` / `macos-tahoe-cua:26.2` (Tahoe, **no Xcode**) and `macos-sequoia-xcode:15.2` (macOS **15.2** + Xcode-16 era — too old for xtty's Xcode-26-on-macOS-26 need). So there is no lume analog to Tart's `macos-tahoe-xcode` — which is *why* the lume path had to install Xcode by hand and hit the §8b Metal trap. Two mitigations that stop short of a real prebuilt: (a) lume's `macos-tahoe-vanilla:26.2` *does* ship auto-login + SSH, so it would have skipped the Setup Assistant — we only hit that because we chose the exact-26.4 **IPSW** over the 26.2 image for CI-build fidelity; (b) you can bake your own lume Xcode image once (`vanilla` → install Xcode → `lume push` to your ghcr) — but the bake still has to solve Metal once, and it's a real upfront cost. **For a "spawn VM → build+test, zero setup" experience today, Tart's prebuilt Xcode image is the only option** (cirruslabs maintains a CI-focused image catalog; trycua's images are agent-sandbox desktops).
 
 ## Sources
 
@@ -134,5 +151,5 @@ Evidence: `~/Downloads/xtty-vm-poc/artifacts/` — `TART-native-CI-parity.xcresu
 - **Fidelity (2026-07-03):** ipsw.me signing status for `VirtualMac2,1` (25E246/25E253/25F71/25F80/25F84); Apple VZ docs + motionbug.com major-boundary restore failure; `actions/runner-images` source (`configure-autologin.sh`, `configure-shell.sh`, `configure-tccdb-macos.sh`, PR #5417); host measurements (`sysctl hw.ncpu hw.memsize`, `df -h`); `/Users/markmark/source/contribute/xtty/.github/workflows/ci.yml` (the parity checklist).
 - **§7 act verification (2026-07-03):** `nektos/act` shallow-cloned to `/tmp` — `pkg/runner/run_context.go` (`:172` darwin bind-mount flag, `:186` `startHostEnvironment`, `:672` `startJobContainer`, `:675-679` `IsHostEnv`/`-self-hosted`), `cmd/root.go:417`.
 - **§8 PoC execution (2026-07-03/04):** lume 0.3.10 VM `xtty-ci` (macOS 26.4/25E246, 3 vCPU) from the verified IPSW; runner-parity provisioning over SSH; host-built products (`build-for-testing`) run in-guest via `test-without-building`; the full-suite `.xcresult` (34/7/1) + 2-test + smoke bundles + failure screenshots at `~/Downloads/xtty-vm-poc/artifacts/`; menu-integrity measurements from the spike branch `spike/menu-clobber-diagnostics` (`55cc8a8` + sharpened sensor). Guest verifications: `sw_vers` 25E246; `xcodebuild -showComponent MetalToolchain` (uninstalled, build 17F113 request fails); `mainMenuPtr`/`builtMenuPtr`/`builtMenuTitlesNow` state-dump fields.
-- **§9 Tart rig (2026-07-04):** Tart 2.32.1 (`brew cirruslabs/cli`); `ghcr.io/cirruslabs/macos-tahoe-xcode:latest` (64 GiB / 263 layers) on external `savepoint` (`TART_HOME`); guest `sw_vers` 25E246, `xcodebuild -showComponent MetalToolchain` = installed (17F42); native `xcodebuild test -retry-tests-on-failure` run twice; `TART-native-CI-parity.xcresult` (run 1, 36/5/1) + `TART-native-run2.xcresult` (run 2, 34/7/1) at `~/Downloads/xtty-vm-poc/artifacts/`; `tart pull --concurrency 64` + `nettop` (vs `du`) + detached-`nohup` lifecycle notes.
+- **§9 Tart rig (2026-07-04):** Tart 2.32.1 (`brew cirruslabs/cli`); `ghcr.io/cirruslabs/macos-tahoe-xcode:latest` (64 GiB / 263 layers) on external `savepoint` (`TART_HOME`); guest `sw_vers` 25E246, `xcodebuild -showComponent MetalToolchain` = installed (17F42); native `xcodebuild test -retry-tests-on-failure` run **three times** (run 3 in a graphics window); `TART-native-CI-parity.xcresult` (run 1, 36/5/1) + `TART-native-run2.xcresult` (run 2, 34/7/1) + `TART-native-run3-visible.xcresult` (run 3, 34/7/1) at `~/Downloads/xtty-vm-poc/artifacts/`; `tart pull --concurrency 64` + `nettop` (vs `du`) + detached-`nohup` lifecycle notes; **§9g** disk `df`-delta measurement (Tart ~81 GB actual, `du` 165 GB CoW-double-count); **§9h** `ghcr.io/trycua` registry query (no `macos-tahoe-xcode`; only vanilla-26.2 + sequoia-xcode-15.2).
 - **Companions:** [`github-actions-ci-cd.md`](github-actions-ci-cd.md) §15 (menu clobber — the target; §15a/§15e reconciled with §8d's mechanism + §9d's live race proof), §15f (second-order matrix — the rehearsal floor), §16 + [`confirm-close-shell-readiness.md`](confirm-close-shell-readiness.md) (the marker roundtrip the bash guest validates).
