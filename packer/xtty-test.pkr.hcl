@@ -110,6 +110,22 @@ build {
     ]
   }
 
+  # macOS 15+/26 Local Network privacy note (NO working pre-suppression baked —
+  # see below). On macOS 26.5 (which macos-tahoe-base:latest now ships, but the
+  # frozen macos-tahoe-xcode image does not) the XCUITest runner<->app IPC touches
+  # the guest's ROUTABLE vmnet address (not loopback), tripping the per-app Local
+  # Network gate → a modal "Allow '<app>' to find devices on local networks?"
+  # attributed to the app under test. It is NOT a TCC.db permission and NOT any
+  # real networking by the app — purely the XCTest IPC. Impact is BENIGN for the
+  # rig's purpose: a HEADLESS run is unaffected (33/8/1 with or without the modal —
+  # no window server, no focus theft); only a GRAPHICS run loses ~1 extra Cmd-key
+  # test to focus theft. TN3179's AllowedEthernet/WiFiLocalNetworkAddresses defaults
+  # were tried (sudo write to com.apple.network.local-network + reboot) and
+  # SCREENSHOT-REFUTED — the dialog still appeared, matching the finding that macOS
+  # offers no supported offline pre-grant for Local Network. So: run HEADLESS for
+  # clean measurement; for graphics watching, click "Allow" once or add an in-test
+  # addUIInterruptionMonitor. See research/03-analysis/local-macos-vm-ci-reproduction.md §12.
+
   # Footprint: drop the installer + caches before the image is sealed.
   provisioner "shell" {
     inline = [

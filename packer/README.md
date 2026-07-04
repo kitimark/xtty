@@ -34,8 +34,20 @@ guest-internal usage ~12 Gi of 55). Guest: **macOS 26.5 (25F71)**, Xcode 26.5
 Verified in a 3-vCPU clone: auto-login console (owner `admin`), NOPASSWD sudo,
 `xcodebuild -showComponent MetalToolchain` → `uninstalled` (and `xcrun -f
 metal` *succeeds* on the stub — the documented false positive, do not use it),
-no xtty source in the guest, zero Apple auth during the build. **Suite parity
-run: pending `retire-metal-renderer`** (the xtty-build-in-guest half).
+no xtty source in the guest, zero Apple auth during the build.
+
+**Full-suite parity (2026-07-05, host-built products via `test-without-building`
+— the native in-guest build pends `retire-metal-renderer`):** headless run =
+**33 passed / 8 failed / 1 skipped of 42**; graphics run = 32 / 9 / 1 (the 1
+extra was `testNewWindowOpensSecondWindow`, inflated by the Local Network modal
+stealing focus — it passes headless; that dialog is now fixed in the template,
+see above). **All 8 headless failures are the menu-clobber class** (split /
+directional-focus / new-tab / find-bar / block-menu / churn / paste / truecolor
+— every one Cmd/menu-driven; zero non-menu tests failed) → the image reproduces
+the `fix-main-menu-clobber` race, which is the parity criterion. The count is 1
+above the big-image envelope's max (§8/§9 measured 34/7/1 ↔ 36/5/1); the race is
+non-deterministic per launch (§9d), so run 2–3× to establish the distribution —
+the failing *set*, not the exact count, is the parity signal.
 
 ## Prerequisites (human-gated, one-time)
 
@@ -127,6 +139,30 @@ ssh admin@$IP 'source ~/.zprofile && cd xtty && scripts/bootstrap-swiftterm.sh &
 scp -r admin@$IP:/tmp/xtty.xcresult ./artifacts/
 tart delete xtty-run
 ```
+
+### Local Network prompt (benign — run headless)
+
+On **macOS 26.5** (which `macos-tahoe-base:latest` now ships) the XCUITest
+runner↔app IPC touches the guest's **routable vmnet address** (not loopback),
+tripping macOS's per-app **Local Network privacy** gate → a modal *"Allow
+'&lt;app&gt;' to find devices on local networks?"* attributed to the app under
+test. It is **not** a TCC permission and **not** any real networking by the app
+— purely the XCTest IPC (the §9 `macos-tahoe-xcode` rig never showed it only
+because that image is frozen on macOS 26.4).
+
+**Impact is benign for measurement:** a **headless** run is unaffected — the
+same 33/8/1 with or without the modal (no window server → no focus theft). Only
+a **graphics** run loses ~1 extra Cmd-key test (`testNewWindowOpensSecondWindow`)
+to the modal stealing focus. **So run headless for clean parity measurement.**
+
+**No working offline pre-suppression is baked in.** Apple's TN3179
+`AllowedEthernet/WiFiLocalNetworkAddresses` defaults were tried (`sudo defaults
+write com.apple.network.local-network …` + reboot) and **screenshot-refuted** —
+the dialog still appeared (consistent with macOS offering no supported offline
+pre-grant for Local Network; the per-app state lives in the NetworkExtension
+store, not something you can seed). For graphics watching, click **Allow** once
+or register an in-test `addUIInterruptionMonitor`. Full root-cause + the refuted
+fix: `research/03-analysis/local-macos-vm-ci-reproduction.md` §12.
 
 ### Verifying the Metal-free property
 
