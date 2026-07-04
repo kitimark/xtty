@@ -194,7 +194,19 @@ Two halves: **(a) download is out-of-band, NOT in the public repo** — the `.xi
 Strip `xcode.pkr.hcl` to: `vm_base_name = macos-tahoe-base:latest` + install Xcode from the `.xip` (11c) + `xcodebuild -runFirstLaunch` (**no `-downloadPlatform`/`-downloadAllPlatforms`** — that one line is the ~45 GB of simulators) + `brew install xcodegen` + (optional) clone xtty + `bootstrap-swiftterm.sh` to warm the checkout. **Remove:** all simulators, Android SDK, Flutter, fastlane/cocoapods/rbenv/tuist, libimobiledevice, the codex/claude-code casks, and the Metal component (patched out). **Result: ~40 GB image**, UI-test-capable, native build, no Metal toolchain.
 
 ### 11f. Prereqs + candidate change
-To actually build: `brew install packer` (not installed) + `packer init` (pulls the tart plugin) + the Xcode `.xip` via `xcodes download 26.5` (Apple ID, once) → `~/XcodesCache/` + the **SwiftTerm Metal-patch landed in the repo (§10b)** + `packer build xtty-test.pkr.hcl` → local image → `tart push ghcr.io/kitimark/xtty-test:26.5` (`GITHUB_TOKEN`, once). Candidate OpenSpec change **`add-xtty-test-image`** (the `.pkr.hcl` + the Metal-patch as its dependency) — **not proposed; research**.
+To actually build: `brew install packer` (not installed) + `packer init` (pulls the tart plugin) + the Xcode `.xip` via `xcodes download 26.5` (Apple ID, once) → `~/XcodesCache/` + the **SwiftTerm Metal-patch landed in the repo (§10b)** + `packer build xtty-test.pkr.hcl` → local image → `tart push ghcr.io/kitimark/xtty-test:26.5` (`GITHUB_TOKEN`, once). Candidate OpenSpec change **`add-xtty-test-image`** (the `.pkr.hcl` + the Metal-patch as its dependency) — **not proposed; research**. *(Superseded by §11g — decided and split into two proposals.)*
+
+### 11g. Decided (2026-07-04) — full Metal retirement + Packer; split into two changes
+
+> **Provenance:** 2026-07-04, owner decision after the §10/§11 exploration.
+
+Three decisions settle the candidate:
+
+1. **Metal: full retirement (option a), as its own change `retire-metal-renderer`.** Grounding the §10b patch against the repo showed it is **not** a build tweak riding along with the image — it is a **spec-visible retirement of the Metal A/B capability**, touching four established specs: `performance-harness` (the CoreGraphics↔Metal A/B-toggle requirement + the A/B-motivated safeguards wording), `terminal-configuration` (`metal` as a valid `renderer` value), `verification-harness` (the state dump's renderer field + the perf-harness e2e's Metal arm), and `build-workflow` (`make doctor`'s Metal-toolchain prerequisite) — plus 7 renderer-plumbing code files, the `make bench` Metal arm, both `ci.yml` toolchain guards, and `testConfiguredMetalRendererIsReported`. Alternatives rejected: an env-flagged optional strip (two build flavors — CI/image would diverge from local; test-what-you-ship drift) and baking the toolchain into the image (Path A: +1.5 GB, host-coupled, leaves the fragile CI guard). Rationale: the P7 gate is **closed** (P7b: keep CoreGraphics, decisively), specs should record what is true, and a dead A/B toggle contradicts the lean bias; resurrection if SwiftTerm's Metal path matures = revert one patch hunk + re-run the archived P7b methodology.
+2. **Image builder: Packer** (cirruslabs `macos-image-templates` style, per §11), not a hand-rolled tart+ssh script — the owner prefers the battle-tested template mechanism. Image stays **generic** (base + Xcode 26.5 from a pre-downloaded `.xip` + xcodegen; **no xtty source baked in** — source arrives at test time), pinned base tag + Xcode 26.5 (CI parity), ghcr push deferred until a second consumer exists.
+3. **Sequencing: independent of `fix-main-menu-clobber`** — the image work does not wait for (or gate) the menu fix; its only hard dependency is `retire-metal-renderer` (the zero-Metal build). Pre-registered: an in-guest suite run on the image **before** the menu fix lands shows the §8/§9 race results (34/7/1-ish), so image acceptance = **parity with the big-image rig**, not all-green.
+
+Both changes proposed 2026-07-04: **`retire-metal-renderer`** (prerequisite) and **`add-xtty-test-image`** (depends on it).
 
 ## Sources
 
