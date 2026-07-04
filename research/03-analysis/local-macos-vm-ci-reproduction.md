@@ -65,9 +65,74 @@ act has exactly **two execution modes**, neither of which reaches a macOS runner
 
 This source-confirms [`github-actions-ci-cd.md`](github-actions-ci-cd.md) §10f's previously-uncited one-liner ("`act` can't do macOS"). **The faithful "act for macOS" is already in this PoC plan:** Tart's images ship the real `actions/runner` preinstalled, so the VM can register as an ephemeral self-hosted runner and execute the actual `ci.yml` inside an environment that resembles the one that loses the race.
 
+## 8. Addendum (2026-07-03/04) — ✅ PoC EXECUTED: reproduced the CI job EXACTLY, and found the clobber mechanism
+
+> **Provenance:** 2026-07-03/04. **The PoC ran** (§1–§7's "proposed, awaiting review" is superseded — owner approved the recommended defaults: **lume**, **26.4-only** guest, **diagnostics-first**). Empirical — a lume VM built from the verified IPSW, provisioned to runner parity, driving the full `xttyUITests` suite; measurements from an **observe-only** menu-integrity instrumentation (the uncommitted spike branch `spike/menu-clobber-diagnostics`, `55cc8a8` + a sharpened sensor). Evidence bundles at `~/Downloads/xtty-vm-poc/artifacts/`.
+
+### 8a. The rig (build notes)
+- **lume 0.3.10** (`brew`, telemetry disabled). Guest **`xtty-ci`** = macOS **26.4 / 25E246** (the exact CI build), **3 vCPU / 7 GB / 1024×768**, restored from the verified IPSW (sha256 `960e6a47…`).
+- ✅ **§1 checkpoint resolved — a minor-version-newer guest installs and boots fine on a 26.2 host** (26.4 guest on 26.2 host), refuting the macosvm "guest ≤ host" claim at *minor* granularity (only the *major* boundary fails, per §3).
+- **Setup Assistant preset drifted on 26.4** (❌ lesson): lume's `tahoe` preset dies at "Set Up Later" because on 26.4 that affordance is behind a new **"Other Sign-In Options"** step; and `systemsetup -setremotelogin on` is gated behind **Full Disk Access** (TCC), so enabling **Remote Login** took **one manual VNC click** — the *only* non-scriptable step in the whole build. Everything after was SSH-scripted.
+- **Runner parity** applied over SSH: `chsh -s /bin/bash`, `automationmodetool enable-automationmode-without-authentication`, NOPASSWD sudo, a ~72-char hostname (the §12 prompt-wrap). **Golden clone** `xtty-ci-osbase` for instant reset; the IPSW archived to an external `savepoint` volume.
+
+### 8b. ❌ The guest Metal-toolchain trap (and the workaround)
+- `xcrun -f metal` **resolving a PATH is a FALSE POSITIVE** — the `metal` *binary* exists in Xcode, but the **Metal Toolchain component reads `uninstalled`**; the real test is *compiling a `.metal` file*. The CI guard's `xcrun -f metal || …` check is therefore unreliable as a presence test (it passed while metal was unusable).
+- The guest download **fails**: guest Xcode 26.6 requests metal build **17F113**, which Apple's asset catalog won't serve; the metal-toolchain build is **decoupled** from the Xcode build (the host has **17F109** installed and working under the same Xcode). SIP blocks copying the host's installed asset into the guest.
+- **Workaround (what actually shipped the run):** `xcodebuild build-for-testing` on the **host** (Metal works) → `rsync` the products to a **shared `/tmp` path** (so the `.xctestrun`'s absolute paths resolve identically on both machines) → `xcodebuild test-without-building` in the guest. The build ran host-side; the *runtime* (where the menu race lives) is 100 % in the guest's Aqua session — the identical arm64 binary. Caveat: **`/tmp` is wiped on guest reboot** — re-rsync the products after any restart.
+
+### 8c. ✅ RESULT — exact CI reproduction (the jackpot)
+The full `xttyUITests` suite in the guest (retry-tolerant, CI's flags): **56 executed / 1 skipped / 30 failures → 34 pass / 7 fail / 1 skip** — **identical to CI run `28472076179`**, the **same 7 failing tests** (split / directional-focus / new-tab / find-bar / paste / truecolor / churn), **all of which pass 100 % on the bare-metal host**. The focused 2-test run failed with the **verbatim** CI errors ("Failed to click 'Find…' MenuItem: No matches found …"). Direct launches: **13/13 at 3-vCPU idle showed the default menu** — reproduction is **~100 %**, even more deterministic than CI's ~98 %. The pre-registered "clobberCount > 0 = jackpot" outcome (§4) is met and then some.
+
+### 8d. ✅ MECHANISM — the finding CI could never surface: **in-place item mutation, not a pointer swap**
+Directly measured via the sharpened sensor (both host and guest): **`mainMenuPtr == builtMenuPtr` is True** — `NSApp.mainMenu` is *still the object xtty built and installed in ADFL*. Yet on the **guest**, that same object's **own items** now read as the SwiftUI defaults **`[xtty, View, Window, Help]`** — including a **"Help" menu `XttyMainMenu` never creates** — versus the custom **`[Edit, View, Terminal, Window, Debug]`** on the **host**. So SwiftUI **mutates our `NSMenu` object's items in place**; it does **not** swap the `NSApp.mainMenu` pointer. Consequences for `fix-main-menu-clobber` (reconciled into [`github-actions-ci-cd.md`](github-actions-ci-cd.md) §15a/§15e):
+- **§15e Stage-A is REFUTED** — re-asserting `NSApp.mainMenu = builtMenu` (same instance) is a **no-op**: the pointer is already correct; the *items* are gone.
+- **`NSApplicationMain` (drop the SwiftUI App lifecycle — §15e's "Stage B") is now the REQUIRED fix**, not the eventual one — it's the only option that stops SwiftUI's scene menu management from running at all. (The alternative — rebuild/restore items on `didBecomeActive` — risks re-mutation and is second choice.)
+- **The diagnostic must compare item TITLES, not object identity.** My first sensor (`menuIsBuiltInstance`/`menuClobberCount`) read **healthy (True / 0) through a 100 % clobber** — blind to in-place mutation. The fix's harness field must check "does the menu still contain Edit/Terminal?".
+
+### 8e. Evidence
+`~/Downloads/xtty-vm-poc/artifacts/`: **`FULL-SUITE-CI-parity.xcresult`** (+ `.log`) — the 34/7/1 run; **`menu-clobber-2tests-FAILED.xcresult`** — the focused split + find-bar failures; **`smoke-testBasicTypedEcho-PASSED.xcresult`** — the drive-path proof; **`FAILED-screenshots/`** — the AX-hierarchy + final-state PNGs showing the clobbered `xtty | View | Window | Help` menu bar. Instrumentation lives on the **uncommitted** spike branch `spike/menu-clobber-diagnostics`.
+
+## 9. Addendum (2026-07-04) — ✅ Tart second rig (native build, no workarounds) + the per-launch race PROVEN live
+
+> **Provenance:** 2026-07-04. A **second, independent rig** on Tart, cross-confirming §8 and settling the race question. The lume-vs-Tart tool tradeoff (§2/§5) is now resolved empirically.
+
+### 9a. The Tart rig — clean, native, no workarounds
+Tart 2.32.1 (`brew install cirruslabs/cli/tart`); image `ghcr.io/cirruslabs/macos-tahoe-xcode:latest` pulled to the **external `savepoint` volume** (`TART_HOME` — the ~90–125 GB materialized image can't fit the internal disk's 47–86 GiB free; the owner chose external over internal after the constraint was surfaced). Guest = macOS **26.4 / 25E246** (the exact CI build — the `-xcode` image *tags* are Xcode versions, but the OS is 26.4), with **Xcode 26.5 + a WORKING Metal toolchain** (`Status: installed`, build 17F42), `actions-runner`, brew, auto-login, SSH, and TCC **all preinstalled** → **no Setup Assistant, no Metal fight, no manual VNC click** (contrast §8's lume ordeal). Only deltas applied: `chsh -s /bin/bash`, a long hostname, `brew install xcodegen`. The `ci.yml` build-and-test job ran **natively in-guest** (`xcodebuild test` — build *and* test, **no host-build/`test-without-building` workaround**, unlike §8b).
+
+### 9b. ❌→✅ Download-speed + monitoring lessons
+- **Per-connection throttle, beaten by concurrency:** the 64 GiB pull ran at ~2 MiB/s single-stream (ghcr per-connection throttle — the same ceiling Apple's CDN imposed on the §3 IPSW), but **`tart pull --concurrency 64` aggregated to ~25 MiB/s** (the real link ceiling, ~2 h total). The external USB-SSD (measured 908 MB/s write) was never the bottleneck — the connection was.
+- **`du` is blind during sparse-fill:** tart assembles all 263 layers into **one pre-sized 140 GB sparse `disk.img`**, so `du` plateaus (filling already-allocated blocks) while `nettop` shows active download. Progress must be measured by **`nettop` bytes, not `du`** — a `du`-based monitor produced false "0.0 MiB/s / stalled" alarms mid-pull.
+
+### 9c. ⚠️ VM-lifecycle lesson
+**`tart run` *is* the VM's lifetime.** Running it as a harness background task means a task-kill stops the VM (and drops any SSH build-test with it — observed once). Launch the VM **detached** (`nohup … & disown`) and run the build-test as a **guest-side `nohup` process** writing to a guest log + `resultBundlePath`; then host-side task kills can't lose progress — just reconnect and read the log.
+
+### 9d. ✅ THE HEADLINE — the per-launch race PROVEN by run-to-run variance on the IDENTICAL VM + binary
+Two native runs of the same Tart VM, same binary, nothing changed between them:
+- **Tart run 1: 36 pass / 5 fail / 1 skip** — `testSplitCreatesAndClosesPanes` + `testDirectionalFocusMovesBetweenPanes` **FLAKY-PASSED** (a `-retry-tests-on-failure` retry caught an app-launch that *won* the menu race).
+- **Tart run 2: 34 / 7 / 1** — those **same 2 tests FAILED** (all seven down), an **exact match to CI run `28472076179` and lume §8**.
+
+Same VM, same binary, **different result** → the SwiftUI main-menu clobber is a **NON-DETERMINISTIC per-launch race, proven live** — not merely inferred from CI's single flaky pass (as §15a had to). Four-way, all macOS 26.4/25E246:
+
+| Run | Result | The 2 Cmd+D split tests |
+|---|---|---|
+| CI `28472076179` | 34 / 7 / 1 | failed |
+| lume (host-built) | 34 / 7 / 1 | failed |
+| **Tart run 1** (native) | **36 / 5 / 1** | **flaky-passed** (retry won the race) |
+| **Tart run 2** (native) | **34 / 7 / 1** | failed |
+
+### 9e. Fix implication reinforced
+Because a **retry-tolerant suite can MASK the race** (Tart run 1 *passed* two genuinely-broken tests), the fix must **eliminate** the race — **`NSApplicationMain` / drop the SwiftUI App lifecycle** (§15e / §8d) — **not** add test retry tolerance. The reproduction rig also makes the fix **directly provable**: build the fix branch, re-run, expect a clean 42/0/1 across repeated runs.
+
+### 9f. Tool verdict for the rig
+**Tart (prebuilt `-xcode` image → native build, zero workarounds) is the cleaner, more-reproducible rig than lume** — at the cost of a **64 GiB download + the external disk**. **lume is viable on the internal disk** but needs the Setup-Assistant OCR wrangling + the Metal-toolchain host-build workaround. For repeated CI-parity work, Tart-on-external wins; for a one-off on a full internal disk, lume works.
+
+Evidence: `~/Downloads/xtty-vm-poc/artifacts/` — `TART-native-CI-parity.xcresult` (run 1) + `TART-native-run2.xcresult` (run 2) + the lume `FULL-SUITE-CI-parity.xcresult`, all with `.log`s, and README.txt with the four-way comparison. The Tart VM `xtty-tart` (external `TART_HOME`) and all VM artifacts are **external to the repo**; only the spike branch `spike/menu-clobber-diagnostics` carries the instrumentation.
+
 ## Sources
 
 - **Per-project source reads (2026-07-03, `/tmp` clones + live registry/API queries):** openai/tart (Sources/tart/Commands/{Run,Exec}.swift, VM.swift; cirruslabs/macos-image-templates `vanilla-tahoe.pkr.hcl` — auto-login/TCC/GHA-runner provisioning; ghcr.io tag/manifest API for `macos-tahoe-{vanilla,base,xcode}` + `macos-runner:tahoe` sizes), trycua/cua `libs/lume` (CommandRegistry, DarwinVirtualizationService, unattended-presets/tahoe.yml, ghcr.io/trycua tags), utmapp/UTM (utmctl scope, VZ backend), s-u/macosvm, insidegui/VirtualBuddy (incl. its Apple-catalog listing 25E246), Veertu Anka docs/pricing.
 - **Fidelity (2026-07-03):** ipsw.me signing status for `VirtualMac2,1` (25E246/25E253/25F71/25F80/25F84); Apple VZ docs + motionbug.com major-boundary restore failure; `actions/runner-images` source (`configure-autologin.sh`, `configure-shell.sh`, `configure-tccdb-macos.sh`, PR #5417); host measurements (`sysctl hw.ncpu hw.memsize`, `df -h`); `/Users/markmark/source/contribute/xtty/.github/workflows/ci.yml` (the parity checklist).
 - **§7 act verification (2026-07-03):** `nektos/act` shallow-cloned to `/tmp` — `pkg/runner/run_context.go` (`:172` darwin bind-mount flag, `:186` `startHostEnvironment`, `:672` `startJobContainer`, `:675-679` `IsHostEnv`/`-self-hosted`), `cmd/root.go:417`.
-- **Companions:** [`github-actions-ci-cd.md`](github-actions-ci-cd.md) §15 (menu clobber — the target), §15f (second-order matrix — the rehearsal floor), §16 + [`confirm-close-shell-readiness.md`](confirm-close-shell-readiness.md) (the marker roundtrip the bash guest validates).
+- **§8 PoC execution (2026-07-03/04):** lume 0.3.10 VM `xtty-ci` (macOS 26.4/25E246, 3 vCPU) from the verified IPSW; runner-parity provisioning over SSH; host-built products (`build-for-testing`) run in-guest via `test-without-building`; the full-suite `.xcresult` (34/7/1) + 2-test + smoke bundles + failure screenshots at `~/Downloads/xtty-vm-poc/artifacts/`; menu-integrity measurements from the spike branch `spike/menu-clobber-diagnostics` (`55cc8a8` + sharpened sensor). Guest verifications: `sw_vers` 25E246; `xcodebuild -showComponent MetalToolchain` (uninstalled, build 17F113 request fails); `mainMenuPtr`/`builtMenuPtr`/`builtMenuTitlesNow` state-dump fields.
+- **§9 Tart rig (2026-07-04):** Tart 2.32.1 (`brew cirruslabs/cli`); `ghcr.io/cirruslabs/macos-tahoe-xcode:latest` (64 GiB / 263 layers) on external `savepoint` (`TART_HOME`); guest `sw_vers` 25E246, `xcodebuild -showComponent MetalToolchain` = installed (17F42); native `xcodebuild test -retry-tests-on-failure` run twice; `TART-native-CI-parity.xcresult` (run 1, 36/5/1) + `TART-native-run2.xcresult` (run 2, 34/7/1) at `~/Downloads/xtty-vm-poc/artifacts/`; `tart pull --concurrency 64` + `nettop` (vs `du`) + detached-`nohup` lifecycle notes.
+- **Companions:** [`github-actions-ci-cd.md`](github-actions-ci-cd.md) §15 (menu clobber — the target; §15a/§15e reconciled with §8d's mechanism + §9d's live race proof), §15f (second-order matrix — the rehearsal floor), §16 + [`confirm-close-shell-readiness.md`](confirm-close-shell-readiness.md) (the marker roundtrip the bash guest validates).
