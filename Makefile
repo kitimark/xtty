@@ -33,7 +33,7 @@ ifdef XTTY_SIGN_IDENTITY
 SIGN_FLAGS := CODE_SIGN_IDENTITY="$(XTTY_SIGN_IDENTITY)" CODE_SIGN_STYLE=Manual CODE_SIGNING_ALLOWED=YES
 endif
 
-.PHONY: help doctor setup build run test test-core build-core bench audit-leaks bootstrap generate clean reset
+.PHONY: help doctor setup build run test test-core build-core bench audit-leaks image bootstrap generate clean reset
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -95,6 +95,25 @@ build-core: $(SWIFTTERM_SENTINEL) ## Build XttyCore only
 
 audit-leaks: build ## P7c leak/allocation DIAGNOSTIC (leaks+vmmap; NOT a gate — the census churn test is)
 	@scripts/audit-leaks.sh
+
+# --- local VM test image (packer/README.md) -----------------------------------
+
+# The Xcode pin for the test-VM image; must match a pre-downloaded
+# ~/XcodesCache/Xcode_$(IMAGE_XCODE).xip (the one-time Apple-ID step).
+IMAGE_XCODE := 26.5
+IMAGE_XIP   := $(HOME)/XcodesCache/Xcode_$(IMAGE_XCODE).xip
+
+image: ## Build the minimal ~40 GB test-VM image (Packer+Tart; prereqs advised, never installed)
+	@ok=1; \
+	if command -v packer >/dev/null 2>&1; then echo "  ok  packer ($$(packer --version 2>/dev/null | head -1))"; \
+	else echo "  --  packer missing              -> brew tap hashicorp/tap && brew install hashicorp/tap/packer"; ok=0; fi; \
+	if command -v tart >/dev/null 2>&1; then echo "  ok  tart ($$(tart --version 2>/dev/null))"; \
+	else echo "  --  tart missing                -> brew install cirruslabs/cli/tart"; ok=0; fi; \
+	if [ -f "$(IMAGE_XIP)" ]; then echo "  ok  Xcode installer ($(IMAGE_XIP))"; \
+	else echo "  --  Xcode installer missing     -> xcodes download $(IMAGE_XCODE) --directory ~/XcodesCache   (Apple ID, once)"; ok=0; fi; \
+	if [ "$$ok" = 1 ]; then echo "Building into TART_HOME=$${TART_HOME:-~/.tart} (set TART_HOME to pick the volume — see packer/README.md)"; \
+	else echo "Missing image prerequisites (see above; packer/README.md)."; exit 1; fi
+	@cd packer && packer init xtty-test.pkr.hcl && packer build -var "xcode_version=$(IMAGE_XCODE)" xtty-test.pkr.hcl
 
 # --- force / housekeeping -----------------------------------------------------
 
