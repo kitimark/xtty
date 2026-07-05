@@ -113,34 +113,79 @@ a couple of hours depending on the network. The result is a local Tart VM named
 ## Runtime workflow (golden-clone per run)
 
 Never boot or build in the golden image — it drifts. Clone per run (APFS
-copy-on-write, near-free), constrain the clone, test, delete:
+copy-on-write, near-free), constrain the clone, test, then let the caller
+decide when to clean up.
+
+> **Interim recipe.** Until `retire-metal-renderer` lands, the guest **cannot
+> build xtty at all** — this image is deliberately Metal-toolchain-free, and
+> fetching the toolchain in-guest is the deterministic Apple-catalog-rotation
+> trap documented above (§10c). So today's workflow **builds on the host**
+> (where Metal exists), **rsyncs the built products** to the guest, and runs
+> **`test-without-building`** in-guest — the runtime that actually matters (the
+> constrained 3-vCPU Aqua session where the per-launch race lives) is still
+> 100% in the guest, on the identical binary; only the *compile* step moves to
+> the host. This **supersedes the earlier shared-`/tmp` workaround**
+> (`local-macos-vm-ci-reproduction.md` §8b): the `.xctestrun` Xcode emits is
+> **`__TESTROOT__`-relative**, resolved against wherever the file lands at
+> test time, so the rsync destination does not need to match the host's
+> absolute path — no path rewriting required. **Flip back to a real in-guest
+> build** (drop this whole host-build detour) belongs to
+> `retire-metal-renderer` / `add-xtty-test-image`, once the guest can build
+> xtty Metal-free.
 
 ```sh
 # same TART_HOME as the build (default ~/.tart; export only if you chose another volume)
 
-# 1. clone + constrain (3 vCPU = the race-reproducing CI-parity constraint)
+# 1. clone + constrain (3 vCPU = the race-reproducing CI-parity constraint).
+#    Use a UNIQUE clone name per run if you keep clones around for review
+#    (tart clone fails on an existing name) — e.g. suffix -1/-2 or a date.
 tart clone xtty-test:26.5 xtty-run
 tart set xtty-run --cpu 3 --memory 7168 --display 1024x768
 
-# 2. boot detached; get the IP (guest creds: admin/admin)
-nohup tart run xtty-run >/tmp/xtty-run.log 2>&1 & disown
+# 2. boot detached + HEADLESS; get the IP (guest creds: admin/admin).
+#    --no-graphics is load-bearing: it is what makes this the headless
+#    (acceptance-bearing) arm. For the GRAPHICS arm, drop --no-graphics —
+#    a VM window opens on the host. Plain `tart run` is the windowed mode,
+#    NOT headless.
+nohup tart run --no-graphics xtty-run >/tmp/xtty-run.log 2>&1 & disown
 IP=$(tart ip xtty-run)   # retry until the guest is up
 
-# 3. deploy the source AT TEST TIME (never baked into the image) — either:
-rsync -a --exclude build --exclude external --exclude .git . admin@$IP:xtty/   # uncommitted work OK
-# or: ssh admin@$IP 'git clone <repo-url> xtty && cd xtty && git checkout <branch>'
+# 3. inject your SSH key into the fresh clone — the golden only has password
+#    auth (admin/admin), so this happens once per clone, not once per image
+#    (-i attaches host stdin; flags come BEFORE the VM name, no `--` separator
+#    — Tart 2.32.1 syntax)
+tart exec -i xtty-run sh -c 'mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys' \
+  < ~/.ssh/xtty-vm.pub
+# every fresh clone has a new host key — accept-new keeps the later
+# ssh/rsync/scp non-interactive (a strict first contact would hang a
+# backgrounded run on the "authenticity of host" prompt)
+SSH="ssh -i ~/.ssh/xtty-vm -o StrictHostKeyChecking=accept-new"
 
-# 4. bootstrap + build + test in-guest
-#    NOTE: a remote ssh command runs a NON-login shell, which never sources
-#    ~/.zprofile — where the base image puts brew's PATH. Any brew-installed
-#    tool (xcodegen!) needs the explicit `source ~/.zprofile` prefix;
-#    /usr/bin tools (git, xcodebuild) work without it.
-ssh admin@$IP 'source ~/.zprofile && cd xtty && scripts/bootstrap-swiftterm.sh && xcodegen generate \
-  && xcodebuild test -project xtty.xcodeproj -scheme xtty -destination platform=macOS \
-       -derivedDataPath build -resultBundlePath /tmp/xtty.xcresult'
+# 4. build on the HOST — the guest has no Metal toolchain (interim, see above)
+xcodebuild build-for-testing -project xtty.xcodeproj -scheme xtty \
+  -destination 'platform=macOS' -derivedDataPath build
 
-# 5. collect evidence, then delete the clone (the golden stays pristine)
-scp -r admin@$IP:/tmp/xtty.xcresult ./artifacts/
+# 5. rsync the built products + the .xctestrun to the guest — no path
+#    rewriting needed (see the interim-recipe note above). Both live under
+#    build/Build/Products/; they must land SIDE BY SIDE at the destination,
+#    because __TESTROOT__ = the directory containing the .xctestrun, and the
+#    .xctestrun references __TESTROOT__/Debug/…
+rsync -a -e "$SSH" \
+  build/Build/Products/Debug build/Build/Products/*.xctestrun \
+  admin@$IP:~/xtty-build/
+
+# 6. test in the guest — NO retry flag (retry tolerance masks the per-launch race)
+$SSH admin@$IP \
+  'cd ~/xtty-build && xcodebuild test-without-building -xctestrun *.xctestrun \
+     -destination "platform=macOS" -resultBundlePath ~/xtty-build/result.xcresult'
+
+# 7. collect evidence (the convention is ~/Downloads/xtty-vm-poc/artifacts/<run>/).
+#    Deleting the clone here is a human's optional last step, not an automated
+#    one — a caller like the xtty-test-validator agent lists the clone in its
+#    cleanup manifest instead, so a red result stays up for follow-on review.
+DEST=~/Downloads/xtty-vm-poc/artifacts/my-run; mkdir -p "$DEST"
+scp -r -i ~/.ssh/xtty-vm -o StrictHostKeyChecking=accept-new \
+  admin@$IP:~/xtty-build/result.xcresult "$DEST/"
 tart delete xtty-run
 ```
 
@@ -201,6 +246,30 @@ SwiftUI menu clobber — **34/7/1 ↔ 36/5/1 of 42** (the two Cmd+D split tests
 were the per-launch-flaky pair), the exact CI failing set. That was the rig's
 whole purpose: to reproduce the per-launch race a green-gated acceptance would
 have masked.
+
+### Expected-difference matrix
+
+Differences between environments are not automatically bugs. This table
+records the **classes** of legitimate cross-environment difference and their
+**causes** — it is the table the `xtty-test-validator` agent (see AGENTS.md)
+classifies reds against at runtime. **Counts stay authoritative in Acceptance
+above; this table never duplicates a number, only causes.**
+
+| Class | Where it shows up | Cause |
+| --- | --- | --- |
+| **Shell arm (zsh vs bash)** | Local bare metal (zsh) vs both VM rigs + hosted CI (bash) | xtty injects OSC 7/133 shell integration into **zsh only** (`ZDOTDIR` redirection). Under bash, semantic-capture-dependent tests take their documented graceful-degradation arm instead of exercising the real path — parity with the (also-bash) hosted runner, not a regression. Also the source of the bash deprecation-banner grid corruption measured (and fixed) in `github-actions-ci-cd.md` §12. |
+| **Menu-race sensitivity by machine speed** | Pre-`fix-main-menu-clobber`: ~100% on the constrained 3-vCPU VM, ~0% on unconstrained bare metal | The SwiftUI main-menu clobber (`swiftui-mainmenu-clobber-forensics.md`) was a per-launch race whose odds scale with machine load — the VM's CPU constraint is *why* this rig reproduced it when bare metal didn't. Retired as a live source now that the fix has landed (validated 3× — the counts live in Acceptance above; `github-actions-ci-cd.md` §18); kept here because a **regression** in this class would reproduce the pre-fix menu-dispatch failing pattern recorded in Acceptance's pre-fix history. |
+| **Bracketed-paste capability** | Both VM rigs + hosted CI (all `/bin/bash`); not local zsh, not Homebrew bash 5.1+ | The rig/CI's `/bin/bash` is macOS's stock **bash 3.2.57**, whose readline lacks `enable-bracketed-paste` — a pasted multi-line string executes instead of staging. One known-benign residual, `testMultiLinePasteIsNotAutoExecuted` (`github-actions-ci-cd.md` §18). |
+| **Confirm-close / interference flake sources** | Local bare metal only (not observed on either VM rig) | Two local-only hazards: (a) **live mouse/keyboard interference** during `make test` driving the real GUI (the hands-off requirement the agent surfaces before that tier); (b) a **confirm-close race** when a churn test closes a freshly-split pane before its shell settles — more likely locally because a heavier interactive `~/.zshrc` widens the race window than the VM/CI's leaner bash startup. Root-caused in `github-actions-ci-cd.md` §13; the fix is the not-yet-applied `harden-churn-shell-readiness` change. |
+
+The Acceptance envelope above **and** this matrix are the **runtime source**
+`xtty-test-validator` reads at validation time (see `AGENTS.md` → test
+validation) — editing either re-tunes the agent's classification without
+touching the agent's own definition. **Reverse duty:** any change that alters
+test counts or expected residuals (e.g. `retire-metal-renderer`,
+`harden-churn-shell-readiness`, the harness-truthing successor) MUST update
+this section — and Acceptance — in the same session, or the "runtime read"
+promise just relocates the staleness.
 
 ## Maintenance
 
