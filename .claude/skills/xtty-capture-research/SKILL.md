@@ -3,7 +3,7 @@ name: xtty-capture-research
 description: Capture settled research/decisions into research/ and reconcile the related trackers. Use AFTER a research investigation or decision has settled, or a change has been archived/decided — to write it into research/ following the doc conventions, index it, reconcile the trackers (research/README.md, AGENTS.md Current status, research/04-design/02-milestones.md), and verify against the actual repo state. NOT for doing research — only for capturing + reconciling what has already settled.
 metadata:
   author: xtty
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Capture research & reconcile trackers
@@ -15,6 +15,15 @@ Capture a settled finding/decision into `research/` and bring every tracker back
 ## Checklist
 
 1. **Place the doc.** Write the finding into the right `research/` subfolder (`00-overview` / `01-terminals` / `02-internals` / `03-analysis` / `04-design`). Follow the research-doc conventions: a **Provenance** note (date + how produced), a **Sources** list, and ✅/❌/❓ confidence tags. For an *evolving* decision, **add a dated addendum — do not rewrite** the original, and add a forward-pointer from the superseded section.
+
+   **Depth bar** (AGENTS.md "Capture depth" is the rule; exemplar: `research/03-analysis/local-network-privacy-forensics.md`). If the capture has **measured claims or retired theories**, check it contains:
+   - [ ] the **mechanism/internals** (how it actually works, with evidence — not just the conclusion)
+   - [ ] **reproducible probes** — exact commands, what each proves *and cannot prove*, incl. dead instruments
+   - [ ] the **retired-theory fates table** — each ❌ next to the experiment that killed it
+   - [ ] **re-verify by effect** — how a future reader re-checks the headline claim (never syntax/read-back)
+   - [ ] a **reusable guideline** if the finding generalizes; **artifact pointers** always
+
+   Lightweight captures (landscape/comparison, no measurements) skip the bar.
 
 2. **Index it.** Add or update the one-line entry in `research/README.md`.
 
