@@ -109,3 +109,7 @@ Rebuild the image only when a pinned input changes: a new Xcode pin (e.g. CI's `
 - ~~**The exact `macos-tahoe-base` tag to pin**~~ — **resolved at apply time (2026-07-04):** no version tags exist upstream (only `:latest`), so the pin is the manifest **digest** `sha256:a8e1c830…` (see D2). The guest's actual macOS build gets recorded in the README's last-verified section at first build.
 - **Source-deploy flavor at test time** — rsync from the host (matches the §8 workflow, works for uncommitted work) vs in-guest `git clone` (needs the repo public/reachable). The README documents both; no need to standardize now.
 - **Whether `packer init` runs inside `make image` every time or once** — folding it in is idempotent and simpler; measure whether its latency is negligible at apply time.
+
+## Open-change interaction (added 2026-07-05)
+
+- **`test-image-bash-shell`** edits this change's `packer/xtty-test.pkr.hcl` after the fact: it adds a `chsh -s /bin/bash` provisioner (hosted-runner shell parity — and the measured resolution of the Local Network modal seen in 4.4's graphics run; the template's original Local Network comment block is superseded and replaced by it). Both changes ADD distinct `build-workflow` requirements — no delta conflict; archive in any order after both apply.
