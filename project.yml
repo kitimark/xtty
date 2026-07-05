@@ -52,8 +52,9 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: xtty
-        # SwiftUI App lifecycle; the terminal NSWindow is created by an AppKit
-        # AppDelegate (SwiftTerm renders black under SwiftUI hosting on macOS 26).
+        # AppKit lifecycle (NSApplicationMain via App/main.swift — the SwiftUI
+        # App lifecycle clobbers the custom main menu); the terminal NSWindow is
+        # AppKit-owned (SwiftTerm renders black under SwiftUI hosting on macOS 26).
         INFOPLIST_KEY_NSPrincipalClass: NSApplication
         SWIFT_VERSION: "6.0"
         # --- Signing posture (P0) ---

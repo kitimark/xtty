@@ -15,6 +15,7 @@ final class XttyMultiplexingUITests: XCTestCase {
             attachScreenshot("no-state-dump (Release?)")
             return  // degrade gracefully when the DEBUG hook is absent
         }
+        requireXttyMainMenu(in: app)  // Cmd+D/W are menu key equivalents
         // Wait for this launch's fresh single-pane baseline (a stale dump from a
         // prior test can linger a tick before the new app overwrites it).
         let initial = StateDumpReader.waitForState(timeout: 10) { ($0["paneCount"] as? Int) == 1 }
@@ -43,6 +44,7 @@ final class XttyMultiplexingUITests: XCTestCase {
             attachScreenshot("no-state-dump (Release?)")
             return
         }
+        requireXttyMainMenu(in: app)  // Cmd+D / Cmd+Opt+arrows are menu key equivalents
 
         app.typeKey("d", modifierFlags: .command)  // split right; new pane (index 1) focused
         let split = StateDumpReader.waitForState(timeout: 5) { ($0["paneCount"] as? Int) == 2 }
@@ -63,12 +65,15 @@ final class XttyMultiplexingUITests: XCTestCase {
             attachScreenshot("no-state-dump (Release?)")
             return
         }
+        requireXttyMainMenu(in: app)  // Cmd+T/W are menu key equivalents
         _ = StateDumpReader.waitForState(timeout: 10) { ($0["tabCount"] as? Int) == 1 }
 
         // New tab → a second native tab, focused, with its own single pane.
         app.typeKey("t", modifierFlags: .command)
         let twoTabs = StateDumpReader.waitForState(timeout: 5) { ($0["tabCount"] as? Int) == 2 }
         XCTAssertEqual(tabCount(twoTabs), 2, "Cmd+T should open a second native tab")
+        XCTAssertEqual(twoTabs?["windowCount"] as? Int, 2,
+                       "a native tab is a window with its own controller (windowCount tracks it)")
         XCTAssertEqual(paneCount(twoTabs), 1, "the new tab has its own single pane")
 
         // Closing the last pane of the focused tab escalates to closing the tab;
@@ -86,12 +91,20 @@ final class XttyMultiplexingUITests: XCTestCase {
             attachScreenshot("no-state-dump (Release?)")
             return
         }
+        requireXttyMainMenu(in: app)  // Cmd+N is a menu key equivalent
+        // This launch's fresh single-window baseline (stale-dump guard).
+        let initial = StateDumpReader.waitForState(timeout: 10) { ($0["windowCount"] as? Int) == 1 }
+        XCTAssertEqual(initial?["windowCount"] as? Int, 1, "starts with one window")
+
         app.typeKey("n", modifierFlags: .command)  // new window
-        // A second top-level window appears; the app stays responsive.
-        let appeared = app.windows.count >= 2
-            || NSPredicate(format: "count >= 2").evaluate(with: app.windows)
-        XCTAssertTrue(appeared || app.state == .runningForeground,
-                      "Cmd+N opens a second window without crashing")
+        // The red→green witness (fix-main-menu-clobber): a REAL second window
+        // must exist. The pre-fix version of this assert passed vacuously
+        // ("appeared || still running") while Cmd+N no-oped against a
+        // clobbered menu.
+        let twoWindows = StateDumpReader.waitForState(timeout: 5) { ($0["windowCount"] as? Int) == 2 }
+        XCTAssertEqual(twoWindows?["windowCount"] as? Int, 2,
+                       "Cmd+N must open a real second window (windowCount)")
+        XCTAssertEqual(app.state, .runningForeground)
         attachScreenshot("after-new-window")
     }
 }

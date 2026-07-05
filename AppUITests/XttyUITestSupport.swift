@@ -74,6 +74,37 @@ extension XCTestCase {
         return app
     }
 
+    /// Menu-clobber canary (fix-main-menu-clobber): a fatal precondition for any
+    /// test that drives menu key equivalents. The Cmd chords (Cmd+D/F/N/T/V/W,
+    /// Cmd+Opt+arrows) dispatch ONLY as main-menu key equivalents, so a launch
+    /// whose menu was clobbered must fail here with the named cause — not later
+    /// as an unexplained dropped keystroke. Observe-only (never repairs the
+    /// menu) and never retries. Call it AFTER the suite's state-dump-available
+    /// guard (Release builds degrade gracefully before reaching it), and only
+    /// where StateDumpReader was reset before launch — a stale dump from a
+    /// prior app instance must not vouch for this one.
+    func requireXttyMainMenu(in app: XCUIApplication, timeout: TimeInterval = 10,
+                             file: StaticString = #filePath, line: UInt = #line) {
+        // "Terminal" is the discriminator (never in SwiftUI's default set);
+        // the clobbered bar also carries Edit/View/Window, so require all four.
+        let required = ["Edit", "View", "Terminal", "Window"]
+        let ok = StateDumpReader.waitForState(timeout: timeout) { state in
+            guard let titles = state["mainMenuTitles"] as? [String] else { return false }
+            return required.allSatisfy(titles.contains)
+        } != nil
+        guard !ok else { return }
+        let titles = (StateDumpReader.read()?["mainMenuTitles"] as? [String]) ?? []
+        let diag = XCTAttachment(string: app.menuBars.debugDescription)
+        diag.name = "menu-canary-menuBars"
+        diag.lifetime = .keepAlways
+        add(diag)
+        attachScreenshot("menu-canary-failure")
+        continueAfterFailure = false  // fatal: driving Cmd chords now would only cascade
+        XCTFail("menu canary: xtty's main menu is not installed (dump titles = \(titles)) — "
+                + "the menu was clobbered or never built; refusing to drive menu key equivalents "
+                + "(see fix-main-menu-clobber)", file: file, line: line)
+    }
+
     /// Attach a full-screen screenshot for human/vision review.
     func attachScreenshot(_ name: String) {
         let shot = XCUIScreen.main.screenshot()

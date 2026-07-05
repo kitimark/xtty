@@ -32,6 +32,7 @@ final class XttyLifecycleCensusUITests: XCTestCase {
             attachScreenshot("no-state-dump-or-census (Release?)")
             return  // degrade gracefully when the DEBUG census hook is absent
         }
+        requireXttyMainMenu(in: app)  // the churn loops drive Cmd+D/W/T
         // Settle to this launch's fresh single-pane / single-tab baseline.
         _ = StateDumpReader.waitForState(timeout: 10) {
             ($0["paneCount"] as? Int) == 1 && ($0["tabCount"] as? Int) == 1

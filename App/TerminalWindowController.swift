@@ -826,6 +826,18 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             // App-layer object lifetimes through, so the churn e2e can assert
             // they return to baseline (a stuck count = a leaked instance).
             "liveInstanceCounts": Self.liveInstanceCensus(),
+            // Menu-clobber canary (fix-main-menu-clobber): the installed main
+            // menu's top-level TITLES — never object identity, which reads
+            // healthy through SwiftUI's in-place item mutation. XttyMainMenu
+            // builds untitled top-level items whose submenu carries the title
+            // (what the menu bar renders), hence the submenu fallback.
+            // Observe-only; the dump path must never repair the menu.
+            "mainMenuTitles": NSApp.mainMenu?.items.map { $0.submenu?.title ?? $0.title } ?? [],
+            // Terminal-window count: live controllers (a native tab is a
+            // window with its own controller; the quake accessory is not a
+            // controller so never counts). Not NSApp.windows — that would
+            // count the quake panel and chrome windows.
+            "windowCount": TerminalWindowController.liveCount,
         ]
         if let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]) {
             try? data.write(to: URL(fileURLWithPath: UITestDump.stateDumpPath))

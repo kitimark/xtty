@@ -1,4 +1,3 @@
-import SwiftUI
 import AppKit
 import XttyCore
 
@@ -10,18 +9,13 @@ import XttyCore
 /// SwiftUI doesn't composite). A plain `NSWindow` composites it correctly. See
 /// `TerminalWindowController` for the full rationale.
 ///
-/// SwiftUI still owns the app lifecycle. All engine access goes through `XttyCore`
-/// (now: the pane model + session registry).
-@main
-struct XttyApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-
-    var body: some Scene {
-        // No `WindowGroup`: the terminal window is created by `AppDelegate` in
-        // AppKit. `Settings` is an inert scene that satisfies the `App` protocol.
-        Settings { EmptyView() }
-    }
-}
+/// The app lifecycle is AppKit's (`NSApplicationMain`, entered from `main.swift`),
+/// NOT the SwiftUI `App` lifecycle: SwiftUI's private app delegate owns the main
+/// menu under that lifecycle and rewrites the installed menu's items in place on
+/// a per-launch race, clobbering the custom menu on slow machines
+/// (`research/03-analysis/swiftui-mainmenu-clobber-forensics.md`). SwiftUI is
+/// used for embedded views only (`NSHostingView`). All engine access goes
+/// through `XttyCore` (the pane model + session registry).
 
 /// Creates and owns the terminal window(s), the shared session registry, and the
 /// app-level config resolved once at launch.
@@ -223,6 +217,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
     // Quit when the last window closes (a native tab is a window, so this still
     // yields correct quit-on-last semantics once tabbing lands in layer 3).
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
+    }
+
+    // Pure-AppKit lifecycle: SwiftUI's delegate proxy used to supply this
+    // default; without it AppKit logs a secure-restorable-state warning.
+    // Windows are programmatic and state restoration is unused.
+    func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
         true
     }
 

@@ -16,6 +16,9 @@ final class XttyUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         GridDumpReader.reset()
+        // The state dump backs the menu canary; reset it too so a stale dump
+        // from a prior app instance can never vouch for this launch's menu.
+        StateDumpReader.reset()
         app = XCUIApplication()
         app.launchArguments = ["-UITestGridDump"]
         app.launch()
@@ -66,6 +69,10 @@ final class XttyUITests: XCTestCase {
         pb.setString("\(lineA)\n\(lineB)", forType: .string)
 
         app.activate()
+        // Cmd+V dispatches via the Edit▸Paste menu item — refuse to drive it
+        // against a clobbered menu (fatal canary; Release builds skip with the
+        // rest of the dump-gated assertions).
+        if GridDumpReader.isAvailable { requireXttyMainMenu(in: app) }
         app.typeKey("v", modifierFlags: .command) // Cmd+V; DO NOT press Return
 
         attachScreenshot("paste-staged-before-return")
@@ -152,6 +159,8 @@ final class XttyUITests: XCTestCase {
                           "seed token never reached the grid")
         }
 
+        // Cmd+F dispatches via Edit▸Find — fatal canary first (see paste test).
+        if GridDumpReader.isAvailable { requireXttyMainMenu(in: app) }
         // Cmd+F → the AppKit Find menu → SwiftTerm's native bar. Fall back to
         // clicking the menu item if the synthetic key-equivalent doesn't register.
         app.typeKey("f", modifierFlags: .command)
@@ -211,6 +220,8 @@ final class XttyUITests: XCTestCase {
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(i18n, forType: .string)
+        // The paste rides Edit▸Paste — fatal canary first (see paste test).
+        if GridDumpReader.isAvailable { requireXttyMainMenu(in: app) }
         app.typeKey("v", modifierFlags: .command)
         app.typeKey(.enter, modifierFlags: [])
 
