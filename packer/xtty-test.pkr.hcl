@@ -110,21 +110,30 @@ build {
     ]
   }
 
-  # macOS 15+/26 Local Network privacy note (NO working pre-suppression baked —
-  # see below). On macOS 26.5 (which macos-tahoe-base:latest now ships, but the
-  # frozen macos-tahoe-xcode image does not) the XCUITest runner<->app IPC touches
-  # the guest's ROUTABLE vmnet address (not loopback), tripping the per-app Local
-  # Network gate → a modal "Allow '<app>' to find devices on local networks?"
-  # attributed to the app under test. It is NOT a TCC.db permission and NOT any
-  # real networking by the app — purely the XCTest IPC. Impact is BENIGN for the
-  # rig's purpose: a HEADLESS run is unaffected (33/8/1 with or without the modal —
-  # no window server, no focus theft); only a GRAPHICS run loses ~1 extra Cmd-key
-  # test to focus theft. TN3179's AllowedEthernet/WiFiLocalNetworkAddresses defaults
-  # were tried (sudo write to com.apple.network.local-network + reboot) and
-  # SCREENSHOT-REFUTED — the dialog still appeared, matching the finding that macOS
-  # offers no supported offline pre-grant for Local Network. So: run HEADLESS for
-  # clean measurement; for graphics watching, click "Allow" once or add an in-test
-  # addUIInterruptionMonitor. See research/03-analysis/local-macos-vm-ci-reproduction.md §12.
+  # CI-parity login shell: GitHub's hosted macOS runners set the runner
+  # account's shell to bash (runner-images configure-shell.sh: chsh -s /bin/bash),
+  # so the in-guest suite must run under bash here too. This also removes the
+  # macOS Local Network privacy modal from graphics runs. Measured root cause
+  # (2026-07-05, lldb backtrace + per-config log captures — supersedes the
+  # earlier "XCUITest IPC over the routable vmnet address" theory): xtty reads
+  # its own host name via ProcessInfo.hostName → NSHost → a reverse-DNS lookup
+  # of every local address, and that code path runs only when the shell emits
+  # OSC 7 — i.e. under zsh (xtty injects shell integration into zsh only),
+  # never bash. Setting a static HostName does NOT help (the reverse lookups
+  # still fire, measured 20/launch either way); TN3179's
+  # Allowed*LocalNetworkAddresses defaults were separately screenshot-refuted.
+  # Under bash there is no OSC 7, no reverse DNS, and nothing for the Local
+  # Network gate to prompt about — the same reason the hosted runners and the
+  # frozen macos-tahoe-xcode rig never show the dialog. Semantic-capture tests
+  # take their graceful-degradation arms under bash, exactly as on CI.
+  # See research/03-analysis/local-macos-vm-ci-reproduction.md §12.
+  provisioner "shell" {
+    inline = [
+      "sudo chsh -s /bin/bash admin",
+      "sudo chsh -s /bin/bash root",
+      "dscl . -read /Users/admin UserShell",
+    ]
+  }
 
   # Footprint: drop the installer + caches before the image is sealed.
   provisioner "shell" {
