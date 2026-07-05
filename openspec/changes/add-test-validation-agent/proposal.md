@@ -1,0 +1,31 @@
+# Add Test Validation Agent
+
+## Why
+
+Multi-environment test validation — local bare metal, headless VM, graphics VM — is now a recurring, high-value workflow (it validated `fix-main-menu-clobber` three ways and has repeatedly surfaced real findings: the menu clobber, the Local Network popup, the bash-3.2 bracketed-paste gap). But run inline it floods the main session with ~30 minutes of polling/SSH/log output per sweep (tens of thousands of tokens for ~2k tokens of decision-relevant content), and the procedure + failure-classification discipline currently live only in session transcripts and scattered docs. A committed Claude Code **agent** codifies the workflow durably, absorbs the noise in an isolated context, and returns only a verdict — invocable both by the user directly and by OpenSpec verify tasks during `/opsx:apply`.
+
+## What Changes
+
+- **New committed agent `.claude/agents/xtty-test-validator.md`** — runs the validation tiers (Tier 0 `make test-core`, Tier 1 local `make test`, Tier 2 headless VM, Tier 3 graphics VM) against the golden `xtty-test` image per `packer/README.md`'s runtime workflow, classifies every red against the **expected-difference matrix** and the **living acceptance envelope** (both read from the repo at runtime — never hardcoded), and returns a fixed-skeleton report: verdict, verbatim per-tier counts + failing sets, per-red classification (known bucket vs UNEXPLAINED), cross-environment consistency, evidence paths, actionable feedback, and a **cleanup manifest** (the agent never deletes anything — it lists what the user may clean up, preserving rigs for follow-on review).
+- **Two spawn scenarios documented in AGENTS.md**: (a) direct user request; (b) **OpenSpec verify tasks** — a delegation rule that verify tasks executing the suite are delegated to the agent, whose report the apply loop consumes (main-context reduction is the point).
+- **New thin launcher `.claude/commands/xtty/validate.md`** (mirrors `/xtty:capture-research`).
+- **`.gitignore` exception** extended to track `.claude/agents/xtty-*` (same pattern as the committed commands/skills).
+- **The expected-difference matrix captured into `packer/README.md`** (next to the acceptance envelope) — it currently exists only in a session transcript; it becomes the durable source the agent defers to. The README's **Runtime workflow is also corrected to the proven interim host-build recipe** (its current in-guest build step cannot run on the Metal-free golden until `retire-metal-renderer` lands), so the agent's runtime source is accurate today.
+- **Guardrails encoded** (all session-proven): no retry flags (they mask per-launch races), clone-per-run/never touch the golden, serialize VM runs (parallel clones muddy 3-vCPU race timing), observe-never-repair, verbatim counts, hands-off-the-machine warning for the local tier, host-build + `test-without-building` (until `retire-metal-renderer` enables in-guest builds).
+- Default tiers: core + local + headless×1 for quick confirms; full sweep (headless×2 + graphics) for product-code changes. A CI-inspect mode (classify a GitHub Actions run with the same logic) is noted as a design option, not built now.
+
+## Capabilities
+
+### New Capabilities
+
+- `test-validation`: the committed multi-environment test-validation tooling — the agent, its launcher, the two spawn scenarios, the runtime deference to repo-owned envelope/matrix numbers, the report contract (incl. the cleanup manifest), and the version-control ignore exception.
+
+### Modified Capabilities
+
+(none — `research-capture` precedent: the AGENTS.md/gitignore/README documentation requirements live inside the new capability's spec)
+
+## Impact
+
+- **Files:** new `.claude/agents/xtty-test-validator.md` + `.claude/commands/xtty/validate.md`; `.gitignore` (one exception block); `AGENTS.md` (delegation rule + tracked-tooling note); `packer/README.md` (expected-difference matrix section + the Runtime-workflow interim correction). **No product code, no test code, no CI changes.**
+- **Interactions:** none with the open changes' specs (verified: the five open changes touch `build-workflow`/`verification-harness`/`terminal-configuration`/`performance-harness` only). Content-level couplings are by design *runtime reads*, so they don't create archive-order constraints: the envelope numbers shift when `retire-metal-renderer` / `harden-churn-shell-readiness` / the harness-truthing successor land, and the agent picks them up from `packer/README.md` without edits — backed by a documented **reverse duty** in the AGENTS.md deference chain (any change that alters test counts or expected residuals updates the README's Acceptance/matrix in the same session). **Pre-registered:** the README's Runtime workflow currently documents the *in-guest* build, which cannot run on the Metal-free golden until `retire-metal-renderer` lands, and **no open change owns correcting that text** — this change rewrites the section to the proven interim host-build recipe (marked interim); flipping it back to the in-guest form belongs to `retire-metal-renderer` / `add-xtty-test-image` (which own the in-guest-build proof), and the runtime-reading agent follows the README in either state.
+- **Cost:** a full sweep is ~25–35 min of wall clock inside the agent; the main session receives ~2k tokens. Users: solo maintainer today; the tooling is committed so it survives machine moves and future contributors.
