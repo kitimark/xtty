@@ -115,6 +115,7 @@ Everything else — `MainMenu.swift`, all `NSHostingView` embeddings (sidebar `T
 ## 7. Re-verify by effect
 
 - **Headline claim (the machinery + fix):** on a post-migration build, `lldb -o 'run' -o 'expr -l objc -- (Class)[[NSApp delegate] class]'` must print xtty's `AppDelegate`, **not** `SwiftUI.AppDelegate`; a breakpoint on the `makeMainMenu` mangled name must fail to resolve any live code path (the class never instantiates). Then the effect that matters: the P6 synthetic trigger against the fixed build must leave the menu intact, and the VM protocol in §6 must go green twice.
+  - ✅ **Done 2026-07-05 (`fix-main-menu-clobber` applied):** the delegate-class check printed **`xtty.AppDelegate`**; the VM protocol measured **40/1/1 three times** (headless ×2 + graphics) on the ~100%-clobber rig, all 7 menu-dispatch tests flipped, the menu canary present every launch. The one residual is a bash-3.2 bracketed-paste rig artifact, not the fix. Full result: [`github-actions-ci-cd.md`](github-actions-ci-cd.md) §18 + `~/Downloads/xtty-vm-poc/artifacts/fix-main-menu-clobber-verify/`.
 - **Mechanism claims on a future macOS:** re-run P2 (symbol hunt) first — Apple renames private symbols; if `makeMainMenu`/`updateMainMenu` vanish, re-anchor via P3 (runtime class enumeration) before trusting any offset in §1.
 - **Fates-table claims:** each ❌ row names its probe; re-run the probe (P7 sources compile standalone with `swiftc`).
 

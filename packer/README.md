@@ -177,17 +177,30 @@ binary inside Xcode even with the component uninstalled (a proven false
 positive, §8b); on a correctly-built image that lookup *succeeds*. The positive
 proof is that the xtty build succeeds without the component.
 
-### Acceptance (pre-registered)
+### Acceptance (measured — post `fix-main-menu-clobber`)
 
-Acceptance = **parity with the proven big-image rig**, *not* an all-green
-suite. Until `fix-main-menu-clobber` lands, a full-suite run is *expected* to
-show the per-launch-race results: the failing-test **set** (split /
-directional-focus / new-tab / find-bar / paste / truecolor / churn) within the
-measured envelope — **33/7/1-ish of 41, possibly 35/5/1** (the big-image rigs
-measured 34/7/1 ↔ 36/5/1 of 42; `retire-metal-renderer` deletes the passing
-Metal e2e, hence 41; the two Cmd+D split tests are the known per-launch-flaky
-pair). A green-gated acceptance would mask exactly the race this rig exists to
-reproduce. If a run is ambiguous, run a second and compare the union.
+**Post-fix envelope: `40/1/1` of 42** (measured 2026-07-05, `fix-main-menu-clobber`
+validated: 3 runs — headless ×2 + graphics — all identical). The 7
+menu-dispatch tests that made this rig's pre-fix envelope now **pass**; the
+single expected residual is **`testMultiLinePasteIsNotAutoExecuted`**, and it
+is **NOT a product bug** — the image's `/bin/bash` login shell is macOS **bash
+3.2.57**, whose readline lacks `enable-bracketed-paste`, so a pasted newline
+executes (grid-proven; zsh + bash 5.1+ users are unaffected). A future harness
+change guards that test on a no-bracketed-paste shell; until then it is the
+image's one known-benign red. (Once `retire-metal-renderer` deletes the passing
+Metal e2e the total is 41, so the envelope reads **39/1/1 of 41**.)
+
+Acceptance = **this measured envelope**, *not* a bare all-green (the paste
+residual is inherent to the bash rig). A regression is any menu-dispatch test
+going red again, or a *second* non-paste failure. Graphics and headless now
+match exactly (the fix's `windowCount` state-dump assertion removed the old
+graphics-mode focus-steal red).
+
+**Pre-fix history (for context):** before the fix this rig reproduced the
+SwiftUI menu clobber — **34/7/1 ↔ 36/5/1 of 42** (the two Cmd+D split tests
+were the per-launch-flaky pair), the exact CI failing set. That was the rig's
+whole purpose: to reproduce the per-launch race a green-gated acceptance would
+have masked.
 
 ## Maintenance
 

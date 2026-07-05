@@ -458,6 +458,20 @@ The §10a/§10g mechanism ("a native app can't reliably own the shared session's
 
 ---
 
+## 18. Addendum (2026-07-05) — `fix-main-menu-clobber` APPLIED + VALIDATED: 7 tests flipped, one benign bash-3.2 residual
+
+> **Provenance:** 2026-07-05. `/opsx:apply fix-main-menu-clobber` (the §17 design). Migration: deleted `@main struct XttyApp: App` + added `App/main.swift` (`NSApplicationMain`, strong `let delegate` retention) + `applicationSupportsSecureRestorableState → true`; DEBUG dump gained `mainMenuTitles` (title-based) + `windowCount`; a `requireXttyMainMenu` canary wired into the Cmd-driving suites; the Cmd+N test now asserts a real second window. Validated on a fresh clone `xtty-fixrun` of the bash `xtty-test:26.5` golden (macOS 26.5, 3 vCPU / 7 GB), host `build-for-testing` → `test-without-building`, no retry flag. Evidence: `~/Downloads/xtty-vm-poc/artifacts/fix-main-menu-clobber-verify/` (`run1/run2/runG` logs + `run1.xcresult` + `KEY/` screenshots + `REVIEW.md`).
+
+- ✅ **The fix works — 3 runs, all `40/1/1`, identical failing set** (headless ×2 + graphics). Pre-fix this rig was **34/7/1**; a per-launch race cannot produce three identical clean results, so the fix is **durable**, not a race win. The ×2 acceptance (§17) is exceeded.
+- ✅ **All 7 menu-dispatch tests flipped green** (split, directional-focus, new-tab, find-bar, truecolor, churn — and new-window). The **menu canary** reported xtty's own Edit/View/Terminal/Window titles present on every launch (~126 launches across the 3 runs); pre-fix it would have `XCTFail`'d naming the clobber.
+- ✅ **Mechanism confirmed independently** (forensics §7): local lldb on the fixed build — `(Class)[[NSApp delegate] class]` = **`xtty.AppDelegate`**, not `SwiftUI.AppDelegate`. Under `NSApplicationMain`, SwiftUI's app delegate (owner of both `makeMainMenu` call sites) is never installed. The redundant P6 synthetic-trigger re-run was dropped — the at-scale canary is stronger.
+- ✅ **Graphics-mode focus-steal red is GONE.** §13b/README documented a graphics-only extra red (`testNewWindowOpensSecondWindow`, focus theft — 32/9/1 vs headless 33/8/1). The fix's new `windowCount` state-dump assertion doesn't use XCUI window enumeration/focus, so graphics now equals headless exactly (both 40/1/1).
+- ❌→ℹ️ **The 1 residual is NOT the fix and NOT a product bug — it's macOS bash 3.2.** `testMultiLinePasteIsNotAutoExecuted` pastes `alpha\nbeta` and asserts it stages, not executes. The rig's `/bin/bash` is **GNU bash 3.2.57** (Apple's GPLv2 build), whose readline has **no `enable-bracketed-paste`** — so the pasted `\n` runs (grid: `-bash: alpha4015: command not found`). Its **sibling Cmd+V test** (single-line paste) passed, and the canary passed for it — Cmd+V dispatches; the menu is intact. Real users get bracketed paste (**zsh** default; **bash 5.1+** via Homebrew). Pre-fix, this test was *masked* as a Cmd+V menu failure (Cmd+V no-oped on the clobbered menu, never reaching the assertion); the fix un-masked a **rig-shell limitation**. This is a *new* finding, outside the §15f matrix.
+- **Follow-up (harness-truthing change, not this one):** guard/skip the bracketed-paste test on a shell without `enable-bracketed-paste` (or seed a bracketed-paste-capable shell in the injected env). CI (also `/bin/bash`) will show this one test red post-fix for the same benign reason — pre-register it so it isn't misread as the fix failing.
+- **§15f matrix outcomes:** quake suite passed (its real body ran on the VM session); confirm-close race did **not** surface on the VM (churn green all 3 runs — the local `make test` churn/new-tab flake the owner eyewitnessed is the separate `harden-churn-shell-readiness` item, per-launch and load-sensitive); ⌘⌥arrow matching worked on 26.5 (directional-focus green). The packer/README acceptance envelope is updated to the measured **40/1/1**.
+
+---
+
 ## Sources
 
 - **xtty repo:** `Makefile`, `project.yml`, `scripts/bootstrap-swiftterm.sh`, `patches/swiftterm/UPSTREAM_CONFIG.sh` + `xtty-accessors.diff`, `.gitignore`, `XttyCore/Package.{swift,resolved}`, `AppUITests/*` (StateDumpReader/GridDumpReader, `XTTY_*` triggers), `AGENTS.md`

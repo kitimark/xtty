@@ -17,6 +17,7 @@
 - [ ] 3.1 Run the churn test 5× consecutively locally (`xcodebuild test … -only-testing:xttyUITests/XttyLifecycleCensusUITests`) — expect 5/5 green against the recorded F/F/P baseline; if any run fails, treat it as the design's D6 escalation signal (do not add retries)
 - [ ] 3.2 Run the full suite (`make test`) — all XCUITests green locally (bench e2e stays opt-in/skipped)
 - [ ] 3.3 `openspec validate "harden-churn-shell-readiness"` passes
+- [ ] 3.5 **Archive-time reconciliation (three-way, inserted by `fix-main-menu-clobber`):** this change's `verification-harness` delta MODIFIES the shared "Deterministic content assertion channel" requirement, which `retire-metal-renderer` and `fix-main-menu-clobber` also MODIFY. Before `openspec archive`, re-paste the then-current established block from `openspec/specs/verification-harness/spec.md` into this change's delta and re-apply only this change's own edit (the modal-liveness dump sentence/scenario), so an earlier-archived sibling's merged text (e.g. `fix-main-menu-clobber`'s `mainMenuTitles`/`windowCount` sentence + two scenarios) is not silently reverted
 - [ ] 3.4 Document the expected CI readout in the change (commit message or PR note): churn stays red on CI until `fix-main-menu-clobber` lands (different root cause — pre-registered), so a red CI churn is not a regression of this change
 
 ## 4. Trackers
