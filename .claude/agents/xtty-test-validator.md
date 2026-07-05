@@ -48,6 +48,7 @@ Every tier at or above Tier 1 will outlive the Bash tool's foreground limits (12
 
 - Launch each tier's actual test/build command with `run_in_background` (or `nohup ... &` redirected to a log file if you need finer control).
 - Poll sparsely — every 30–60 s — by reading the tail of the log file or checking whether the background process/task has completed. Don't poll faster than that; it just burns your own context on the same noise you're supposed to be absorbing.
+- **Keep your turn alive while you wait — never park.** Poll with bounded foreground waits you drive yourself (e.g. `until ! kill -0 <pid> 2>/dev/null; do sleep 30; done` with a generous `timeout`, up to the 600 s per-call max, repeated as needed) — do NOT end your turn expecting a background-task notification to wake you: a subagent that stops with only a watcher running may never be re-invoked and strands the sweep mid-run (measured twice on this tooling's own smoke runs; the bounded-wait pattern completed a full ×2 VM sweep without incident).
 - This also bounds your own context growth over a 25–35 min full sweep: you're reading log tails periodically, not streaming everything continuously.
 
 ## Evidence and the report
