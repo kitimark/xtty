@@ -502,6 +502,8 @@ Both are on the **non-blocking** `build-and-test` job, both grid-proven (§11–
 
 **Fixes (deferred to the harness-truthing successor — not a product change):** extend the wrap-tolerant matcher to the find-bar focus-restore assertion; guard the paste test on a bracketed-paste-capable shell (or seed one in the injected env).
 
+**Mechanism (why `findbar-marker-wrap` is runner-only):** verified from `actions/runner-images` source in [`ci-runner-prompt-width-forensics.md`](ci-runner-prompt-width-forensics.md) — stock macOS `PS1='\h:\W \u\$ '` (the image sets **no** `PS1`), so prompt width = `len(\h)`; the runner's ~61-char `\h` is **GitHub-network-injected at runtime** (the image build sets only `Mac-<epoch>.local`), which is why the short-`\h` local Tart VM's `39/1/1` envelope does **not** include this red and why it can't be reproduced by rebuilding the image. The only reproduction lever is hostname length.
+
 ### 19c. Reverse duty
 
 Any change that **adds or removes a test, fixes a known-benign residual, or changes a job's required-gate status** MUST update this matrix (and the §19a job map) **in the same session** — otherwise the agent's runtime read just relocates the staleness. Mirrors the `packer/README.md` reverse duty for the VM matrix.

@@ -259,6 +259,8 @@ executes (grid-proven; zsh + bash 5.1+ users are unaffected). A future harness
 change guards that test on a no-bracketed-paste shell; until then it is the
 image's one known-benign red.
 
+**Why the CI `findbar-marker-wrap` residual is NOT in this envelope** (`testFindBarOpensLocatesAndDismisses` passes here but reds on the hosted runner): that flake is a pure **prompt-width** artifact — the runner's ~61-char `\h` soft-wraps the typed marker, defeating a strict grid match — and this image's `\h` is short (`Manageds-Virtual-Machine`, 24 chars), so the marker never wraps. The image mirrors CI on the **race class** and **shell capability**, but not **prompt width**. To close that gap the image would need a long `\h` (`scutil --set` a ~60-char hostname, mirroring `runner-images`' runtime name) — a "harness-truthing" investment that **re-baselines this envelope** (a long `\h` also flips the paste test's failing line `:87`→`:84` like the runner). Verified mechanism + the gethostname spike + the options menu: `research/03-analysis/ci-runner-prompt-width-forensics.md`.
+
 Acceptance = **this measured envelope**, *not* a bare all-green (the paste
 residual is inherent to the bash rig). A regression is any menu-dispatch test
 going red again, or a *second* non-paste failure. Graphics and headless now
