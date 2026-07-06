@@ -477,6 +477,37 @@ The §10a/§10g mechanism ("a native app can't reliably own the shared session's
 
 ---
 
+## 19. The CI expected-difference matrix — durable classification target for `xtty-ci-investigator`
+
+> **Provenance:** 2026-07-06. Consolidates the per-addendum residual findings above (esp. §18's CI-measured pair) into a single crisp table + job map for the committed **`xtty-ci-investigator`** agent (`.claude/agents/xtty-ci-investigator.md`) to defer to at run time. This is the CI counterpart to `packer/README.md`'s VM expected-difference matrix. When a narrative addendum above and this matrix disagree, **this matrix wins** (it is the latest consolidation).
+
+This section is the **classification target** for CI-failure investigation: given a failed run, every red maps to exactly one row below (a named benign bucket) **or** is **UNEXPLAINED** — and any UNEXPLAINED red forbids an in-envelope verdict. Re-verified grid-first against run `28801860582` (2026-07-06): both residuals reproduced with the documented causes.
+
+### 19a. Job map — which jobs gate merges
+
+| Job (`.github/workflows/`) | Role | A red here means |
+| --- | --- | --- |
+| `test-core` (`ci.yml`) | **Required gate** | **Stop.** The fast view-free `XttyCore` unit suite is deterministic — a red is a real regression by default, regardless of any bucket. |
+| `build-and-test` (`ci.yml`) | **Non-blocking** | Classify each red against §19b; all-benign ⇒ expected, proceed. |
+| `pr-lint` (`pr-lint.yml`) | **Non-blocking** (PRs only) | A Conventional-Commit **PR-title** violation — a title fix, not a code failure. |
+
+### 19b. Known-benign residual buckets (hosted `macos-26` runner)
+
+Both are on the **non-blocking** `build-and-test` job, both grid-proven (§11–§18), both with a known fix deferred to a harness-truthing successor. **Neither is a product bug.**
+
+| Failing test | Runner-specific cause | Why benign | Bucket |
+| --- | --- | --- | --- |
+| `testFindBarOpensLocatesAndDismisses` (`XttyUITests.swift:192`) | The runner's ~68–72-char hostname prompt soft-wraps the typed `AFTERFIND####` focus marker across two grid rows (`…runner$ A` / `FTERFIND####`); the line-192 focus-restore check uses the **strict** `waitForContains` — the wrap-tolerant matcher was applied only to the focus-typing test (`:54`). | Focus **does** return: the marker reached the grid, just wrapped. Product behavior is correct; the assertion is prompt-width-fragile. | `findbar-marker-wrap` |
+| `testMultiLinePasteIsNotAutoExecuted` (`XttyUITests.swift:84`) | The runner's login shell is `/bin/bash` = GNU bash 3.2.57, whose readline has **no `enable-bracketed-paste`**; the pasted `\n` executes the first line (`-bash: alpha####: command not found`). | Real users get bracketed paste (zsh default; bash 5.1+). The test encodes the zsh guarantee; the rig shell can't honor it. | `bash32-no-bracketed-paste` |
+
+**Fixes (deferred to the harness-truthing successor — not a product change):** extend the wrap-tolerant matcher to the find-bar focus-restore assertion; guard the paste test on a bracketed-paste-capable shell (or seed one in the injected env).
+
+### 19c. Reverse duty
+
+Any change that **adds or removes a test, fixes a known-benign residual, or changes a job's required-gate status** MUST update this matrix (and the §19a job map) **in the same session** — otherwise the agent's runtime read just relocates the staleness. Mirrors the `packer/README.md` reverse duty for the VM matrix.
+
+---
+
 ## Sources
 
 - **xtty repo:** `Makefile`, `project.yml`, `scripts/bootstrap-swiftterm.sh`, `patches/swiftterm/UPSTREAM_CONFIG.sh` + `xtty-accessors.diff`, `.gitignore`, `XttyCore/Package.{swift,resolved}`, `AppUITests/*` (StateDumpReader/GridDumpReader, `XTTY_*` triggers), `AGENTS.md`

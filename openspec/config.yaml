@@ -53,3 +53,11 @@ rules:
       app launches, greps, `make doctor`, `openspec validate`) stay unmarked
       and inline. See AGENTS.md → "How to work here" → test-validation for the
       authoritative inline-vs-delegate boundary — this rule only points there.
+    - >-
+      CI-investigation markers: author any task that *investigates a failed CI
+      run* (pulling logs/`.xcresult`/attachments to classify the failures) with
+      the marker `⟶ xtty-ci-investigator (<run>)` in the task line, so the apply
+      loop delegates it to the CI-investigation agent. Merely *watching* a run
+      (`gh run watch`/`gh run view` for status) stays unmarked and inline. See
+      AGENTS.md → "How to work here" → CI-failure investigation for the
+      authoritative watch-vs-investigate boundary — this rule only points there.
