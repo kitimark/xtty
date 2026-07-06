@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The build/setup contract for xtty — how a contributor goes from a fresh clone to a running, tested app. It defines: reproducible reconstruction of the patched-but-pinned SwiftTerm dependency from version-controlled inputs alone (a pinned ref + a tracked patch, without committing the upstream tree); generation of the **untracked** Xcode project from the tracked `project.yml`; single-command build/run/test entry points that perform any prerequisite reconstitution and generation automatically (plus a fast view-free `XttyCore` test path); a prerequisite check for the components that can't be auto-installed; self-documenting entry points; and the requirement that the canonical build docs stay accurate (no superseded mechanism described as current). This is a **meta/tooling** capability — it constrains the developer workflow and its documentation, not app runtime behavior — recorded as a source of truth so the build contract (previously only drift-prone prose) has something authoritative to fail against. Parallels the `verification-harness` spec. The concrete entry point is the top-level `Makefile`.
+The build/setup contract for xtty — how a contributor goes from a fresh clone to a running, tested app. It defines: reproducible reconstruction of the patched-but-pinned SwiftTerm dependency from version-controlled inputs alone (a pinned ref + a tracked patch, without committing the upstream tree); generation of the **untracked** Xcode project from the tracked `project.yml`; single-command build/run/test entry points that perform any prerequisite reconstitution and generation automatically (plus a fast view-free `XttyCore` test path); a prerequisite check for the components that can't be auto-installed; self-documenting entry points; the requirement that the canonical build docs stay accurate (no superseded mechanism described as current); and a reproducible minimal local VM test image (built from pinned inputs plus a one-time human-provided Xcode archive, simulator- and Metal-toolchain-free) for CI-parity in-guest build+test. This is a **meta/tooling** capability — it constrains the developer workflow and its documentation, not app runtime behavior — recorded as a source of truth so the build contract (previously only drift-prone prose) has something authoritative to fail against. Parallels the `verification-harness` spec. The concrete entry point is the top-level `Makefile`.
 ## Requirements
 ### Requirement: Reproducible patched-SwiftTerm reconstitution
 
@@ -103,4 +103,23 @@ The project SHALL provide an **opt-in** way to build with a stable local code-si
 
 - **WHEN** an OS permission keyed to the app's code identity has been granted for a build made with the stable identity, and the app is rebuilt with the same identity
 - **THEN** the grant still applies to the rebuilt app without re-prompting
+
+### Requirement: Reproducible minimal local VM test image
+
+The project SHALL provide a reproducible way to build a **minimal local macOS virtual-machine test image** capable of building xtty and running the **full test suite, including the UI tests**, inside the guest. The image SHALL require **neither the iOS/watchOS/tvOS simulator platforms nor the Metal toolchain**. It SHALL be buildable from **pinned, version-controlled inputs** — the operating-system base image and the Xcode version — plus a **one-time human-provided official Apple installer archive**, and the image build itself SHALL NOT require Apple credentials. The image SHALL be generic: it SHALL NOT bake in the project source — the source arrives in a per-run copy of the image at test time.
+
+#### Scenario: Building from pinned inputs yields a full-suite-capable image
+
+- **WHEN** the image is built from its pinned inputs (the pinned OS base and the pinned Xcode version) with the pre-downloaded Apple installer archive present
+- **THEN** the build completes and produces an image in which the project builds and the full test suite, including the UI tests, can run in-guest
+
+#### Scenario: The image build requires no Apple credentials
+
+- **WHEN** the image build runs
+- **THEN** it installs Xcode from the pre-downloaded official Apple installer archive and completes without authenticating to Apple (the archive download is a separate one-time, human-performed, Apple-ID-authenticated step)
+
+#### Scenario: The guest has no Metal toolchain yet builds xtty
+
+- **WHEN** the resulting guest is inspected for the Metal toolchain component and the project is then built there
+- **THEN** the Metal toolchain component is reported as not installed, and the project build nevertheless succeeds
 
