@@ -11,7 +11,8 @@ echo "LAUNCH context ${NAME} rep${REP} $(date -u +%FT%TZ)" >> "$EV/ledger.log"
 python3 - "$OUT" <<'EOF'
 import json, sys
 d = json.load(open(sys.argv[1]))
-u = d.get("usage", {})
+res = [x for x in d if x.get("type") == "result"][0] if isinstance(d, list) else d
+u = res.get("usage", {})
 total = u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0) + u.get("cache_read_input_tokens", 0)
 print(f"{sys.argv[1]}: startup_context={total} (input={u.get('input_tokens',0)} cache_create={u.get('cache_creation_input_tokens',0)} cache_read={u.get('cache_read_input_tokens',0)})")
 EOF

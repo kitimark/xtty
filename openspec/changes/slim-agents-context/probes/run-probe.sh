@@ -21,7 +21,8 @@ python3 - "$OUT" <<'EOF'
 import json, sys
 try:
     d = json.load(open(sys.argv[1]))
-    print(f"{sys.argv[1]}: turns={d.get('num_turns')} err={d.get('is_error')} result[:200]={str(d.get('result'))[:200]!r}")
+    res = [x for x in d if x.get("type") == "result"][0] if isinstance(d, list) else d
+    print(f"{sys.argv[1]}: turns={res.get('num_turns')} err={res.get('is_error')} result[:200]={str(res.get('result'))[:200]!r}")
 except Exception as e:
     print(f"{sys.argv[1]}: UNPARSEABLE ({e})")
 EOF
