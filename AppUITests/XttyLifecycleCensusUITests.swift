@@ -25,7 +25,36 @@ final class XttyLifecycleCensusUITests: XCTestCase {
         "PaneController", "XttyTerminalView", "TerminalSession", "TerminalWindowController",
     ]
 
+    /// Readiness gate (D1): prove the fresh shell has *executed* a command — rc
+    /// files done, back at its prompt — before we close it. Types `echo $((base+i))`;
+    /// the *output* token `base+i` appears only in the command's output, never in
+    /// the echoed input line (which shows the unevaluated `$((base+i))`), so a grid
+    /// match proves execution, not mere keypress echo. The per-iteration token is
+    /// unique (41001…/42001…), so a stale dump from the prior iteration can't
+    /// false-positive (D2). Returns true when the token lands; on timeout it attaches
+    /// the dump/screenshot, fails naming the loop+iteration, and returns false so the
+    /// caller skips the ⌘W it would otherwise race into a still-starting shell (D3).
+    @discardableResult
+    private func waitShellReady(_ app: XCUIApplication, base: Int, i: Int, loop: String) -> Bool {
+        let token = base + i
+        app.typeText("echo $((\(base)+\(i)))")
+        app.typeKey(.enter, modifierFlags: [])
+        // 15 s ≈ 7.5× the worst probe-measured settle; wrap-tolerant because long
+        // prompts soft-wrap the token across dump rows (D4).
+        if GridDumpReader.waitForContains("\(token)", timeout: 15, ignoringLineWraps: true) {
+            return true
+        }
+        attachGridDump("\(loop)-iter\(i)-shell-not-ready")
+        attachScreenshot("\(loop)-iter\(i)-shell-not-ready")
+        XCTFail("\(loop) loop iteration \(i): fresh shell never executed the readiness "
+                + "marker (token \(token)) within 15 s — refusing to send ⌘W into a shell "
+                + "still sourcing startup files (harden-churn-shell-readiness D1/D3)")
+        return false
+    }
+
     func testLifecycleChurnReturnsCensusToBaseline() {
+        continueAfterFailure = false  // D3: a failed churn precondition halts the
+        // test rather than cascading further ⌘-chords into a wedged/modal state.
         let app = launchConfigured(config: "")
         guard let firstState = StateDumpReader.waitForState(timeout: 10),
               let firstCensus = census(firstState), !firstCensus.isEmpty else {
@@ -40,18 +69,42 @@ final class XttyLifecycleCensusUITests: XCTestCase {
         let base = census(StateDumpReader.read()) ?? firstCensus
 
         // Churn 1: split + close (pane lifecycle — the closures the audit vetted).
-        for _ in 0..<4 {
+        // Every precondition is a hard assertion (D3): a step that fails to
+        // materialize halts the test at its own iteration with artifacts, and never
+        // sends the ⌘W it would otherwise race into a still-starting shell.
+        for i in 1...4 {
             app.typeKey("d", modifierFlags: .command)
-            _ = StateDumpReader.waitForState(timeout: 5) { ($0["paneCount"] as? Int) == 2 }
+            guard StateDumpReader.waitForState(timeout: 5, where: { ($0["paneCount"] as? Int) == 2 }) != nil else {
+                attachGridDump("pane-iter\(i)-split-not-registered")
+                XCTFail("pane loop iteration \(i): split never reached paneCount==2 within 5 s")
+                return
+            }
+            guard waitShellReady(app, base: 41000, i: i, loop: "pane") else { return }
             app.typeKey("w", modifierFlags: .command)
-            _ = StateDumpReader.waitForState(timeout: 5) { ($0["paneCount"] as? Int) == 1 }
+            guard StateDumpReader.waitForState(timeout: 5, where: { ($0["paneCount"] as? Int) == 1 }) != nil else {
+                attachGridDump("pane-iter\(i)-close-not-registered")
+                XCTFail("pane loop iteration \(i): close never returned to paneCount==1 within "
+                        + "5 s (a confirm-close alert may have blocked ⌘W — the race this change fixes)")
+                return
+            }
         }
-        // Churn 2: new tab + close (window-controller lifecycle).
-        for _ in 0..<3 {
+        // Churn 2: new tab + close (window-controller lifecycle). Same gate: the tab
+        // loop closes an equally fresh shell through the identical confirm-close path.
+        for i in 1...3 {
             app.typeKey("t", modifierFlags: .command)
-            _ = StateDumpReader.waitForState(timeout: 5) { ($0["tabCount"] as? Int) == 2 }
+            guard StateDumpReader.waitForState(timeout: 5, where: { ($0["tabCount"] as? Int) == 2 }) != nil else {
+                attachGridDump("tab-iter\(i)-newtab-not-registered")
+                XCTFail("tab loop iteration \(i): new tab never reached tabCount==2 within 5 s")
+                return
+            }
+            guard waitShellReady(app, base: 42000, i: i, loop: "tab") else { return }
             app.typeKey("w", modifierFlags: .command)
-            _ = StateDumpReader.waitForState(timeout: 5) { ($0["tabCount"] as? Int) == 1 }
+            guard StateDumpReader.waitForState(timeout: 5, where: { ($0["tabCount"] as? Int) == 1 }) != nil else {
+                attachGridDump("tab-iter\(i)-close-not-registered")
+                XCTFail("tab loop iteration \(i): close never returned to tabCount==1 within "
+                        + "5 s (a confirm-close alert may have blocked ⌘W — the race this change fixes)")
+                return
+            }
         }
 
         // Poll-to-settle: after AppKit/SwiftTerm teardown drains, every tracked

@@ -68,6 +68,17 @@ The real protocol for shell readiness is **OSC 133 semantic prompts** (FinalTerm
 - ✅ **§13b display-blindness re-confirmed:** the `after-churn` screenshot captured the **main/external** display (the dev editor session), not xtty and not the alert — local visual artifacts remain useless for this bug; timelines + failure messages are the evidence channel.
 - **Net:** in both failing runs the §5 marker gate would have held ⌘W past the exact iteration that was struck — the decided fix addresses the *observed* failure mode, not a theorized one.
 
+## Implementation addendum (2026-07-06 — landed clean, no divergence from §5)
+
+`harden-churn-shell-readiness` was implemented exactly as the §5 design specified — **no divergence, so no design correction is recorded here** (this addendum notes the clean landing per the tracker rule). What shipped:
+
+- **D1/D2 readiness gate in both loops.** `AppUITests/XttyLifecycleCensusUITests.swift` now types `echo $((41000+i))` (pane loop, i=1…4) / `echo $((42000+i))` (tab loop, i=1…3) after each pane/tab registers, and waits (`GridDumpReader.waitForContains`, `timeout: 15`, `ignoringLineWraps: true`, D4) for the **output** token `41001…`/`42001…` — which never appears in the un-evaluated echoed input line `echo $((41000+1))`, so a match proves the shell *executed* a command. Per-iteration unique tokens make stale-dump false-positives impossible (D2).
+- **D3 fail-fast.** `continueAfterFailure = false`; every `waitForState` result is a hard `guard … else { XCTFail(loop+iteration); return }` — a stuck step halts at its own iteration with an attached grid dump/screenshot and never sends ⌘W into a still-starting shell.
+- **D5 `.common`-modes dump timer.** `App/XttyApp.swift`'s `-UITestGridDump` timer is now constructed explicitly and registered via `RunLoop.main.add(timer, forMode: .common)`, so state/grid dumps keep ticking during the confirm-close `NSAlert`'s `NSModalPanelRunLoopMode`.
+- **D6 escalation did not fire.** No residual flake surfaced — the post-marker precmd window predicted at ~nil probability stayed nil.
+
+**Verification (the §7 predictions held).** Churn ran **5/5 green locally** (14.6–15.4 s each) against the recorded F/F/P baseline, no retries. A full-sweep `xtty-test-validator` run (autonomously delegated — the `harden-validator-delegation-trigger` §6 proof) held the acceptance envelope with `testLifecycleChurnReturnsCensusToBaseline` **green in every tier**: Tier 0 `232/0/0`, Tier 1 local `40/0/1`, headless ×2 `39/1/1`+`39/1/1`, graphics `39/1/1` (sole red the unrelated bash-3.2 bracketed-paste residual). The confirm-close race did not reproduce on any VM rig. Evidence: `~/Downloads/xtty-vm-poc/artifacts/2026-07-06-harden-churn-shell-readiness/`. The future candidates (at-prompt confirm-close gate, bash shell integration, zero-input latch) remain captured, non-gating, and unshipped.
+
 ## Sources
 
 - **§7 artifact verification (2026-07-03):** the three local bundles `build/Logs/Test/Test-xtty-2569.07.03_{16-41-10,16-44-36,16-47-54}-+0700.xcresult` — `xcrun xcresulttool get test-results activities --test-id "XttyLifecycleCensusUITests/testLifecycleChurnReturnsCensusToBaseline()"` (per-keystroke timelines with gap analysis) + `export attachments` (the `after-churn` png).

@@ -248,6 +248,14 @@ going red again, or a *second* non-paste failure. Graphics and headless now
 match exactly (the fix's `windowCount` state-dump assertion removed the old
 graphics-mode focus-steal red).
 
+**Confirm-close class (update 2026-07-06):** `harden-churn-shell-readiness`
+landed its computed-marker shell-readiness gate; a full sweep (Tier 0 `232/0/0`,
+Tier 1 local `40/0/1`, headless ×2 `39/1/1`+`39/1/1`, graphics `39/1/1`) held
+this envelope with `testLifecycleChurnReturnsCensusToBaseline` **green in every
+tier**. The churn confirm-close race (matrix row below) is now fixed, not a
+standing local-only hazard. Evidence:
+`~/Downloads/xtty-vm-poc/artifacts/2026-07-06-harden-churn-shell-readiness/`.
+
 **Pre-fix history (for context):** before the fix this rig reproduced the
 SwiftUI menu clobber — **34/7/1 ↔ 36/5/1 of 42** (the two Cmd+D split tests
 were the per-launch-flaky pair), the exact CI failing set. That was the rig's
@@ -267,7 +275,7 @@ above; this table never duplicates a number, only causes.**
 | **Shell arm (zsh vs bash)** | Local bare metal (zsh) vs both VM rigs + hosted CI (bash) | xtty injects OSC 7/133 shell integration into **zsh only** (`ZDOTDIR` redirection). Under bash, semantic-capture-dependent tests take their documented graceful-degradation arm instead of exercising the real path — parity with the (also-bash) hosted runner, not a regression. Also the source of the bash deprecation-banner grid corruption measured (and fixed) in `github-actions-ci-cd.md` §12. |
 | **Menu-race sensitivity by machine speed** | Pre-`fix-main-menu-clobber`: ~100% on the constrained 3-vCPU VM, ~0% on unconstrained bare metal | The SwiftUI main-menu clobber (`swiftui-mainmenu-clobber-forensics.md`) was a per-launch race whose odds scale with machine load — the VM's CPU constraint is *why* this rig reproduced it when bare metal didn't. Retired as a live source now that the fix has landed (validated 3× — the counts live in Acceptance above; `github-actions-ci-cd.md` §18); kept here because a **regression** in this class would reproduce the pre-fix menu-dispatch failing pattern recorded in Acceptance's pre-fix history. |
 | **Bracketed-paste capability** | Both VM rigs + hosted CI (all `/bin/bash`); not local zsh, not Homebrew bash 5.1+ | The rig/CI's `/bin/bash` is macOS's stock **bash 3.2.57**, whose readline lacks `enable-bracketed-paste` — a pasted multi-line string executes instead of staging. One known-benign residual, `testMultiLinePasteIsNotAutoExecuted` (`github-actions-ci-cd.md` §18). |
-| **Confirm-close / interference flake sources** | Local bare metal only (not observed on either VM rig) | Two local-only hazards: (a) **live mouse/keyboard interference** during `make test` driving the real GUI (the hands-off requirement the agent surfaces before that tier); (b) a **confirm-close race** when a churn test closes a freshly-split pane before its shell settles — more likely locally because a heavier interactive `~/.zshrc` widens the race window than the VM/CI's leaner bash startup. Root-caused in `github-actions-ci-cd.md` §13; the fix is the not-yet-applied `harden-churn-shell-readiness` change. |
+| **Confirm-close / interference flake sources** | Local bare metal only (not observed on either VM rig) | (a) **live mouse/keyboard interference** during `make test` driving the real GUI (the hands-off requirement the agent surfaces before that tier) — still a live local-only hazard. (b) a **confirm-close race** when a churn test closed a freshly-split pane before its shell settled (a heavier interactive `~/.zshrc` widened the race window locally vs the VM/CI's leaner bash startup) — **fixed** by `harden-churn-shell-readiness` (a computed-marker shell-readiness gate: the churn test proves the fresh shell executed a command before closing it). The churn test now passes green across local **and** both VM rigs (full-sweep-validated 2026-07-06). Root-caused in `github-actions-ci-cd.md` §13; retained here because a regression would reproduce the pre-fix churn-flake pattern. |
 
 The Acceptance envelope above **and** this matrix are the **runtime source**
 `xtty-test-validator` reads at validation time (see `AGENTS.md` → test

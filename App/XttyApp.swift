@@ -186,7 +186,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
     }
 
     private func startUITestDump() {
-        dumpTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
+        // Register in `.common` modes (not just the default mode) so the periodic
+        // dump keeps ticking while a modal panel — e.g. the confirm-close NSAlert —
+        // spins `NSModalPanelRunLoopMode`. A `.default`-only timer (the implicit
+        // registration `Timer.scheduledTimer` uses) freezes at the modal's
+        // appearance, so post-alert waits read stale JSON and failures surface one
+        // step removed (harden-churn-shell-readiness D5). Observe-only: the dump
+        // never repairs anything, it just stays truthful during modals.
+        let timer = Timer(timeInterval: 0.15, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.routePendingTestLink()
@@ -212,6 +219,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
                 }
             }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        dumpTimer = timer
     }
     #endif
 
