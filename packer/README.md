@@ -244,6 +244,8 @@ proof is that the xtty build succeeds without the component.
 
 ### Acceptance (measured — post `fix-main-menu-clobber`)
 
+> **Interim state — the `add-vm-prompt-width-parity` → `harden-findbar-wrap-assertion` red→green pair (2026-07-07).** The image now carries a **59-char single-label guest hostname** (`add-vm-prompt-width-parity`, set on all three `scutil` keys), so bash `\h` reproduces the hosted runner's prompt width and a typed marker **soft-wraps in-guest** exactly as on CI — **verified by effect** on all three clones (grid dump `…admin$ AFTERFIND`/`786`; this resolves the forensics **T6** gethostname spike: setting all three keys makes the NAT'd guest's `\h` read the long name). Applied **alone** — before the wrap-tolerant fix — this makes `testFindBarOpensLocatesAndDismisses` **red in-guest** (the CI `findbar-marker-wrap` flake, now reproduced locally), so the **currently-measured VM envelope is `38/2/1` of 41** (headless ×2 + graphics, all three identical; 2026-07-07; evidence `~/Downloads/xtty-vm-poc/artifacts/2026-07-06-vm-prompt-width-parity-rebaseline/`). **That find-bar red is the pre-registered repro proof for `add-vm-prompt-width-parity` — a transient state, NOT a standing residual and NOT a regression.** `harden-findbar-wrap-assertion` (the pair's second half) flips it green on the same image (no rebuild — the source isn't baked in); the **final find-bar-green envelope is documented jointly then** (expected back to a find-bar-robust `39/1/1`, paste the sole residual). The find-bar-green envelope immediately below is that target (last measured pre-wide-prompt).
+
 **Envelope: `39/1/1` of 41, measured** (graphics-rig validation run,
 2026-07-06, after `retire-metal-renderer` deleted the always-passing Metal
 e2e `testConfiguredMetalRendererIsReported` — the churn census test passed
@@ -259,13 +261,16 @@ executes (grid-proven; zsh + bash 5.1+ users are unaffected). A future harness
 change guards that test on a no-bracketed-paste shell; until then it is the
 image's one known-benign red.
 
-**Why the CI `findbar-marker-wrap` residual is NOT in this envelope** (`testFindBarOpensLocatesAndDismisses` passes here but reds on the hosted runner): that flake is a pure **prompt-width** artifact — the runner's ~61-char `\h` soft-wraps the typed marker, defeating a strict grid match — and this image's `\h` is short (`Manageds-Virtual-Machine`, 24 chars), so the marker never wraps. The image mirrors CI on the **race class** and **shell capability**, but not **prompt width**. To close that gap the image would need a long `\h` (`scutil --set` a ~60-char hostname, mirroring `runner-images`' runtime name) — a "harness-truthing" investment that **re-baselines this envelope** (a long `\h` also flips the paste test's failing line `:87`→`:84` like the runner). Verified mechanism + the gethostname spike + the options menu: `research/03-analysis/ci-runner-prompt-width-forensics.md`.
+**The CI `findbar-marker-wrap` gap is now CLOSED in-guest** (was: "this residual is NOT in the envelope — find-bar passes here but reds on the hosted runner"). That flake is a pure **prompt-width** artifact — a long `\h` soft-wraps the typed marker, defeating a strict grid match. `add-vm-prompt-width-parity` gave the image a ~60-char single-label `\h` (all three `scutil` keys, mirroring `runner-images`' runtime name), so the marker now wraps in-guest and the find-bar red reproduces here — the intended fidelity (see the interim-state block above; the image now mirrors CI on **race class**, **shell capability**, *and* **prompt width**). **Measured correction:** a long `\h` does **NOT** flip the paste test's failing line `:87`→`:84` as `ci-runner-prompt-width-forensics.md` §6 (option C) predicted — measurement shows it **stays at `:87`** (the `command not found` check). Bash 3.2 executes the pasted newline, so line B (`beta####`) echoes contiguously and fits before col 80, leaving the `:84` `waitForContains(lineB)` still passing; the failure remains the downstream `:87`. Verified mechanism + the gethostname spike (**T6, now closed**) + the options menu: `research/03-analysis/ci-runner-prompt-width-forensics.md`.
 
 Acceptance = **this measured envelope**, *not* a bare all-green (the paste
 residual is inherent to the bash rig). A regression is any menu-dispatch test
-going red again, or a *second* non-paste failure. Graphics and headless now
-match exactly (the fix's `windowCount` state-dump assertion removed the old
-graphics-mode focus-steal red).
+going red again, or — **beyond** the interim find-bar prompt-width red the
+red→green pair expects (interim-state block above) — a *second* non-paste
+failure. (Once `harden-findbar-wrap-assertion` greens find-bar, that interim
+carve-out closes and any second non-paste failure is again a regression.)
+Graphics and headless match exactly (the fix's `windowCount` state-dump
+assertion removed the old graphics-mode focus-steal red).
 
 **Confirm-close class (update 2026-07-06):** `harden-churn-shell-readiness`
 landed its computed-marker shell-readiness gate; a full sweep (Tier 0 `232/0/0`,
@@ -294,6 +299,7 @@ above; this table never duplicates a number, only causes.**
 | **Shell arm (zsh vs bash)** | Local bare metal (zsh) vs both VM rigs + hosted CI (bash) | xtty injects OSC 7/133 shell integration into **zsh only** (`ZDOTDIR` redirection). Under bash, semantic-capture-dependent tests take their documented graceful-degradation arm instead of exercising the real path — parity with the (also-bash) hosted runner, not a regression. Also the source of the bash deprecation-banner grid corruption measured (and fixed) in `github-actions-ci-cd.md` §12. |
 | **Menu-race sensitivity by machine speed** | Pre-`fix-main-menu-clobber`: ~100% on the constrained 3-vCPU VM, ~0% on unconstrained bare metal | The SwiftUI main-menu clobber (`swiftui-mainmenu-clobber-forensics.md`) was a per-launch race whose odds scale with machine load — the VM's CPU constraint is *why* this rig reproduced it when bare metal didn't. Retired as a live source now that the fix has landed (validated 3× — the counts live in Acceptance above; `github-actions-ci-cd.md` §18); kept here because a **regression** in this class would reproduce the pre-fix menu-dispatch failing pattern recorded in Acceptance's pre-fix history. |
 | **Bracketed-paste capability** | Both VM rigs + hosted CI (all `/bin/bash`); not local zsh, not Homebrew bash 5.1+ | The rig/CI's `/bin/bash` is macOS's stock **bash 3.2.57**, whose readline lacks `enable-bracketed-paste` — a pasted multi-line string executes instead of staging. One known-benign residual, `testMultiLinePasteIsNotAutoExecuted` (`github-actions-ci-cd.md` §18). |
+| **Prompt-width wrap** | Both VM rigs (since `add-vm-prompt-width-parity`) + hosted CI; not local zsh (short bare-metal `\h`) | The guest's 59-char `\h` reproduces the hosted runner's prompt width, so a marker typed at the `\h:\W \u\$ ` prompt **soft-wraps** across physical grid rows; a strict (wrap-intolerant) grid match then reds while a wrap-tolerant one passes. Surfaces `testFindBarOpensLocatesAndDismisses` in-guest — the **intended** fidelity of `add-vm-prompt-width-parity` (`ci-runner-prompt-width-forensics.md`; grid-verified by effect). **The find-bar instance is transient** — `harden-findbar-wrap-assertion` makes that assertion wrap-tolerant (the red→green pair), after which no current test reds on width, but **the width parity itself is durable**, guarding *future* type-at-prompt assertions. Distinct from the CI-only artifact it reproduces: on the runner the long `\h` is runtime-injected; here it is `scutil`-set in the image. |
 | **Confirm-close / interference flake sources** | Local bare metal only (not observed on either VM rig) | (a) **live mouse/keyboard interference** during `make test` driving the real GUI (the hands-off requirement the agent surfaces before that tier) — still a live local-only hazard. (b) a **confirm-close race** when a churn test closed a freshly-split pane before its shell settled (a heavier interactive `~/.zshrc` widened the race window locally vs the VM/CI's leaner bash startup) — **fixed** by `harden-churn-shell-readiness` (a computed-marker shell-readiness gate: the churn test proves the fresh shell executed a command before closing it). The churn test now passes green across local **and** both VM rigs (full-sweep-validated 2026-07-06). Root-caused in `github-actions-ci-cd.md` §13; retained here because a regression would reproduce the pre-fix churn-flake pattern. |
 
 The Acceptance envelope above **and** this matrix are the **runtime source**
@@ -301,9 +307,9 @@ The Acceptance envelope above **and** this matrix are the **runtime source**
 validation) — editing either re-tunes the agent's classification without
 touching the agent's own definition. **Reverse duty:** any change that alters
 test counts or expected residuals (e.g. `retire-metal-renderer`,
-`harden-churn-shell-readiness`, the harness-truthing successor) MUST update
-this section — and Acceptance — in the same session, or the "runtime read"
-promise just relocates the staleness.
+`harden-churn-shell-readiness`, `add-vm-prompt-width-parity`, and its pair
+`harden-findbar-wrap-assertion`) MUST update this section — and Acceptance — in
+the same session, or the "runtime read" promise just relocates the staleness.
 
 ## Maintenance
 

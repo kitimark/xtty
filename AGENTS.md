@@ -16,7 +16,7 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 | --- | --- | --- | --- |
 | `add-ci-pipeline` | implemented — owner steps left | CI is live; remaining: repo public, pr-lint PR, branch protection, archive | `research/03-analysis/github-actions-ci-cd.md` |
 | `add-openspec-critic-agent` | implemented — dogfood-proven, pending archive | committed `xtty-openspec-critic` agent + `/xtty:review` launcher: change-set-aware OpenSpec coherence + disk-drift review | `research/03-analysis/dev-workflow-agent-orchestration.md` |
-| `add-vm-prompt-width-parity` | proposed | long-`\h` Tart image so the guest reproduces the runner's prompt width; **apply first** of the red→green pair | `research/03-analysis/ci-runner-prompt-width-forensics.md` |
+| `add-vm-prompt-width-parity` | implemented — pending archive (pair #1) | long-`\h` (59-char) Tart image reproduces the runner's prompt width; image rebuilt + VM re-baselined **`38/2/1` interim** (find-bar reds in-guest as the transient repro; D2 verified by effect; paste stayed `:87`, not `:84`); on-archive snapshot/HISTORY left (task 5.2) | `research/03-analysis/ci-runner-prompt-width-forensics.md` |
 | `harden-findbar-wrap-assertion` | proposed | test-only: wrap-tolerant matcher at `XttyUITests.swift:192` + deterministic soft-wrap guard; retires §19b `findbar-marker-wrap`; **apply after** `add-vm-prompt-width-parity` (red→green) | `research/03-analysis/ci-runner-prompt-width-forensics.md` |
 
 **Shipped and archived** (full narratives: [HISTORY.md](HISTORY.md); what is true: `openspec/specs/`; mechanisms: `research/`):
