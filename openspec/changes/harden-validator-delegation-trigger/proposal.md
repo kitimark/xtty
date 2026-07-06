@@ -19,7 +19,7 @@ The fix was **pre-registered**: `add-test-validation-agent` deferred "per-task d
 - **Add the marker to the "keeping a change coherent" task-authoring checklist** in `AGENTS.md` so propose emits it and coherence checks catch its absence.
 - **Retrofit the currently-open changes** — mark the suite-executing verify tasks already written in `harden-churn-shell-readiness`, `add-xtty-test-image`, and `add-ci-pipeline` — so the fix is live for the **next** apply, not only future proposals.
 - **`test-validation` spec delta**: strengthen the "Two documented spawn scenarios" requirement so the delegation half names the marker convention and the iterate/validate boundary, with scenarios for a marked verify task and for the inline-permitted cheap tier.
-- **Verify by effect** (primary): the next product-code change's apply delegates its Tier‑1/matrix verify tasks autonomously (agent spawned; task ticked from the report). A scoped behavioral spot-check is optional supporting evidence.
+- **Verify by effect, hold-open** (primary): this change is implemented-but-open until the proof is captured — on the next product-code apply (`harden-churn-shell-readiness`, which needs a real sweep), its marked verify task must trigger an **autonomous** `xtty-test-validator` spawn (ticked from the report), on a **compacted** context, with no user prompt. Sequencing is load-bearing: apply this change first (its retrofit marks `harden-churn-shell-readiness`'s tasks) → compact → apply `harden-churn-shell-readiness`. An inline-anyway result is a clean failure that justifies a stronger apply-side gate (a follow-up), not a silent patch.
 
 ## Capabilities
 

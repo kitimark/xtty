@@ -69,11 +69,17 @@ Amend the `AGENTS.md` test-validation rule to state the split explicitly: inline
 
 Add the D1 marker to the suite-executing verify tasks already written in `harden-churn-shell-readiness`, `add-xtty-test-image`, and `add-ci-pipeline` (mark only Tier‑1/VM/full‑matrix tasks; leave cheap checks unmarked). This makes the very next apply (likely `harden-churn-shell-readiness`) exercise the fix, and converts the "won't help already-open changes" limitation into a one-time edit. It changes neither the scope nor any requirement of those changes — only the authoring form of specific verify tasks.
 
-### D6 — Verification is by-effect (primary); a behavioral spot-check is optional
+### D6 — Verification is by-effect, and the change is HOLD-OPEN until it is captured
 
-Primary bar (pre-registered, re-verify by effect — never a read-back that the marker text exists): **the next product-code change's apply delegates its Tier‑1/matrix verify tasks autonomously** — observable as an `xtty-test-validator` spawn for those tasks and the tasks ticked from the report's verbatim counts, with no user prompt. `harden-churn-shell-readiness`'s apply is the natural first observation.
+Primary bar (pre-registered, re-verify by effect — never a read-back that the marker text exists): **the next product-code change's apply delegates its Tier‑1/matrix verify tasks autonomously** — observable as an `xtty-test-validator` spawn for those tasks and the tasks ticked from the report's verbatim counts, with no user prompt. `harden-churn-shell-readiness`'s apply is the natural vehicle — it is genuine product code that needs a validation sweep anyway, so the trigger is real, not staged.
 
-Optional supporting evidence: a lightweight `slim-agents-context`-style behavioral probe — a fresh headless session dropped mid-apply facing a marked verify task, checked for a delegation intent rather than an inline `make test`. Kept optional because a behavioral probe of a documentation/convention change is heavier than the by-effect check and adds little over observing the real next apply.
+**Hold-open** (repo pattern — `add-ci-pipeline` stayed open pending its first CI run, `add-test-validation-agent` pending live-smoke): this change is implemented-but-open until the proof is captured. The proof executes during a *different* change's apply, so it cannot be ticked in this change's own apply session — the change stays open across the `harden-churn-shell-readiness` apply, then is ticked and archived.
+
+**Sequencing dependency (proof validity):** this change must be applied **before** `harden-churn-shell-readiness` — its retrofit (D5) is what puts the markers into that change's tasks — then context is compacted, then `harden-churn-shell-readiness` is applied. Applying them in the other order tests nothing (no markers yet).
+
+**Primed-observer caveat:** this change's *own* apply does not count as the proof — that session just authored the marker convention and is maximally primed; delegating there proves only the machinery. The valid observation is the post-compact `harden-churn-shell-readiness` apply; the cleaner the compaction (the less it foregrounds "we are testing delegation"), the stronger the proof. This is why a fully-isolated result is unattainable — the compaction summary carries some history — but the failure being fixed is *delegation not happening at all*, so an autonomous post-compact delegation (driven by the marker, the internalized convention, or both) is valid evidence of success; only an inline-anyway result is a clean failure.
+
+Deliberately **not** a gratuitous marked task on this change (D1 boundary: mark only genuine Tier‑1/VM/matrix tasks — a docs-only change has nothing to validate; a proof-only marked task would undercut the boundary). And an optional `slim-agents-context`-style headless probe is dropped: a behavioral probe of a convention change is heavier than, and adds little over, observing the real next apply.
 
 ### D7 — A pre-tick self-check (belt-and-suspenders)
 
