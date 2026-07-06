@@ -45,10 +45,6 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
     /// Whether to confirm closing a pane with a running foreground job
     /// (the `confirm-close` config key — design D10).
     private let confirmCloseEnabled: Bool
-    /// The rendering backend applied to every pane's view (the `renderer` config
-    /// key / `-UITestRenderer` override). `.coregraphics` is the default no-op;
-    /// `.metal` enables SwiftTerm's Metal path once the view is in a window.
-    private let renderer: RendererBackend
 
     /// The split-tree structure (view-free model) and the controllers backing it.
     private var tree: PaneNode
@@ -92,11 +88,9 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
 
     init(profile: XttyProfile, registry: SessionRegistry, confirmClose: Bool = true,
          gitReviewLayout: GitReviewLayout = .flat,
-         renderer: RendererBackend = .coregraphics,
          contentSize: NSSize = NSSize(width: 900, height: 560)) {
         self.registry = registry
         self.confirmCloseEnabled = confirmClose
-        self.renderer = renderer
         window = NSWindow(
             contentRect: NSRect(origin: .zero, size: contentSize),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
@@ -152,9 +146,6 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         positionOnBuiltInDisplay()
         window.makeKeyAndOrderFront(nil)
         focusActivePane()
-        // Apply the rendering backend now that the root view is in a window
-        // (SwiftTerm's Metal path requires it). No-op for the CoreGraphics default.
-        applyRenderer()
 
         keyObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main
@@ -592,21 +583,6 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         setTerminalRoot(root)
         if let split = root as? NSSplitView { distributeEvenly(split) }
         focusActivePane()
-        // New split panes are now in the window; ensure they share the backend.
-        applyRenderer()
-    }
-
-    /// Apply the configured rendering backend to every pane's view. SwiftTerm's
-    /// Metal path must be enabled only once a view is in a window, so this is
-    /// called after the window is shown and after each split rebuild. The
-    /// CoreGraphics default needs no call; `setUseMetal` is idempotent, and a
-    /// failure (e.g. no Metal device) is logged, never fatal.
-    private func applyRenderer() {
-        guard renderer == .metal else { return }
-        for pane in panes.values {
-            do { try pane.view.setUseMetal(true) }
-            catch { NSLog("xtty: setUseMetal(true) failed: \(error)") }
-        }
     }
 
     /// Recursively build the AppKit view tree for a `PaneNode`.
@@ -680,11 +656,6 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
     }
 
     #if DEBUG
-    /// The active backend in ground truth (the active pane's view), for the dump.
-    var activeRenderer: RendererBackend {
-        (activePane?.view.isUsingMetalRenderer ?? false) ? .metal : .coregraphics
-    }
-
     /// Establish a benchmark memory scenario on this window and return a resident
     /// footprint sample (P7a `-Benchmark` mode only). Each scenario is measured
     /// **independently**: the window is first reset to one clean pane, so (matching
@@ -816,10 +787,11 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             // Git review (P6a): the cached store snapshot — NEVER exec git here
             // (this runs on the 0.15s dump timer). Counts/paths/statuses only.
             "gitReview": Self.gitReviewDump(gitReview.store),
-            // Performance harness (P7a): the active rendering backend (ground
-            // truth from the view) + the latest resident-memory sample (bytes),
-            // so the renderer toggle + memory sampler are e2e-assertable.
-            "renderer": activeRenderer.rawValue,
+            // Performance harness (P7a): the rendering backend (constant — the
+            // single CoreGraphics path since retire-metal-renderer; the field is
+            // retained for report-schema stability) + the latest resident-memory
+            // sample (bytes), so the memory sampler is e2e-assertable.
+            "renderer": "coregraphics",
             "memoryFootprintBytes": MemorySampler.currentFootprintBytes().map { NSNumber(value: $0) } ?? NSNull(),
             // Lifecycle census (P7c): per-type live-instance counts (process-wide
             // statics). The only channel an out-of-process XCUITest can read

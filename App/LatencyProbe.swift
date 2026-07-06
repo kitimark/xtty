@@ -33,9 +33,11 @@ enum LatencyProbeError: Error, CustomStringConvertible {
 /// means the absolute numbers are untrustworthy and `samplesMs` is empty.
 struct LatencyProbeRun {
     let samplesMs: [Double]
-    /// The renderer-independent reference-stimulus baseline (overlay flip → glass),
-    /// measured identically — the common capture/compositor/scheduling floor shared
-    /// by both renderers (design D5). Empty when no baseline stimulus was provided.
+    /// The reference-stimulus baseline (overlay flip → glass), measured
+    /// identically — the capture/compositor/scheduling floor common to any
+    /// rendering path, so the terminal pipeline's own contribution can be
+    /// distinguished from it (design D5). Empty when no baseline stimulus was
+    /// provided.
     let baselineSamplesMs: [Double]
     let calibration: TimebaseCalibration
     /// The achieved frame-quantized resolution (ms) — one display-refresh interval;
@@ -68,7 +70,7 @@ struct LatencyProbeRun {
 ///
 /// **Resolution is frame-quantized** (one refresh interval, ProMotion-variable);
 /// the report surfaces this rather than implying sub-frame precision. The omitted
-/// hardware tail is renderer-independent and cancels in the renderer delta.
+/// hardware tail is constant run-to-run, so comparisons between runs stay valid.
 ///
 /// The caller (on the main actor) must have made the active pane first responder so
 /// the keystroke reaches the PTY (design D3) and hidden the caret (an independent
@@ -149,9 +151,10 @@ final class LatencyProbe {
         }
         guard !samples.isEmpty else { throw LatencyProbeError.noChangeDetected }
 
-        // Baseline pass: a renderer-independent overlay flip → glass, measured the
-        // same way — the common capture/compositor floor shared by both renderers
-        // (design D5). Each trial toggles the overlay, then toggles it back.
+        // Baseline pass: an overlay flip → glass outside the terminal's rendering
+        // path, measured the same way — the common capture/compositor floor, so it
+        // can be told apart from the terminal pipeline's own latency (design D5).
+        // Each trial toggles the overlay, then toggles it back.
         var baselineSamples: [Double] = []
         if let flip = baselineFlip {
             for _ in 0..<trials {

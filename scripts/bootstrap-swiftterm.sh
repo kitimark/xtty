@@ -9,6 +9,10 @@
 # (external/SwiftTerm is in .gitignore). See
 # research/03-analysis/swiftterm-fork-vs-patch-strategy.md.
 #
+# The tracked patch carries two effects (it is NOT add-only): it adds the accessor
+# file, and it modifies Package.swift to strip the Metal shader resource so building
+# the package needs no Metal toolchain (openspec change retire-metal-renderer).
+#
 # Run this once after cloning, and after editing the pin or the accessor file.
 # Idempotent; enforces the pinned ref every run so it can't drift.
 set -euo pipefail
@@ -33,9 +37,11 @@ fi
 echo "==> pinning SwiftTerm to $UPSTREAM_REF (pristine)"
 git -C "$checkout" fetch --tags --quiet origin
 git -C "$checkout" -c advice.detachedHead=false checkout --quiet "$UPSTREAM_REF"
-git -C "$checkout" clean -fdq        # drop a previously-applied patch (untracked add)
+git -C "$checkout" reset --hard --quiet HEAD   # restore tracked files a previous patch apply modified (Package.swift)
+git -C "$checkout" clean -fdq        # drop a previous patch apply's untracked add (XttyAccessors.swift)
 
-# 3. Apply the add-only patch (Playwright-style: a tracked .diff, git apply).
+# 3. Apply the tracked patch (Playwright-style: a tracked .diff, git apply —
+#    the accessors add + the Metal-shader-resource strip).
 echo "==> applying patches/swiftterm/xtty-accessors.diff"
 git -C "$checkout" apply "$patch"
 

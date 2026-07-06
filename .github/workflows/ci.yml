@@ -5,10 +5,9 @@ name: ci
 # macOS runners are free + unlimited on public repos.
 #
 # Runner: macos-26 (pinned — `macos-latest` is mid-flip macos-15 -> macos-26).
-# Xcode: the image's DEFAULT release Xcode is used deliberately (no xcode-select):
-#   the Metal toolchain is preinstalled for release Xcode >=26 but EXCLUDED for
-#   RCs, so pinning a specific Xcode_26.x.app risks pinning an RC without Metal.
-#   The Metal guard below makes the build correct even if the toolchain is absent.
+# Xcode: the image's DEFAULT release Xcode is used (no xcode-select pin). The
+#   build needs no Metal toolchain (the SwiftTerm patch strips the shader
+#   resource — retire-metal-renderer), so no toolchain guard is required.
 
 on:
   push:
@@ -20,9 +19,6 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
-
-      - name: Ensure Metal toolchain (no-op when preinstalled)
-        run: xcrun -f metal >/dev/null 2>&1 || sudo xcodebuild -downloadComponent MetalToolchain
 
       - name: Cache patched SwiftTerm checkout
         uses: actions/cache@v4
@@ -51,9 +47,6 @@ jobs:
     # only `test-core` should be a required check.
     steps:
       - uses: actions/checkout@v4
-
-      - name: Ensure Metal toolchain (no-op when preinstalled)
-        run: xcrun -f metal >/dev/null 2>&1 || sudo xcodebuild -downloadComponent MetalToolchain
 
       - name: Install XcodeGen
         run: brew install xcodegen

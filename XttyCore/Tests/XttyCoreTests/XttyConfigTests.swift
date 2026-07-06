@@ -341,33 +341,20 @@ final class XttyConfigTests: XCTestCase {
         XCTAssertTrue(warnings.contains { $0.contains("git-review-layout") })
     }
 
-    func testResolveSetParsesRenderer() {
-        XCTAssertEqual(XttyConfigLoader.resolveSet(from: "renderer = metal").renderer, .metal)
-        XCTAssertEqual(XttyConfigLoader.resolveSet(from: "renderer = coregraphics").renderer, .coregraphics)
-        // Case-insensitive value (the key itself is already lowercased by parsing).
-        XCTAssertEqual(XttyConfigLoader.resolveSet(from: "renderer = METAL").renderer, .metal)
-    }
-
-    func testResolveSetRendererDefaultsToCoreGraphics() {
-        XCTAssertEqual(XttyConfigLoader.resolveSet(from: "").renderer, .coregraphics)
-    }
-
-    func testResolveSetInvalidRendererFallsBackAndWarns() {
-        var warnings: [String] = []
-        let set = XttyConfigLoader.resolveSet(from: "renderer = vulkan") { warnings.append($0) }
-        XCTAssertEqual(set.renderer, .coregraphics)
-        XCTAssertTrue(warnings.contains { $0.contains("renderer") })
-    }
-
-    func testResolveSetRendererInsideBlockIsIgnoredWithWarning() {
+    func testResolveSetRetiredRendererKeyIsIgnoredAsUnrecognized() {
+        // The `renderer` key was retired with the Metal renderer option
+        // (retire-metal-renderer). A legacy config carrying it falls under the
+        // forward-compatibility rule: the key is unrecognized and silently
+        // ignored (no unknown-key warning path exists), and all recognized
+        // settings still load.
         var warnings: [String] = []
         let set = XttyConfigLoader.resolveSet(from: """
         renderer = metal
-        [profile "work"]
-        renderer = coregraphics
+        font-size = 15
         """) { warnings.append($0) }
-        XCTAssertEqual(set.renderer, .metal, "the base value wins; the profile copy is ignored")
-        XCTAssertTrue(warnings.contains { $0.contains("renderer") })
+        XCTAssertEqual(set.base.config.fontSize, 15, "recognized settings still load")
+        XCTAssertFalse(warnings.contains { $0.contains("renderer") },
+                       "unrecognized keys are ignored without a warning")
     }
 
     func testResolveSetDefaultProfileInsideBlockIsIgnoredWithWarning() {

@@ -5,9 +5,9 @@
 # `make` with no target prints the list below. Two setup steps are modeled as
 # real file-targets, so `make build` re-bootstraps SwiftTerm only when the
 # pin/patch changed and regenerates the Xcode project only when project.yml
-# changed. Prerequisites it can't safely install (XcodeGen, full Xcode, the
-# Metal toolchain) are checked by `make doctor`, which advises rather than
-# running sudo. Targeting macOS-default GNU make 3.81; keep recipes POSIX-sh.
+# changed. Prerequisites it can't safely install (XcodeGen, full Xcode) are
+# checked by `make doctor`, which advises rather than running sudo. Targeting
+# macOS-default GNU make 3.81; keep recipes POSIX-sh.
 
 .DEFAULT_GOAL := help
 
@@ -47,8 +47,6 @@ doctor: ## Check prerequisites it can't auto-install (advises; never runs sudo)
 	dev="$$(xcode-select -p 2>/dev/null)"; \
 	if echo "$$dev" | grep -q "Xcode.app"; then echo "  ok  full Xcode ($$dev)"; \
 	else echo "  --  full Xcode not selected ($$dev) -> install Xcode, then sudo xcode-select -s /Applications/Xcode.app"; ok=0; fi; \
-	if xcrun -f metal >/dev/null 2>&1; then echo "  ok  Metal toolchain"; \
-	else echo "  --  Metal toolchain missing     -> sudo xcodebuild -downloadComponent MetalToolchain"; ok=0; fi; \
 	if [ "$$ok" = 1 ]; then echo "All prerequisites satisfied."; \
 	else echo "Some prerequisites are missing (see above)."; exit 1; fi
 
@@ -77,18 +75,16 @@ test: $(SWIFTTERM_SENTINEL) $(XCODEPROJ) ## Run the app UI tests (XCUITests)
 test-core: $(SWIFTTERM_SENTINEL) ## Run the fast XttyCore unit tests (no app build)
 	@swift test --package-path XttyCore
 
-bench: build ## Measure latency+memory for both renderers; writes JSON reports (P7a)
+bench: build ## Measure latency+memory (P7a regression baseline); writes a JSON report
 	@mkdir -p $(BENCH_DIR)
-	@echo "Running benchmark (CoreGraphics)…"
-	@"$(BENCH_BIN)" -Benchmark -UITestRenderer coregraphics -BenchmarkReport "$(BENCH_DIR)/coregraphics.json" || true
-	@echo "Running benchmark (Metal)…"
-	@"$(BENCH_BIN)" -Benchmark -UITestRenderer metal -BenchmarkReport "$(BENCH_DIR)/metal.json" || true
-	@echo "Reports written to:"; echo "  $(BENCH_DIR)/coregraphics.json"; echo "  $(BENCH_DIR)/metal.json"
+	@echo "Running benchmark…"
+	@"$(BENCH_BIN)" -Benchmark -BenchmarkReport "$(BENCH_DIR)/coregraphics.json" || true
+	@echo "Report written to:"; echo "  $(BENCH_DIR)/coregraphics.json"
 	@echo "Note: latency needs the Screen Recording grant (System Settings ▸ Privacy & Security) + a visible display;"
 	@echo "      without it the report still records memory + renderer, with latency marked unavailable/untrustworthy."
 	@echo "Latency (P7b): an SCStream per-frame-displayTime probe, gated by a startup timebase calibration; resolution"
-	@echo "      is frame-quantized (~one refresh interval), valid for the renderer delta. Pin the display refresh for"
-	@echo "      the steadiest cadence. Verdict (2026-06-29): keep CoreGraphics — see research/03-analysis/p7-measurement-methodology.md."
+	@echo "      is frame-quantized (~one refresh interval). Pin the display refresh for the steadiest cadence."
+	@echo "      Renderer verdict (2026-06-29, gate closed): CoreGraphics — see research/03-analysis/p7-measurement-methodology.md."
 
 build-core: $(SWIFTTERM_SENTINEL) ## Build XttyCore only
 	@swift build --package-path XttyCore

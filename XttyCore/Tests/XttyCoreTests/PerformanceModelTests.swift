@@ -42,7 +42,7 @@ final class PerformanceModelTests: XCTestCase {
 
     func testBenchResultRoundTripsThroughJSON() throws {
         let result = BenchResult(
-            renderer: .metal,
+            renderer: "coregraphics",
             latency: LatencyStats(samplesMs: [8, 9, 10, 11, 12]),
             captureFrameRate: 120,
             memory: [
@@ -60,7 +60,7 @@ final class PerformanceModelTests: XCTestCase {
         // P7b: calibration outcome, frame-quantized resolution, and the no-op
         // baseline survive serialization (the report's trustworthiness metadata).
         let result = BenchResult(
-            renderer: .coregraphics,
+            renderer: "coregraphics",
             latency: LatencyStats(samplesMs: [16, 17, 18]),
             captureFrameRate: 120,
             frameQuantizationMs: 1000.0 / 120.0,
@@ -81,7 +81,7 @@ final class PerformanceModelTests: XCTestCase {
         // numbers (latency == nil) but is distinct from missing-permission — the
         // calibration outcome is recorded (passed == false) alongside the marker.
         let result = BenchResult(
-            renderer: .metal,
+            renderer: "coregraphics",
             latency: nil,
             latencyUnavailableReason: "timebase calibration failed (offset 0.42s)",
             timebaseCalibration: TimebaseCalibration(passed: false, offsetSeconds: 0.42),
@@ -99,7 +99,7 @@ final class PerformanceModelTests: XCTestCase {
 
     func testBenchResultEncodesLatencyUnavailableMarker() throws {
         let result = BenchResult(
-            renderer: .coregraphics,
+            renderer: "coregraphics",
             latency: nil,
             latencyUnavailableReason: "no screen-capture permission",
             captureFrameRate: nil,
@@ -111,6 +111,6 @@ final class PerformanceModelTests: XCTestCase {
         XCTAssertEqual(decoded.latencyUnavailableReason, "no screen-capture permission")
         XCTAssertEqual(decoded.memory.first?.footprintBytes, 42_000_000)
         // The renderer + memory survive even with latency unavailable.
-        XCTAssertEqual(decoded.renderer, .coregraphics)
+        XCTAssertEqual(decoded.renderer, "coregraphics")
     }
 }

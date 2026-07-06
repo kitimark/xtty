@@ -15,8 +15,8 @@ What's inside: the pinned cirruslabs **base** layer (which carries the entire
 XCUITest session infrastructure — kcpassword auto-login, `automationmodetool`,
 TCC grants for automation, NOPASSWD sudo, brew) + **Xcode (macOS SDK only)** +
 **XcodeGen**. Deliberately absent: all simulator platforms, the Metal
-toolchain (xtty builds Metal-free once `retire-metal-renderer` is applied — a
-hard dependency, see below), Android/Flutter/fastlane-class tooling, and the
+toolchain (xtty builds Metal-free since `retire-metal-renderer`, applied
+2026-07-06 — see below), Android/Flutter/fastlane-class tooling, and the
 xtty source itself (the repo arrives at *test* time — the image stays generic).
 
 ## Current pins
@@ -37,7 +37,8 @@ metal` *succeeds* on the stub — the documented false positive, do not use it),
 no xtty source in the guest, zero Apple auth during the build.
 
 **Full-suite parity (2026-07-05, host-built products via `test-without-building`
-— the native in-guest build pends `retire-metal-renderer`):** measured on the
+— the native in-guest build now pends only `add-xtty-test-image`'s in-guest
+verification; `retire-metal-renderer` landed 2026-07-06):** measured on the
 first (zsh-shell) image build: headless run = **33 passed / 8 failed / 1 skipped
 of 42**; graphics run = 32 / 9 / 1 (the 1 extra was
 `testNewWindowOpensSecondWindow`, inflated by the Local Network modal stealing
@@ -89,8 +90,9 @@ The build cannot proceed without these, and no script performs them:
    Record the chosen volume here so future free-space checks target the right
    one. **Chosen:** default `~/.tart` (internal), unless noted otherwise.
 
-**Hard dependency:** the `retire-metal-renderer` change must be applied to the
-xtty repo you intend to test — it patches SwiftTerm's bundled `.metal` shader
+**Hard dependency (satisfied on `main` since 2026-07-06):** the
+`retire-metal-renderer` change must be applied to the xtty repo you intend to
+test — only pre-retire checkouts are affected. It patches SwiftTerm's bundled `.metal` shader
 out of the build, which is the *only* reason xtty ever needed the Metal
 toolchain. Without it, nothing built from this image can compile xtty (and
 fetching the toolchain in-guest is a deterministic Apple-catalog-rotation trap
@@ -116,8 +118,10 @@ Never boot or build in the golden image — it drifts. Clone per run (APFS
 copy-on-write, near-free), constrain the clone, test, then let the caller
 decide when to clean up.
 
-> **Interim recipe.** Until `retire-metal-renderer` lands, the guest **cannot
-> build xtty at all** — this image is deliberately Metal-toolchain-free, and
+> **Interim recipe.** `retire-metal-renderer` landed 2026-07-06, so the guest
+> *can* now compile xtty in principle — but this recipe stays until
+> `add-xtty-test-image` verifies the in-guest build (its remaining tasks).
+> The image is deliberately Metal-toolchain-free, and
 > fetching the toolchain in-guest is the deterministic Apple-catalog-rotation
 > trap documented above (§10c). So today's workflow **builds on the host**
 > (where Metal exists), **rsyncs the built products** to the guest, and runs
@@ -129,9 +133,8 @@ decide when to clean up.
 > **`__TESTROOT__`-relative**, resolved against wherever the file lands at
 > test time, so the rsync destination does not need to match the host's
 > absolute path — no path rewriting required. **Flip back to a real in-guest
-> build** (drop this whole host-build detour) belongs to
-> `retire-metal-renderer` / `add-xtty-test-image`, once the guest can build
-> xtty Metal-free.
+> build** (drop this whole host-build detour) belongs to `add-xtty-test-image`
+> (`retire-metal-renderer`'s half landed 2026-07-06).
 
 ```sh
 # same TART_HOME as the build (default ~/.tart; export only if you chose another volume)
@@ -224,16 +227,18 @@ proof is that the xtty build succeeds without the component.
 
 ### Acceptance (measured — post `fix-main-menu-clobber`)
 
-**Post-fix envelope: `40/1/1` of 42** (measured 2026-07-05, `fix-main-menu-clobber`
-validated: 3 runs — headless ×2 + graphics — all identical). The 7
+**Envelope: `39/1/1` of 41** (arithmetic from the measured 2026-07-05
+`40/1/1` of 42 — 3 runs, headless ×2 + graphics, all identical — after
+`retire-metal-renderer` (2026-07-06) deleted the always-passing Metal e2e
+`testConfiguredMetalRendererIsReported`; re-confirm the 41 total on the next
+VM sweep). The 7
 menu-dispatch tests that made this rig's pre-fix envelope now **pass**; the
 single expected residual is **`testMultiLinePasteIsNotAutoExecuted`**, and it
 is **NOT a product bug** — the image's `/bin/bash` login shell is macOS **bash
 3.2.57**, whose readline lacks `enable-bracketed-paste`, so a pasted newline
 executes (grid-proven; zsh + bash 5.1+ users are unaffected). A future harness
 change guards that test on a no-bracketed-paste shell; until then it is the
-image's one known-benign red. (Once `retire-metal-renderer` deletes the passing
-Metal e2e the total is 41, so the envelope reads **39/1/1 of 41**.)
+image's one known-benign red.
 
 Acceptance = **this measured envelope**, *not* a bare all-green (the paste
 residual is inherent to the bash rig). A regression is any menu-dispatch test

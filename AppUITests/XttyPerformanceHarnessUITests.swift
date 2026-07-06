@@ -1,31 +1,22 @@
 import XCTest
-import Metal
 
-/// End-to-end coverage for the performance harness (P7a): the renderer A/B toggle
-/// and the memory sampler are asserted via the DEBUG state dump (no screen-capture
-/// permission or hardware display needed); a `-Benchmark` run is asserted to write
-/// a results report. The latency probe's pixel path is exercised only where the
-/// capture permission is available (it degrades to an explicit marker otherwise).
+/// End-to-end coverage for the performance harness (P7a): the rendering-backend
+/// dump field and the memory sampler are asserted via the DEBUG state dump (no
+/// screen-capture permission or hardware display needed); a `-Benchmark` run is
+/// asserted to write a results report. The latency probe's pixel path is exercised
+/// only where the capture permission is available (it degrades to an explicit
+/// marker otherwise).
 final class XttyPerformanceHarnessUITests: XCTestCase {
 
-    /// 6.2 — the configured/overridden backend is reflected in the state dump.
-    /// Waits for the *expected* value (the live app overwrites the shared dump
-    /// every tick, so a previous test's still-terminating instance can't win).
+    /// 6.2 — a plain launch reports the single CoreGraphics rendering path in the
+    /// state dump (the field is retained for report-schema stability —
+    /// retire-metal-renderer). Waits for the *expected* value (the live app
+    /// overwrites the shared dump every tick, so a previous test's
+    /// still-terminating instance can't win).
     func testConfiguredCoreGraphicsRendererIsReported() {
-        _ = launchConfigured(config: "", extraArgs: ["-UITestRenderer", "coregraphics"])
+        _ = launchConfigured(config: "", extraArgs: [])
         let state = StateDumpReader.waitForState(timeout: 10) { $0["renderer"] as? String == "coregraphics" }
         XCTAssertEqual(state?["renderer"] as? String, "coregraphics")
-    }
-
-    /// 6.2 — Metal override is applied on Metal-capable hardware (the dev machine);
-    /// the dump reports ground truth (the view's actual backend). Waits for the
-    /// expected value to avoid a stale-dump race with the prior test's instance.
-    func testConfiguredMetalRendererIsReported() throws {
-        try XCTSkipIf(MTLCreateSystemDefaultDevice() == nil, "requires Metal-capable hardware")
-        _ = launchConfigured(config: "renderer = metal", extraArgs: ["-UITestRenderer", "metal"])
-        let state = StateDumpReader.waitForState(timeout: 10) { $0["renderer"] as? String == "metal" }
-        XCTAssertEqual(state?["renderer"] as? String, "metal",
-                       "Metal should initialize on Metal-capable hardware")
     }
 
     /// 6.3 — the memory sampler reports a positive resident footprint.

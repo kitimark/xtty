@@ -41,7 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
 
         let controller = TerminalWindowController(
             profile: configSet.defaultProfile, registry: registry, confirmClose: configSet.confirmClose,
-            gitReviewLayout: configSet.gitReviewLayout, renderer: configSet.renderer
+            gitReviewLayout: configSet.gitReviewLayout
         )
         controller.coordinator = self
         windowControllers.append(controller)
@@ -61,13 +61,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
         if ProcessInfo.processInfo.arguments.contains("-UITestGridDump") {
             startUITestDump()
         }
-        // Performance benchmark (P7a): measure latency + memory for the active
-        // renderer, write a report, and quit. Let the window settle first.
+        // Performance benchmark (P7a): measure latency + memory, write a report,
+        // and quit. Let the window settle first.
         if ProcessInfo.processInfo.arguments.contains("-Benchmark") {
-            let reportPath = benchmarkReportPath(renderer: configSet.renderer)
+            let reportPath = benchmarkReportPath()
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak controller] in
                 guard let controller else { return }
-                BenchmarkRunner.run(controller: controller, renderer: configSet.renderer, reportPath: reportPath)
+                BenchmarkRunner.run(controller: controller, reportPath: reportPath)
             }
         }
         #endif
@@ -75,15 +75,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
 
     #if DEBUG
     /// The benchmark report destination: `-BenchmarkReport <path>` when given, else
-    /// a renderer-tagged file in the temp dir (the app sandbox is off, so /tmp-like
-    /// paths are writable).
-    private func benchmarkReportPath(renderer: RendererBackend) -> String {
+    /// a fixed file in the temp dir (the app sandbox is off, so /tmp-like paths are
+    /// writable). The `coregraphics` name is kept for report continuity with the
+    /// P7-era per-renderer reports.
+    private func benchmarkReportPath() -> String {
         let args = ProcessInfo.processInfo.arguments
         if let i = args.firstIndex(of: "-BenchmarkReport"), i + 1 < args.count, !args[i + 1].isEmpty {
             return args[i + 1]
         }
         return (NSTemporaryDirectory() as NSString)
-            .appendingPathComponent("xtty-bench-\(renderer.rawValue).json")
+            .appendingPathComponent("xtty-bench-coregraphics.json")
     }
     #endif
 
@@ -251,7 +252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
     private func makeWindow(profile: XttyProfile) -> TerminalWindowController {
         let controller = TerminalWindowController(
             profile: profile, registry: registry, confirmClose: configSet.confirmClose,
-            gitReviewLayout: configSet.gitReviewLayout, renderer: configSet.renderer
+            gitReviewLayout: configSet.gitReviewLayout
         )
         controller.coordinator = self
         windowControllers.append(controller)
@@ -379,8 +380,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
     /// XCUITest determinism overrides applied at launch:
     /// - `-UITestScrollback <n>` shrinks the scrollback cap so the bounded-scrollback
     ///   flood test runs fast with an exact saturation point.
-    /// - `-UITestRenderer <coregraphics|metal>` forces the rendering backend so the
-    ///   CoreGraphics-vs-Metal A/B can run without rebuilding (P7a).
     /// Every other field is carried through unchanged.
     private static func applyUITestOverrides(to set: XttyConfigSet) -> XttyConfigSet {
         let args = ProcessInfo.processInfo.arguments
@@ -391,17 +390,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
             base.scrollback = n
         }
 
-        var renderer = set.renderer
-        if let i = args.firstIndex(of: "-UITestRenderer"),
-           i + 1 < args.count, let value = RendererBackend(rawValue: args[i + 1].lowercased()) {
-            renderer = value
-        }
-
         let newBase = XttyProfile(name: set.base.name, config: base, launch: set.base.launch)
         return XttyConfigSet(
             base: newBase, profiles: set.profiles,
             defaultProfileName: set.defaultProfileName, confirmClose: set.confirmClose,
-            gitReviewLayout: set.gitReviewLayout, renderer: renderer
+            gitReviewLayout: set.gitReviewLayout
         )
     }
     #endif

@@ -2,10 +2,10 @@
 import AppKit
 import XttyCore
 
-/// Drives the `-Benchmark` run (P7a): for the active renderer it measures
-/// key-to-photon latency (probe) and per-scenario memory, writes a `BenchResult`
-/// JSON report, and terminates. The report is the artifact for the P7 renderer
-/// decision and a regression baseline.
+/// Drives the `-Benchmark` run (P7a): measures key-to-photon latency (probe) and
+/// per-scenario memory, writes a `BenchResult` JSON report, and terminates. The
+/// report is a performance-regression baseline (it was previously also the
+/// artifact for the now-closed P7 renderer decision).
 ///
 /// Latency runs **first** (clean single-pane state); the memory scenarios mutate
 /// the window (splits/flood/alt-screen) and run after. If the latency probe can't
@@ -16,7 +16,7 @@ import XttyCore
 enum BenchmarkRunner {
     static let defaultTrials = 60
 
-    static func run(controller: TerminalWindowController, renderer: RendererBackend, reportPath: String) {
+    static func run(controller: TerminalWindowController, reportPath: String) {
         let windowID = CGWindowID(controller.window.windowNumber)
         let pid = ProcessInfo.processInfo.processIdentifier
         let probe = LatencyProbe(windowID: windowID, pid: pid)
@@ -35,8 +35,9 @@ enum BenchmarkRunner {
             // dirty-rect source).
             controller?.benchmarkPrepareForProbe()
             controller?.benchmarkSetCaretHidden(true)
-            // A renderer-independent overlay stimulus for the common-path baseline
-            // (design D5): the probe flips it and times it the same way.
+            // An overlay stimulus outside the terminal's rendering path, for the
+            // reference baseline (design D5): the probe flips it and times it the
+            // same way, so the capture/compositor floor is identifiable.
             var overlay: ProbeOverlay?
             if let contentView = controller?.window.contentView {
                 overlay = ProbeOverlay(in: contentView)
@@ -80,7 +81,6 @@ enum BenchmarkRunner {
             }
 
             let result = BenchResult(
-                renderer: renderer,
                 latency: latency,
                 latencyUnavailableReason: latency == nil ? (unavailableReason ?? "unavailable") : nil,
                 captureFrameRate: latency != nil ? displayHz : nil,
@@ -127,13 +127,13 @@ enum BenchmarkRunner {
     }
 }
 
-/// A renderer-independent on-screen stimulus for the latency baseline pass (P7b /
-/// design D5): a full-width strip at the bottom of the window (guaranteed visible in
-/// the downscaled capture, clear of the prompt/cursor) whose layer color the probe
-/// toggles. Because it is a plain AppKit/CoreAnimation layer — not the SwiftTerm
-/// renderer — its keystroke-free flip→glass latency is the capture/compositor floor
-/// common to both CoreGraphics and Metal, so it contextualizes how much of the
-/// glyph latency is the compositor floor vs. the terminal pipeline.
+/// An on-screen stimulus outside the terminal's rendering path, for the latency
+/// baseline pass (P7b / design D5): a full-width strip at the bottom of the window
+/// (guaranteed visible in the downscaled capture, clear of the prompt/cursor) whose
+/// layer color the probe toggles. Because it is a plain AppKit/CoreAnimation layer —
+/// not the SwiftTerm renderer — its keystroke-free flip→glass latency is the
+/// capture/compositor floor, so it contextualizes how much of the glyph latency is
+/// that floor vs. the terminal pipeline.
 @MainActor
 final class ProbeOverlay {
     private let view: NSView

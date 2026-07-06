@@ -110,20 +110,25 @@ public struct BenchEnvironment: Equatable, Sendable, Codable {
     }
 }
 
-/// The full benchmark result — the artifact for the P7 renderer decision and a
-/// performance-regression baseline. `latency` is nil when the probe could not run
-/// (no screen-capture permission or no visible display) **or** the timebase
-/// calibration failed (untrustworthy), in which case `latencyUnavailableReason`
-/// explains why; memory is always measured.
+/// The full benchmark result — a performance-regression baseline (it was
+/// previously also the artifact for the now-closed P7 renderer decision).
+/// `latency` is nil when the probe could not run (no screen-capture permission
+/// or no visible display) **or** the timebase calibration failed
+/// (untrustworthy), in which case `latencyUnavailableReason` explains why;
+/// memory is always measured.
 ///
 /// P7b latency-measurement provenance makes the latency numbers' trustworthiness
 /// and time-resolution explicit rather than implying sub-frame precision:
 /// `timebaseCalibration` (did the clocks reconcile), `frameQuantizationMs` (the
 /// achieved resolution — one display-refresh interval), and `noOpBaseline` (a
-/// per-renderer identical-content baseline measured the same way, so a constant
-/// capture/scheduling offset can be distinguished from a real renderer difference).
+/// reference-stimulus baseline measured the same way, so the constant
+/// capture/compositor/scheduling floor can be identified and distinguished from
+/// the terminal's own rendering contribution).
 public struct BenchResult: Equatable, Sendable, Codable {
-    public let renderer: RendererBackend
+    /// The rendering backend the run was measured on. Retained for report-schema
+    /// stability (same JSON key/value as the P7-era reports); always
+    /// `"coregraphics"` — the single rendering path since retire-metal-renderer.
+    public let renderer: String
     public let latency: LatencyStats?
     /// Set iff `latency` is nil — an explicit "unavailable / untrustworthy" marker,
     /// never silent (missing permission, no display, or a failed timebase gate).
@@ -138,14 +143,15 @@ public struct BenchResult: Equatable, Sendable, Codable {
     /// The startup timebase-calibration outcome (P7b); nil when calibration was
     /// not reached (e.g. capture unavailable before it could run).
     public let timebaseCalibration: TimebaseCalibration?
-    /// The per-renderer no-op / identical-content baseline distribution, measured
-    /// identically, so a constant offset can be subtracted in P7b; nil when not run.
+    /// The no-op / identical-content reference-stimulus baseline distribution,
+    /// measured identically, so the capture/compositor/scheduling floor can be
+    /// distinguished from the terminal's own contribution; nil when not run.
     public let noOpBaseline: LatencyStats?
     public let memory: [MemorySample]
     public let environment: BenchEnvironment
 
     public init(
-        renderer: RendererBackend,
+        renderer: String = "coregraphics",
         latency: LatencyStats?,
         latencyUnavailableReason: String? = nil,
         captureFrameRate: Double? = nil,

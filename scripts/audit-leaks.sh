@@ -44,7 +44,7 @@ echo
 echo "[1/2] leaks -atExit (this exercises the bench scenarios; needs a visible display)…"
 MallocStackLogging=1 \
   leaks --atExit --outputGraph="$OUT/xtty.memgraph" -- \
-  "$BIN" -Benchmark -UITestRenderer coregraphics -BenchmarkReport "$OUT/bench.json" \
+  "$BIN" -Benchmark -BenchmarkReport "$OUT/bench.json" \
   > "$OUT/leaks.txt" 2>&1 || true
 echo "      → $OUT/leaks.txt   (graph: $OUT/xtty.memgraph)"
 

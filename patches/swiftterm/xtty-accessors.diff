@@ -1,18 +1,58 @@
+diff --git a/Package.swift b/Package.swift
+index 54e0241..5d01b84 100644
+--- a/Package.swift
++++ b/Package.swift
+@@ -78,10 +78,10 @@ let targets: [Target] = [
+ //            .product(name: "Subprocess", package: "swift-subprocess", condition: .when(platforms: [.macOS, .linux]))
+ //        ],
+         path: "Sources/SwiftTerm",
+-        exclude: platformExcludes + ["Mac/README.md"],
+-        resources: [
+-            .process("Apple/Metal/Shaders.metal")
+-        ]
++        // xtty patch (retire-metal-renderer): the bundled Metal shader is excluded instead of
++        // declared as a processed resource, so building the package needs no Metal toolchain.
++        // xtty renders with CoreGraphics; nothing calls setUseMetal(true).
++        exclude: platformExcludes + ["Mac/README.md", "Apple/Metal/Shaders.metal"]
+ //        swiftSettings: [
+ //            .unsafeFlags(["-enforce-exclusivity=none"])
+ //        ]
+diff --git a/Sources/SwiftTerm/Apple/Metal/MetalTerminalRenderer.swift b/Sources/SwiftTerm/Apple/Metal/MetalTerminalRenderer.swift
+index 3a738ff..f5ae967 100644
+--- a/Sources/SwiftTerm/Apple/Metal/MetalTerminalRenderer.swift
++++ b/Sources/SwiftTerm/Apple/Metal/MetalTerminalRenderer.swift
+@@ -2734,9 +2734,10 @@ final class MetalTerminalRenderer: NSObject, MTKViewDelegate {
+ 
+     private static func candidateBundles() -> [Bundle] {
+         var bundles: [Bundle] = []
+-        #if SWIFT_PACKAGE
+-        bundles.append(Bundle.module)
+-        #endif
++        // xtty patch (retire-metal-renderer): Bundle.module is not synthesized once the
++        // package declares no resources (the shader resource is stripped in Package.swift),
++        // so the SWIFT_PACKAGE arm is removed. The metallib lookup then finds nothing and
++        // returns nil, which callers already handle; nothing in xtty calls setUseMetal(true).
+         bundles.append(Bundle(for: MetalTerminalRenderer.self))
+         bundles.append(Bundle.main)
+         return bundles
 diff --git a/Sources/SwiftTerm/XttyAccessors.swift b/Sources/SwiftTerm/XttyAccessors.swift
 new file mode 100644
-index 0000000..4f902ba
+index 0000000..0bb2d90
 --- /dev/null
 +++ b/Sources/SwiftTerm/XttyAccessors.swift
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,41 @@
 +// XttyAccessors.swift — the P4b-2 SwiftTerm engine addition (Phase 2).
 +//
 +// THIS FILE IS NOT COMPILED BY xtty. It is the committed artifact that the
 +// Phase-2 light-up drops into the SwiftTerm package's `Sources/SwiftTerm/`
 +// directory (via the chosen mechanism — a gitignored clone + git-apply'd patch,
 +// or vendored source, or a fork; see research/03-analysis/swiftterm-fork-vs-patch-strategy.md
-+// and openspec change add-spatial-blocks design D1). It is add-only: it modifies
-+// no existing SwiftTerm file, mirrors the already-public `getScrollInvariantLine`
-+// idiom, and is the basis for the upstream PR that would retire the local copy.
++// and openspec change add-spatial-blocks design D1). This accessor addition is
++// add-only — it modifies no existing SwiftTerm file, mirrors the already-public
++// `getScrollInvariantLine` idiom, and is the basis for the upstream PR that would
++// retire the local copy. (The same tracked .diff also carries a Package.swift hunk
++// that strips the Metal shader resource so the build needs no Metal toolchain —
++// see openspec change retire-metal-renderer.)
 +//
 +// It exposes the two read-only values P4b-2 needs but that are module-internal
 +// today: the cursor's trim-invariant absolute row and the scrollback base. Once

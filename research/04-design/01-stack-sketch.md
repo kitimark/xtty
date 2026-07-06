@@ -148,6 +148,7 @@ The spike found the three "adoption levels" are **one engine with different rend
 - **SwiftTerm limitations** (perf, data model, maintenance) → consider Alt C (libghostty-vt) or Alt A.
 - **Cross-platform demand** → Alt A or Alt B (portable core).
 - **Latency not good enough** → revisit render-thread design + frame pacing before changing language ([06-performance](../02-internals/06-performance-latency.md)).
+- **Metal renderer re-evaluation triggers (added 2026-07-06, `retire-metal-renderer`).** The P7b gate closed on measurement (CG: faster median, tighter tail, leaner memory than SwiftTerm's experimental Metal path) and the toggle + toolchain dep were retired; the owner's standing intent is that Metal may win *later*. Re-open by re-running the archived P7b methodology (`../03-analysis/p7-measurement-methodology.md`) — never on opinion — when any of: (a) **SwiftTerm ships a reworked/production Metal renderer** (resurrection is cheap: revert the `Package.swift` patch hunk, re-add the ~7-file plumbing from the retire change's diff); (b) **CoreGraphics starts missing frame budget** at 120 Hz ProMotion or large-scrollback/full-redraw loads (the `make bench` regression baseline drifting is the early signal); (c) **the Phase-8 custom-renderer question reopens** (e.g. libghostty adoption or an in-house renderer for features CG can't express).
 - **Memory creeping up** → check scrollback cap, atlas eviction, retain cycles *before* blaming the stack.
 
 ## Open questions (for later)
