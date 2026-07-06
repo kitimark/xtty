@@ -36,9 +36,22 @@ Verified in a 3-vCPU clone: auto-login console (owner `admin`), NOPASSWD sudo,
 metal` *succeeds* on the stub — the documented false positive, do not use it),
 no xtty source in the guest, zero Apple auth during the build.
 
+**Native in-guest build (verified 2026-07-06, `add-xtty-test-image` task 4.3 —
+the positive proof the §8b `xcrun -f metal` false positive cannot give):** on a
+fresh 3-vCPU clone, the source was rsync'd in (no products), SwiftTerm was
+cloned+patched **in-guest** by `bootstrap-swiftterm.sh` (v1.13.0 +
+`xtty-accessors.diff`), `xcodegen generate` produced the project, and a **native
+`xcodebuild build-for-testing` succeeded** (`** TEST BUILD SUCCEEDED **`, ~43 s,
+0 errors) — 158 Swift compile steps, `SwiftTerm.o`/`.swiftmodule` + `xtty.app`
+(arm64) + `xttyUITests-Runner.app` + the `.xctestrun` all built fresh, with the
+Metal toolchain `uninstalled` and **zero** `.metal`/`Metal.xctoolchain` steps in
+the guest log. So the minimal image is a complete self-sufficient **build+test**
+environment, not just a test runner. Evidence:
+`~/Downloads/xtty-vm-poc/artifacts/2026-07-06-add-xtty-test-image-inguest-build/`.
+
 **Full-suite parity (2026-07-05, host-built products via `test-without-building`
-— the native in-guest build now pends only `add-xtty-test-image`'s in-guest
-verification; `retire-metal-renderer` landed 2026-07-06):** measured on the
+— native in-guest build since verified 2026-07-06, see above;
+`retire-metal-renderer` landed 2026-07-06):** measured on the
 first (zsh-shell) image build: headless run = **33 passed / 8 failed / 1 skipped
 of 42**; graphics run = 32 / 9 / 1 (the 1 extra was
 `testNewWindowOpensSecondWindow`, inflated by the Local Network modal stealing
@@ -118,23 +131,27 @@ Never boot or build in the golden image — it drifts. Clone per run (APFS
 copy-on-write, near-free), constrain the clone, test, then let the caller
 decide when to clean up.
 
-> **Interim recipe.** `retire-metal-renderer` landed 2026-07-06, so the guest
-> *can* now compile xtty in principle — but this recipe stays until
-> `add-xtty-test-image` verifies the in-guest build (its remaining tasks).
-> The image is deliberately Metal-toolchain-free, and
-> fetching the toolchain in-guest is the deterministic Apple-catalog-rotation
-> trap documented above (§10c). So today's workflow **builds on the host**
-> (where Metal exists), **rsyncs the built products** to the guest, and runs
-> **`test-without-building`** in-guest — the runtime that actually matters (the
-> constrained 3-vCPU Aqua session where the per-launch race lives) is still
-> 100% in the guest, on the identical binary; only the *compile* step moves to
-> the host. This **supersedes the earlier shared-`/tmp` workaround**
-> (`local-macos-vm-ci-reproduction.md` §8b): the `.xctestrun` Xcode emits is
-> **`__TESTROOT__`-relative**, resolved against wherever the file lands at
-> test time, so the rsync destination does not need to match the host's
-> absolute path — no path rewriting required. **Flip back to a real in-guest
-> build** (drop this whole host-build detour) belongs to `add-xtty-test-image`
-> (`retire-metal-renderer`'s half landed 2026-07-06).
+> **Why this recipe host-builds (native in-guest build is verified, not
+> required).** `retire-metal-renderer` landed 2026-07-06 and
+> `add-xtty-test-image` task 4.3 then **proved a native in-guest
+> `build-for-testing` succeeds** on the Metal-toolchain-free guest (see
+> Last-verified above). So the host-build detour is now a **deliberate choice,
+> not a limitation**: building once on the host and running the *identical*
+> binary across every test tier (headless ×2 + graphics) keeps build variance
+> out of the cross-tier consistency comparison — the property the
+> `xtty-test-validator` relies on — and dodges the in-guest Metal-catalog trap
+> (§10c) entirely. The runtime that actually matters (the constrained 3-vCPU
+> Aqua session where the per-launch race lives) is still 100% in the guest, on
+> that one binary; only the *compile* moves to the host. This **supersedes the
+> earlier shared-`/tmp` workaround** (`local-macos-vm-ci-reproduction.md` §8b):
+> the `.xctestrun` Xcode emits is **`__TESTROOT__`-relative**, resolved against
+> wherever the file lands at test time, so the rsync destination need not match
+> the host's absolute path — no path rewriting required. **To build natively
+> in-guest instead** (a self-sufficient single-run recipe, now proven): rsync
+> the source (excl. `build/ external/ .git`), then in-guest run
+> `scripts/bootstrap-swiftterm.sh` → `xcodegen generate` →
+> `xcodebuild build-for-testing` (source brew's PATH — the non-interactive SSH
+> shell lacks `/opt/homebrew/bin`).
 
 ```sh
 # same TART_HOME as the build (default ~/.tart; export only if you chose another volume)

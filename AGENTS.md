@@ -14,7 +14,7 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 
 | Change | State | What it is | Detail |
 | --- | --- | --- | --- |
-| `add-xtty-test-image` | 16/20 — unblocked (`retire-metal-renderer` archived 2026-07-06) | reproducible ~40 GB minimal Packer/Tart test-VM image | `packer/README.md`; same research doc §10/§11 |
+| `add-xtty-test-image` | implemented — pending archive (20/20) | reproducible ~35 GB minimal Packer/Tart test-VM image; native in-guest Metal-free build proven 2026-07-06 (task 4.3) | `packer/README.md`; same research doc §10/§11 |
 | `test-image-bash-shell` | implemented — pending archive | bash guest login shell → exact CI parity; Local-Network modal root-caused | `research/03-analysis/local-network-privacy-forensics.md` |
 | `add-ci-pipeline` | implemented — owner steps left | CI is live; remaining: repo public, pr-lint PR, branch protection, archive | `research/03-analysis/github-actions-ci-cd.md` |
 
