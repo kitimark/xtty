@@ -32,7 +32,7 @@ The agent SHALL NOT hardcode acceptance counts, failing-set expectations, or env
 
 ### Requirement: Fixed verdict-report contract with a cleanup manifest
 
-The agent's report SHALL follow a fixed skeleton so both a human and an apply-loop caller can act on it: an overall **verdict** (in-envelope / out-of-envelope / regression); **verbatim** per-tier counts and failing-test sets (never paraphrased); a per-failure **classification** mapping every red to a named known bucket or **UNEXPLAINED** — and any UNEXPLAINED red SHALL prevent an in-envelope verdict; a **cross-environment consistency** assessment against the expected-difference matrix (an unexplained cross-tier delta is itself a reportable finding); **evidence paths** (the agent SHALL preserve result bundles and write a review document); actionable **feedback** for the caller; and a **cleanup manifest** enumerating everything the sweep created or left running with the commands to remove it. The agent SHALL NOT delete rigs, clones, or evidence itself — follow-on review and re-verification take precedence over tidiness.
+The agent's report SHALL follow a fixed skeleton so both a human and an apply-loop caller can act on it: a **definition-version stamp** as the first line (agent-definition edits propagate to spawns with unpredictable lag, so every report self-identifies which definition version produced it and the caller can detect a stale-served definition); an overall **verdict** (in-envelope / out-of-envelope / regression); **verbatim** per-tier counts and failing-test sets (never paraphrased); a per-failure **classification** mapping every red to a named known bucket or **UNEXPLAINED** — and any UNEXPLAINED red SHALL prevent an in-envelope verdict; a **cross-environment consistency** assessment against the expected-difference matrix (an unexplained cross-tier delta is itself a reportable finding); **evidence paths** (the agent SHALL preserve result bundles, write a review document, and record every long-running launch in an on-disk ledger as it happens — evidence is written incrementally, never held for a single final write, so a cut-off sweep is reconstructable from disk); actionable **feedback** for the caller; and a **cleanup manifest** enumerating everything the sweep created or left running with the commands to remove it. The agent SHALL NOT delete rigs, clones, or evidence itself — follow-on review and re-verification take precedence over tidiness (stopping a finished, evidence-collected VM is permitted; deleting is not).
 
 #### Scenario: A known-benign residual does not fail the verdict
 
@@ -49,9 +49,14 @@ The agent's report SHALL follow a fixed skeleton so both a human and an apply-lo
 - **WHEN** a sweep completes (fully or partially)
 - **THEN** every clone/rig/artifact created is still present and the report's cleanup manifest lists each with the exact removal command, so the user decides what to keep for further verification
 
+#### Scenario: A stale-served definition is detectable
+
+- **WHEN** a validation run executes under an agent definition older than the file in the repository
+- **THEN** the report's version stamp does not match the repository file's stamp, and the caller treats the run as invalid for judging any definition change rather than silently trusting it
+
 ### Requirement: Two documented spawn scenarios
 
-The canonical project guide SHALL document the two ways the agent is spawned: (a) **direct user request** (via the launcher command or natural language), and (b) **spec-workflow verify tasks** — a delegation rule that change-verification tasks which execute the test suite are delegated to the agent, with the apply loop consuming the agent's report and recording its verbatim results when ticking the task. The guide SHALL also state the deference chain (the agent defers to the project guide for rules and to the test-image documentation for numbers) so the documents cannot drift apart silently.
+The canonical project guide SHALL document the two ways the agent is spawned: (a) **direct user request** (via the launcher command or natural language), and (b) **spec-workflow verify tasks** — a delegation rule that change-verification tasks which execute the test suite are delegated to the agent, with the apply loop consuming the agent's report and recording its verbatim results when ticking the task. The guide SHALL also state the deference chain (the agent defers to the project guide for rules and to the test-image documentation for numbers) so the documents cannot drift apart silently. The launcher SHALL additionally document the caller's half of the workflow: the **delivery check** (compare the report's definition-version stamp against the repository file) and the **strand-recovery protocol** — if a sweep ends without a final report, the caller reconstructs state from the run's on-disk evidence and **resumes the same agent** rather than spawning a fresh run, recording the resume in the run's review document so a resurrected run is distinguishable from a clean one.
 
 #### Scenario: A verify task is delegated
 
@@ -63,9 +68,14 @@ The canonical project guide SHALL document the two ways the agent is spawned: (a
 - **WHEN** a contributor or agent reads the canonical project guide
 - **THEN** it states both spawn scenarios and the deference chain for the test-validation tooling
 
+#### Scenario: A stranded sweep is recovered, not rerun
+
+- **WHEN** the agent's task ends without a final report while tier work is still running or partial evidence exists on disk
+- **THEN** the caller follows the documented recovery protocol — resuming the same agent with the on-disk state rather than starting a fresh sweep — and the resume is recorded in the run's review document
+
 ### Requirement: Validation-discipline guardrails
 
-The agent SHALL encode the measured validation discipline: **no retry flags or in-run retries** (retry tolerance masks per-launch races); **clone-per-run** against the golden test image, never booting or mutating the golden itself; **serialized** VM runs (concurrent clones on one host distort the constrained-CPU race timing that gives the VM tier its meaning); **observe-never-repair** (the agent never edits tests, configuration, or product code to change an outcome — an out-of-envelope result is reported, not fixed); and a **hands-off warning** before the local bare-metal tier (live mouse/keyboard interference is a measured flake source).
+The agent SHALL encode the measured validation discipline: **no retry flags or in-run retries** (retry tolerance masks per-launch races); **clone-per-run** against the golden test image, never booting or mutating the golden itself (with a unique clone name per run, since kept clones make name reuse collide); **serialized** VM runs (concurrent clones on one host distort the constrained-CPU race timing that gives the VM tier its meaning); **observe-never-repair** (the agent never edits tests, configuration, or product code to change an outcome — an out-of-envelope result is reported, not fixed); a **hands-off warning** before the local bare-metal tier (live mouse/keyboard interference is a measured flake source); and **continuous execution** — the agent SHALL remain actively driving its tools for the entire sweep, bridging long-running tiers with bounded, reissued waits, and SHALL NOT end its turn to await any external notification while tier work is executing (a subagent whose turn ends is never re-invoked; ending the turn mid-sweep strands the run — measured three times before this discipline was encoded). A genuinely wedged tier (prolonged zero progress) is reported as a blocker with its live processes documented, rather than either waiting forever or abandoning the sweep silently.
 
 #### Scenario: Retries are never used
 
@@ -76,3 +86,8 @@ The agent SHALL encode the measured validation discipline: **no retry flags or i
 
 - **WHEN** any VM tier runs
 - **THEN** the sweep operates on a fresh clone of the golden image and the golden itself is never booted or modified
+
+#### Scenario: Long waits do not strand the sweep
+
+- **WHEN** a tier's execution outlasts any single tool call's time limit
+- **THEN** the agent bridges the wait by remaining continuously active (bounded waits, reissued on timeout) and the sweep proceeds to its final report or a blocker report without requiring external resurrection

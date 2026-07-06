@@ -51,6 +51,18 @@ The agent must not edit tests/config to green, must not add retries, must not de
 **D9 — One agent, room for a family; CI-inspect is a mode, not a sibling.**
 The `xtty-` prefix namespaces future agents, but each is maintenance surface — new members only when a recurring noisy workflow proves itself (the bar capture-research passed). CI-run classification shares this agent's logic, so if built it becomes a mode of this agent (a fifth matrix column), not a second agent.
 
+## Apply-phase amendments (v4, 2026-07-06)
+
+The live smokes stranded three Sonnet sweeps mid-run; a 7-agent forensic workflow over all four transcripts (three failures + the one sweep that completed) found the mechanism and produced these additional decisions (full capture: `research/03-analysis/claude-code-subagent-execution-forensics.md`):
+
+**D10 — Continuous execution; `run_in_background` banned.** The strand cause was an *affordance failure*, not model disobedience: the Bash tool's "re-invokes you when it exits" promise is false for subagents (a subagent's task closes when it stops calling tools — measured, zero notifications ever delivered), and the harness's anti-sleep hook *recommends* the trap at the decision moment. The agent now runs the control-run-proven unfused shape: instant foreground `nohup` launch (pidfile + ledger entry) → separate foreground bounded wait loops (`while kill -0 … sleep 30`, 600 s cap, reissued on timeout). VM boots are launch-only (readiness is polled; `tart run` never exits). A wedge escape permits a blocker report after prolonged zero progress, so the report gate cannot deadlock on a hung tier.
+
+**D11 — Definition-version stamp (delivery probe).** Agent-definition edits reach spawns with unpredictable lag (measured: stale 63 s after an edit — three "rule violations" were spawns that never received the rule — fresh ~40 min later). Every report opens with `Definition: <version>`; the launcher compares it to the file. No definition change is ever judged without a passed delivery probe.
+
+**D12 — Caller-side babysitter protocol (in the launcher).** The measured recovery path for a strand, formalized: reconstruct from the run's `ledger.log`/REVIEW.md, wait out live tier processes, resume the *same agent* via SendMessage (never respawn — and note a resume drops a per-call model override), record the resume in REVIEW.md so a resurrected run is distinguishable from a clean one.
+
+**Validation record:** post-v4, Sonnet completed three consecutive sweeps with zero strands and zero `run_in_background` uses — a 14-min quick-confirm, a 65-min all-tiers sweep (including a correctly-handled transient Tier-1 automation-mode blocker: two init attempts, 0 tests executed, reported as a blocker with verbatim "0/0/0", no third attempt, no self-repair), and a 30-min all-tiers sweep fully at envelope.
+
 ## Risks / Trade-offs
 
 - [Agent prompt drifts from reality (rigs/paths change)] → numbers/workflow deferred to `packer/README.md` at runtime (D2/D7); the prompt holds only procedure + discipline; AGENTS.md names the deference chain so doc updates propagate.
