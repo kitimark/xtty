@@ -43,6 +43,7 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 - **Guest bash 3.2 has no bracketed paste** — the VM rig's multi-line-paste red is a benign rig residual, not a product bug.
 - **The hosted-runner find-bar wrap is not reproducible from the image build** — stock macOS `PS1='\h:\W \u\$ '` is byte-identical on runner + VM (`runner-images` sets no `PS1`); the runner's ~61-char `\h` is GitHub-network-injected at *runtime* (the image sets only `Mac-<epoch>.local`), so the sole reproduction lever is hostname *length*, which we control — and the short-`\h` Tart VM is blind to prompt-width flakes by construction (`ci-runner-prompt-width-forensics.md`).
 - **`xcrun -f metal` inside a VM is a false positive** — it PATH-resolves while the toolchain is unfetchable in-guest.
+- **Don't pre-build a speculative dev-workflow agent roster** — add an `xtty-*` agent only after its friction recurs across several changes and is provably under-done (both existing agents were reactive; a proposed roster-of-4 was refuted by the dev-workflow forensics → build one **change-set-aware** `openspec-critic` first, adopt fork-per-change authoring as a habit). Delegate only above the ~12k-token subagent-inheritance floor; compute cross-artifact state on demand, never cache counts (`dev-workflow-agent-orchestration.md`).
 
 ## Repository structure
 
