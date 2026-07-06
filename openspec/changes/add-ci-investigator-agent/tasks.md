@@ -1,0 +1,28 @@
+## 1. CI expected-difference matrix (the classification target)
+
+- [ ] 1.1 Add a **CI expected-difference matrix** section to `research/03-analysis/github-actions-ci-cd.md`: a table of hosted-runner known-benign buckets — `testFindBarOpensLocatesAndDismisses` → the ~72-char runner prompt soft-wraps the `AFTERFIND` focus marker across grid rows (focus restore genuinely works) → **benign**; `testMultiLinePasteIsNotAutoExecuted` → the runner's `/bin/bash` (bash 3.2) has no bracketed paste, so the first pasted line auto-executes → **benign** — each row as failing-test → runner-specific cause → bucket.
+- [ ] 1.2 In the same section, record the **required-gate vs non-blocking job map** (`test-core` = required gate; `build-and-test` + `pr-lint` = non-blocking) and the **reverse duty**: any change that adds/removes a test, fixes a known-benign residual, or changes a job's gate status updates this matrix in the same session.
+- [ ] 1.3 Refresh the `research/README.md` line for `github-actions-ci-cd.md` to mention the matrix, so the agent's deference target is discoverable.
+
+## 2. The `xtty-ci-investigator` agent
+
+- [ ] 2.1 Write `.claude/agents/xtty-ci-investigator.md` frontmatter (`name`, `description`, `model: sonnet`) + a `Definition version: v1 (<date>)` stamp as the first report line (with a maintainer note to bump it on every edit) + the **deference chain** (AGENTS.md for rules; `github-actions-ci-cd.md` for the CI matrix + job map — read fresh each run, never hardcode buckets).
+- [ ] 2.2 Encode the **investigation playbook**: establish run identity (`gh run view`), a **regression pre-check** from the triggering commit's changed-file set (docs-only → short-circuit path), then per-job-type evidence gathering — build break (compile error + file:line); required-gate red (stop signal); XCUITest red (`.xcresult` download → `xcrun xcresulttool` parse → attachment export → read grid dumps against the relevant test source); pr-lint red (offending title) — and classify each failure against the matrix.
+- [ ] 2.3 Encode the **fixed report skeleton**: stamp · verdict (in-envelope/out-of-envelope/regression) · run identity (failing job(s) marked required-gate|non-blocking, triggering commit + whether it touched product/test code) · verbatim failing names + messages · per-failure classification (matrix bucket or `UNEXPLAINED`, any `UNEXPLAINED` forbids in-envelope) · evidence paths · recommendation (proceed/stop-and-investigate/blocked-prereq); a **required-gate red is a stop signal regardless of bucket**.
+- [ ] 2.4 Encode **observe-never-repair + read-only guardrails** (no edits to product/test/config, no CI re-run/retry/cancel, verbatim reporting, blocked-prereq reporting instead of guessing) and the **deliberately-lighter posture** (no VM / turn-alive invariant / babysitter — short read-only runs; optional evidence dir `~/Downloads/xtty-ci-poc/<run>/` as convenience, not survival).
+
+## 3. The `/xtty:investigate-ci` launcher
+
+- [ ] 3.1 Write `.claude/commands/xtty/investigate-ci.md`: spawn `xtty-ci-investigator` **by name** (subagent invocation, not Skill), forward the run reference verbatim, relay the report; document the **delivery check** (report's first-line stamp must match `.claude/agents/xtty-ci-investigator.md`; mismatch = stale-served, treat as blocker) and point at AGENTS.md as the source of truth for the boundary.
+
+## 4. Wire the trigger boundary + tooling docs
+
+- [ ] 4.1 Update `AGENTS.md`: add the tooling-table/committed-tooling row for `xtty-ci-investigator` + `/xtty:investigate-ci`; add the **watch-vs-investigate delegation boundary** (`gh run watch`/status = inline; investigating a red run = delegate) with the per-task marker `⟶ xtty-ci-investigator (<run>)` to "How to work here"; state its deference chain (rules here; CI matrix/job map in `github-actions-ci-cd.md`).
+- [ ] 4.2 Update `openspec/config.yaml` `rules.tasks`: add a pointer instructing that a task investigating a failed CI run carries the `⟶ xtty-ci-investigator (<run>)` marker, deferring to AGENTS.md for the boundary (single source of truth).
+
+## 5. Verify + reconcile
+
+- [ ] 5.1 `openspec validate --strict add-ci-investigator-agent` passes (proposal ↔ specs capability match, every requirement has ≥1 four-hashtag scenario).
+- [ ] 5.2 Confirm the two new `.claude` files are git-tracked, not ignored (`git check-ignore -v` returns nothing for them; they fall under the `xtty-*` / `commands/xtty/` exceptions).
+- [ ] 5.3 By-effect proof (dogfood the delegation): investigate the real failed run end-to-end and confirm the verdict is **IN-ENVELOPE** with both reds mapped to their CI-matrix buckets, `build-and-test` marked **non-blocking**, and the report stamp `v1` matching the file. ⟶ xtty-ci-investigator (run 28801860582)
+- [ ] 5.4 Reconcile trackers (Keep progress current): add the change's Current-status row + refresh the snapshot in `AGENTS.md`; append a dated narrative to `HISTORY.md`; add the Tooling-group milestone note; then verify against disk (`openspec list`, `ls openspec/changes/archive/`, `ls openspec/specs/`).
