@@ -26,15 +26,19 @@ Bash `\h` reads `gethostname(3)`, whose backing key on macOS is not fixed: on th
 
 ### D3: Re-establish the acceptance envelope by measurement (validator-delegated)
 
-A wide prompt shifts the *failing signature* of prompt-typing tests, so the envelope must be re-measured on **both** rigs (headless + graphics), delegated to `xtty-test-validator`. Expected outcome (to confirm, not assume): with `harden-findbar-wrap-assertion` present, `testFindBarOpensLocatesAndDismisses` stays green; the `testMultiLinePasteIsNotAutoExecuted` residual's failing line shifts from the `command not found` check (`:87`) to the wrap (`:84`), matching the runner; the count likely stays `39/1/1`. The measurement's purpose is to catch a *previously-hidden* wrap in some other type-at-prompt assertion — if one appears, it is a newly-surfaced (real, benign-or-not) residual to classify, exactly the fidelity this change buys.
+A wide prompt shifts the *failing signature* of prompt-typing tests, so the envelope must be re-measured on **both** rigs (headless + graphics), delegated to `xtty-test-validator`. Expected outcome (to confirm, not assume): applied **alone** (before the fix), `testFindBarOpensLocatesAndDismisses` **reds under the wide prompt** — the repro proof (D5); after `harden-findbar-wrap-assertion` it **greens**. The `testMultiLinePasteIsNotAutoExecuted` residual's failing line shifts from the `command not found` check (`:87`) to the wrap (`:84`), matching the runner; the final count (find-bar green) likely stays `39/1/1`. The measurement's purpose is to catch a *previously-hidden* wrap in some other type-at-prompt assertion — if one appears, it is a newly-surfaced (real, benign-or-not) residual to classify, exactly the fidelity this change buys.
 
 ### D4: Safety — the Local Network prompt stays gone
 
 Lengthening `\h` cannot resurrect the LN modal: the reverse-DNS path is `ProcessInfo.hostName` → PTR of every local **address** (address count, not hostname length) and runs only under a zsh OSC 7 emission; the guest is bash, so the path is dead regardless of hostname (`local-network-privacy-forensics.md`; `scutil --set HostName` measured inert for that gate). The change keeps `chsh -s /bin/bash`. The spec carries a scenario asserting the modal still does not appear.
 
-### D5: Sequence after `harden-findbar-wrap-assertion`
+### D5: Sequence BEFORE `harden-findbar-wrap-assertion` — reproduce the red first
 
-The re-baseline is measured with the find-bar fix present, so the wide-prompt envelope carries find-bar **green** (else find-bar would red under the wide prompt and muddy the new envelope). This is an ordering constraint on *apply*, not a spec dependency.
+Apply this change first, then `harden-findbar-wrap-assertion`, as a **red→green pair on one rebuilt image**:
+- **After #2 alone** (wide prompt, find-bar assertion still strict): `testFindBarOpensLocatesAndDismisses` **reds in-guest** — the same failure CI shows. This red is the *acceptance signal for #2*: it proves the guest now reproduces the runner's prompt width (the parity worked).
+- **After #1** (wrap-tolerant matcher; same image, no rebuild — the source is not baked in): find-bar **greens in-guest**, proving the fix against the live repro.
+
+This is a stronger proof than measuring with the fix already present, and it costs one image rebuild for both. The interim find-bar red is a **pre-registered, transient repro observation, not a documented residual**; the *final* documented envelope (find-bar green) is established after #1. This is an ordering constraint on *apply*, not a spec dependency (both changes remain independently valid).
 
 ### D6: Reverse-duty tracker updates land in the same session
 

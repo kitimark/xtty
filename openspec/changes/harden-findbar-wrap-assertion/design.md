@@ -40,11 +40,11 @@ The "most faithful" fix — reconstructing logical lines from SwiftTerm wrap met
 
 ### D4: Reverse-duty tracker updates land in the same session
 
-Per AGENTS.md, retiring a §19b known-benign residual obliges same-session updates: move `findbar-marker-wrap` from residual → fixed in `github-actions-ci-cd.md` §19b, refresh the `packer/README.md` acceptance note (find-bar fixed; the VM envelope count is unchanged since find-bar already passed on the short-`\h` VM), and add a dated "fix landed" line to the forensics doc. These are implementation tasks, not afterthoughts.
+Per AGENTS.md, retiring a §19b known-benign residual obliges same-session updates: move `findbar-marker-wrap` from residual → fixed in `github-actions-ci-cd.md` §19b, refresh the `packer/README.md` acceptance note (find-bar fixed), and add a dated "fix landed" line to the forensics doc. If this change is applied **after** `add-vm-prompt-width-parity` (the recommended red→green order), find-bar was the *reproduced red* on the wide-prompt VM and this change flips it green — the `packer/README.md` note records that, not "unchanged." These are implementation tasks, not afterthoughts.
 
 ## Risks / Trade-offs
 
-- **The fix cannot be verified on a *local* machine** — local/VM prompts are short, so find-bar does not wrap there (it already passes). *Mitigation:* the D2 guard exercises the wrap-tolerance deterministically in `make test`; end-to-end confirmation that find-bar flips green under a real wrap comes from the next CI `build-and-test` run (watched inline; classified via `xtty-ci-investigator` only if unexpectedly red).
+- **End-to-end verification of the *find-bar* fix needs a wrapping prompt** — bare-metal/short-`\h` prompts don't wrap, so find-bar passes there trivially. *Mitigation:* two paths. (1) The D2 guard exercises the wrap-tolerance deterministically in `make test` regardless of prompt width. (2) If `add-vm-prompt-width-parity` is applied **first** (the recommended red→green order), the wide-prompt VM rig *reproduces* the find-bar wrap, so the fix is verified **red→green in-guest**, not only on CI. CI `build-and-test` remains the final confirmation (watched inline; classified via `xtty-ci-investigator` only if unexpectedly red).
 - **A wider-than-expected default window could make the guard's marker not wrap** → *Mitigation:* the guard self-validates (asserts the wrap actually occurred via a failing strict match) and fails loudly if it didn't, prompting a longer marker — it can never pass vacuously.
 - **Wrap-tolerance could mask a real wrapping bug** → *Mitigation:* it stays opt-in and scoped to the two focus assertions; the strict default remains the norm for ~15 other callers.
 

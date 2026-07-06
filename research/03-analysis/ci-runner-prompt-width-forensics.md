@@ -116,6 +116,13 @@ If step 3 does **not** wrap, resolve the P7 spike first: the guest's `\h` is rea
 
 Making the VM reproduce the red (B or C) does **not** fix anything by itself — it only surfaces the failure pre-push; option A is still required to go green.
 
+**Addendum (2026-07-07) — the options crystallized into a red→green change pair.** Owner chose **A + B + C**, split across two proposed OpenSpec changes applied in a deliberate order:
+
+1. **`add-vm-prompt-width-parity`** (option **C**) — applied **first**. With the wide prompt in place but the fix not yet applied, `testFindBarOpensLocatesAndDismisses` **reds in-guest** — reproducing the CI flake locally. That red *is* C's acceptance signal (the VM now mirrors the runner's prompt width).
+2. **`harden-findbar-wrap-assertion`** (options **A + B**) — applied **second**, on the same rebuilt image (no rebuild; source isn't baked in). The wrap-tolerant matcher **greens** find-bar in-guest → the fix is proven **red→green** against the live repro; B's deterministic guard locks the class in `make test`.
+
+So the earlier framing "A vs C" became "C then A" — reproduce, then fix — turning the two changes into a self-verifying pair. The final documented VM envelope (find-bar green) is set after step 2; the interim red is transient, not a standing residual. B's column-pinning spike is **dissolved** by the guaranteed-wrap-marker design (`harden-findbar-wrap-assertion` design D2).
+
 ## 7. Reusable guideline (generalizes to any hosted-CI-only red)
 
 1. **A hosted-CI-only failure with no local/VM repro is often a single environment *variable*, not a product bug or "flaky runner."** Identify the one differing field before proposing a fix — here, `\h` length inside a byte-identical prompt.

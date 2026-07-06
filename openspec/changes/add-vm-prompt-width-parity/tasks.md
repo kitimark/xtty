@@ -1,4 +1,4 @@
-> **Sequencing:** apply this change **after** `harden-findbar-wrap-assertion` lands, so the re-baselined envelope carries find-bar green (D5).
+> **Sequencing:** apply this change **before** `harden-findbar-wrap-assertion`, as a red→green pair — applied alone it reproduces the find-bar red in-guest (proof of parity); `harden-findbar-wrap-assertion` then flips it green on the same image, no rebuild (D5). The final documented envelope (find-bar green) is set after #1.
 
 ## 1. Long-hostname provisioner
 
@@ -11,11 +11,11 @@
 
 ## 3. Verify by effect + re-establish the envelope (VM, delegated)
 
-- [ ] 3.1 On both VM rigs (headless + graphics), (a) **verify by effect** that bash `\h` renders the long name and a marker typed at the prompt soft-wraps across ≥2 physical rows in the grid dump (the D2 precondition — if it does not wrap, adjust the hostname/effective key before trusting counts); (b) re-run the full UI suite and re-establish the acceptance envelope — confirming `testFindBarOpensLocatesAndDismisses` stays green (with `harden-findbar-wrap-assertion` present), recording the `testMultiLinePasteIsNotAutoExecuted` residual's new failing line (`:84` wrap vs `:87`), and flagging any *newly-surfaced* prompt-width wrap in another test. ⟶ xtty-test-validator (headless + graphics VM, full acceptance matrix + prompt-width verify-by-effect)
+- [ ] 3.1 On both VM rigs (headless + graphics), (a) **verify by effect** that bash `\h` renders the long name and a marker typed at the prompt soft-wraps across ≥2 physical rows in the grid dump (the D2 precondition — if it does not wrap, adjust the hostname/effective key before trusting counts); (b) re-run the full UI suite and record the interim envelope — confirming `testFindBarOpensLocatesAndDismisses` now **reds in-guest under the wide prompt** (the repro proof; `harden-findbar-wrap-assertion` not yet applied — its green flip is that change's task), recording the `testMultiLinePasteIsNotAutoExecuted` residual's new failing line (`:84` wrap vs `:87`), and flagging any *newly-surfaced* prompt-width wrap in another test. ⟶ xtty-test-validator (headless + graphics VM, full acceptance matrix + prompt-width verify-by-effect)
 
 ## 4. Reverse-duty tracker updates (same session)
 
-- [ ] 4.1 `packer/README.md` Acceptance + expected-difference matrix: update to the **re-measured** envelope — note the guest now reproduces the runner's prompt width, the paste residual's failing signature under the wide prompt, and remove/adjust the earlier "why the CI find-bar residual isn't in this envelope" note (the gap is now closed).
+- [ ] 4.1 `packer/README.md` Acceptance + expected-difference matrix: update to reflect that the guest now reproduces the runner's prompt width and the paste residual's failing signature (`:84`) under the wide prompt; remove/adjust the earlier "why the CI find-bar residual isn't in this envelope" note (the gap is now closed). The **final** find-bar-green envelope is documented jointly once `harden-findbar-wrap-assertion` is applied — do **not** record the interim find-bar red as a standing residual.
 - [ ] 4.2 `research/03-analysis/ci-runner-prompt-width-forensics.md` §6: add a dated line recording that Option C (long-`\h` VM parity) landed, with the change name and the measured envelope outcome.
 
 ## 5. Close-out
