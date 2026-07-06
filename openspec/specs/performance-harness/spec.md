@@ -2,21 +2,16 @@
 
 ## Purpose
 
-Defines xtty's **performance measurement harness** — the instrument behind the P7 measure-and-decide gate (M1 lean memory, M4 latency-first). It covers a fork-free, in-process **key-to-photon latency probe** (synthetic keystroke → on-screen pixel change; renderer-agnostic), a **resident-memory sampler** over a fixed, independently-reset scenario set (idle / multiple panes / saturated scrollback / alt-screen), a **CoreGraphics↔Metal renderer A/B toggle** so the two backends can be compared without rebuilding, a DEBUG **benchmark run** that writes a machine-readable results report (the P7-decision artifact + a regression baseline), and a view-free result model in `XttyCore`. The measurement results live in `research/` (not this spec). **Latency probe (P7b):** the probe times key-to-photon from the on-screen **presentation timestamp** of the first changed frame (a continuous capture, not per-keystroke screenshots), with the injection and frame clocks reconciled in one domain and a startup **timebase calibration** that marks results untrustworthy rather than fabricating them; resolution is **frame-quantized** (one display-refresh interval) and reported as such, which is sufficient for the renderer **delta** (the omitted hardware tail cancels). A renderer-independent reference-stimulus baseline records the common capture/compositor floor. This replaced P7a's coarse screenshot-polling probe, whose per-capture cost exceeded the signal; with the trustworthy probe the P7 gate closed (CoreGraphics retained — the verdict + numbers live in `research/`). Observability of the harness through the DEBUG state dump is covered by `verification-harness`; the `renderer` config key by `terminal-configuration`.
+Defines xtty's **performance measurement harness** — the instrument behind the P7 measure-and-decide gate (M1 lean memory, M4 latency-first). It covers a fork-free, in-process **key-to-photon latency probe** (synthetic keystroke → on-screen pixel change; independent of the rendering implementation), a **resident-memory sampler** over a fixed, independently-reset scenario set (idle / multiple panes / saturated scrollback / alt-screen), a DEBUG **benchmark run** that writes a machine-readable results report (a performance-regression baseline; previously also the P7-decision artifact), and a view-free result model in `XttyCore`. The **CoreGraphics↔Metal renderer A/B toggle** the harness once carried was retired with the closed P7b gate (`retire-metal-renderer`, 2026-07-06) — the single rendering path is CoreGraphics, the report's `renderer` field is a retained constant for schema stability, and resurrecting a second backend requires re-running the archived P7b methodology. The measurement results live in `research/` (not this spec). **Latency probe (P7b):** the probe times key-to-photon from the on-screen **presentation timestamp** of the first changed frame (a continuous capture, not per-keystroke screenshots), with the injection and frame clocks reconciled in one domain and a startup **timebase calibration** that marks results untrustworthy rather than fabricating them; resolution is **frame-quantized** (one display-refresh interval) and reported as such, which is sufficient for run-to-run comparison (the omitted hardware tail is constant run-to-run). A reference-stimulus baseline (a known change outside the terminal's rendering path) records the common capture/compositor floor. This replaced P7a's coarse screenshot-polling probe, whose per-capture cost exceeded the signal; with the trustworthy probe the P7 gate closed (CoreGraphics retained — the verdict + numbers live in `research/`). Observability of the harness through the DEBUG state dump is covered by `verification-harness`; the retired `renderer` config key falls under `terminal-configuration`'s forward-compatibility rule.
 ## Requirements
 ### Requirement: Key-to-photon latency probe
 
-The app SHALL provide a DEBUG-gated, in-process **key-to-photon latency probe** that measures input-to-display latency by injecting a synthetic keystroke and detecting the resulting on-screen change by sampling the **rendered pixels** of the terminal window. The probe SHALL time the interval using the **on-screen presentation timestamp of the captured frame in which the change first appears** — not the wall-clock cost of the capture operation — so that a slow capture path does not floor the measurement; it SHALL be able to resolve at least **whole-frame** (one display-refresh-interval) differences between configurations. The injection time (t0) and the frame presentation time (t1) SHALL be measured or normalized into the **same monotonic clock domain** so that `t1 − t0` is a valid duration. The probe SHALL be **renderer-agnostic** — functioning identically whether the CoreGraphics or the Metal backend is active — and SHALL run over many trials to produce a **distribution** (at minimum median and tail percentiles), not a single sample. The probe SHALL NOT require modifying the SwiftTerm engine. It deliberately excludes hardware input/display latency; this is acceptable because, for the renderer comparison, the omitted latency is constant and cancels in the delta. Because the timing resolution is bounded by the display refresh interval (and is variable on a variable-refresh display), the probe SHALL surface results as **frame-quantized with the achieved time-resolution made explicit**, rather than implying sub-frame precision. When the OS screen-capture permission is unavailable, the probe SHALL fail with a clear error rather than report a bogus measurement.
+The app SHALL provide a DEBUG-gated, in-process **key-to-photon latency probe** that measures input-to-display latency by injecting a synthetic keystroke and detecting the resulting on-screen change by sampling the **rendered pixels** of the terminal window. The probe SHALL time the interval using the **on-screen presentation timestamp of the captured frame in which the change first appears** — not the wall-clock cost of the capture operation — so that a slow capture path does not floor the measurement; it SHALL be able to resolve at least **whole-frame** (one display-refresh-interval) differences between configurations. The injection time (t0) and the frame presentation time (t1) SHALL be measured or normalized into the **same monotonic clock domain** so that `t1 − t0` is a valid duration. The probe SHALL be independent of the rendering implementation — it observes rendered pixels, not the engine or a renderer API — and SHALL run over many trials to produce a **distribution** (at minimum median and tail percentiles), not a single sample. The probe SHALL NOT require modifying the SwiftTerm engine. It deliberately excludes hardware input/display latency; this is acceptable because the omitted latency is constant run-to-run, so comparisons between runs and configurations remain valid. Because the timing resolution is bounded by the display refresh interval (and is variable on a variable-refresh display), the probe SHALL surface results as **frame-quantized with the achieved time-resolution made explicit**, rather than implying sub-frame precision. When the OS screen-capture permission is unavailable, the probe SHALL fail with a clear error rather than report a bogus measurement.
 
 #### Scenario: Probe produces a latency distribution
 
 - **WHEN** the latency probe runs a configured number of trials in a DEBUG benchmark run
 - **THEN** it records one key-to-photon sample per trial and reports aggregate statistics including a median and at least one tail percentile
-
-#### Scenario: Probe works under both renderers
-
-- **WHEN** the latency probe runs with the CoreGraphics backend and again with the Metal backend
-- **THEN** each run yields a comparable latency distribution measured the same way, so the two backends can be compared
 
 #### Scenario: Timing comes from the changed frame's presentation timestamp
 
@@ -52,43 +47,19 @@ The harness SHALL sample the process's **resident memory footprint** (via the OS
 - **WHEN** the test suite runs
 - **THEN** the scenario-set definitions are exercised by unit tests that do not launch the app or create a terminal view
 
-### Requirement: Renderer A/B selection
-
-xtty SHALL select its rendering backend — **CoreGraphics** or **Metal** — from configuration so the two can be compared **without rebuilding**, defaulting to CoreGraphics. The selection SHALL be applied to the live terminal view **after** it is hosted in a window (a necessary precondition for the rendering-backend selection to take effect). Selecting the Metal backend SHALL NOT change the correctness of rendered output (truecolor, emoji, and wide/CJK glyphs still render without corruption). A launch-time override SHALL be available so a test or benchmark run can force a backend regardless of the config file.
-
-#### Scenario: Configured renderer is applied to the live view
-
-- **WHEN** the configuration selects `renderer = metal`
-- **THEN** the live terminal view uses the Metal backend; and when the configuration selects `coregraphics` or omits the key, the view uses the CoreGraphics backend
-
-#### Scenario: Switching backend preserves output correctness
-
-- **WHEN** the Metal backend is selected and output exercising truecolor, emoji, and wide/CJK glyphs is produced
-- **THEN** that output renders without corruption, the same content as under CoreGraphics
-
-#### Scenario: A launch override forces a backend for A/B
-
-- **WHEN** a benchmark or test run is launched with the renderer override set to a specific backend
-- **THEN** that backend is used regardless of the config file value, enabling a rebuild-free A/B comparison
-
 ### Requirement: Benchmark run and results report
 
-The harness SHALL provide a **benchmark mode**, runnable from a single command, that drives the latency probe and the memory scenarios for the active renderer and writes a **structured, machine-readable results report**. The report SHALL include the active rendering backend, the latency distribution statistics, the per-scenario memory samples, the capture frame rate (so the latency time-resolution is explicit), the **timebase-calibration outcome** (whether the injection and frame-timestamp clocks reconciled, so the latency numbers' trustworthiness is recorded), the **achieved capture cadence and frame-quantized resolution** of the latency measurement, and an environment description (machine, display, OS). When the latency probe cannot run (e.g. the screen-capture permission or a visible display is unavailable) or the timebase calibration fails, the benchmark run SHALL still write the report with the renderer, memory samples, and environment, and SHALL mark the latency section **explicitly unavailable or untrustworthy** rather than omitting the report or aborting the whole run — so memory remains measurable on a headless/permission-less runner. The report SHALL serve as the artifact for the P7 renderer decision and as a performance-regression baseline. The benchmark mode SHALL be DEBUG-gated and SHALL NOT run in shipping builds. Producing a pass/fail verdict against comparator baselines is out of scope for this capability.
+The harness SHALL provide a **benchmark mode**, runnable from a single command, that drives the latency probe and the memory scenarios and writes a **structured, machine-readable results report**. The report SHALL include the active rendering backend, the latency distribution statistics, the per-scenario memory samples, the capture frame rate (so the latency time-resolution is explicit), the **timebase-calibration outcome** (whether the injection and frame-timestamp clocks reconciled, so the latency numbers' trustworthiness is recorded), the **achieved capture cadence and frame-quantized resolution** of the latency measurement, and an environment description (machine, display, OS). When the latency probe cannot run (e.g. the screen-capture permission or a visible display is unavailable) or the timebase calibration fails, the benchmark run SHALL still write the report with the renderer, memory samples, and environment, and SHALL mark the latency section **explicitly unavailable or untrustworthy** rather than omitting the report or aborting the whole run — so memory remains measurable on a headless/permission-less runner. The report SHALL serve as a performance-regression baseline (it was previously also the artifact for the now-closed P7 renderer decision). The benchmark mode SHALL be DEBUG-gated and SHALL NOT run in shipping builds. Producing a pass/fail verdict against comparator baselines is out of scope for this capability.
 
 #### Scenario: Benchmark run writes a results report
 
-- **WHEN** the benchmark mode runs to completion for a selected renderer with the latency probe available and the timebase calibration passing
+- **WHEN** the benchmark mode runs to completion with the latency probe available and the timebase calibration passing
 - **THEN** it writes a results report containing the active renderer, the latency distribution statistics, the capture frame rate, the timebase-calibration outcome, the achieved capture cadence / frame-quantized resolution, the per-scenario memory samples, and an environment description
 
 #### Scenario: Benchmark still reports memory when latency is unmeasurable
 
 - **WHEN** the benchmark mode runs where the latency probe cannot run (no screen-capture permission or no visible display) or the timebase calibration fails
 - **THEN** the report is still written with the active renderer, the per-scenario memory samples, and the environment, and the latency section is marked explicitly unavailable or untrustworthy
-
-#### Scenario: The report supports the renderer A/B
-
-- **WHEN** the benchmark is run once for each renderer
-- **THEN** the two reports carry comparable latency and memory data measured the same way, sufficient to compare the backends
 
 #### Scenario: Benchmark mode is absent from shipping builds
 
@@ -111,15 +82,15 @@ The benchmark **result model** and the **scenario-set definitions** SHALL live i
 
 ### Requirement: Latency measurement trustworthiness safeguards
 
-So the renderer comparison is trustworthy rather than plausible-but-wrong, the latency probe SHALL apply measurement-validity safeguards beyond producing a distribution. (1) It SHALL perform a startup **timebase calibration** that confirms the keystroke-injection clock and the frame-presentation-timestamp clock reconcile into one domain; if they do not, it SHALL mark the latency results **untrustworthy** (and emit no absolute key-to-photon numbers) rather than report fabricated values. (2) For the renderer A/B it SHALL also measure a **renderer-independent reference-stimulus baseline** the same way — a known on-screen change produced outside the terminal renderer — so that the capture/compositor/scheduling floor common to both renderers can be identified and the renderer's own contribution distinguished, rather than the floor being mistaken for a renderer difference. These safeguards exist because the expected CoreGraphics↔Metal delta is small (sub-frame to about one frame) and the measurement is frame-quantized, so an uncalibrated or un-baselined number could misrank the backends.
+So the latency numbers are trustworthy rather than plausible-but-wrong, the latency probe SHALL apply measurement-validity safeguards beyond producing a distribution. (1) It SHALL perform a startup **timebase calibration** that confirms the keystroke-injection clock and the frame-presentation-timestamp clock reconcile into one domain; if they do not, it SHALL mark the latency results **untrustworthy** (and emit no absolute key-to-photon numbers) rather than report fabricated values. (2) It SHALL also measure a **reference-stimulus baseline** the same way — a known on-screen change produced outside the terminal's rendering path — so that the capture/compositor/scheduling floor can be identified and the terminal's own contribution distinguished from it, rather than the floor being mistaken for terminal rendering latency. These safeguards exist because the measurement is frame-quantized and the effects being tracked are small (sub-frame to about one frame), so an uncalibrated or un-baselined number could report a plausible-but-wrong absolute latency or misattribute the capture floor to the terminal.
 
 #### Scenario: Timebase calibration gates absolute results
 
 - **WHEN** the probe starts and the injection clock and the frame-presentation-timestamp clock cannot be reconciled into one domain
 - **THEN** the run marks the latency results untrustworthy and emits no absolute key-to-photon numbers, rather than reporting plausible-but-wrong values
 
-#### Scenario: A reference-stimulus baseline accompanies the renderer comparison
+#### Scenario: A reference-stimulus baseline accompanies the benchmark run
 
-- **WHEN** the latency A/B is run for the two renderers
-- **THEN** each renderer also has a renderer-independent reference-stimulus baseline measured identically, so the common capture/compositor floor can be distinguished from a genuine renderer difference
+- **WHEN** a latency benchmark run executes
+- **THEN** the run also carries a reference-stimulus baseline measured identically, so the common capture/compositor floor can be distinguished from the terminal's own rendering contribution
 

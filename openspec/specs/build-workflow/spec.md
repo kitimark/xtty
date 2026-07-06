@@ -50,7 +50,7 @@ The project SHALL provide a single documented command each to build the app, run
 
 ### Requirement: Prerequisite check
 
-The project SHALL provide a command that verifies the prerequisites it cannot install automatically — the project generator, a full Xcode toolchain, and the Metal toolchain — and reports clearly which are missing along with how to install each, without attempting privileged installation itself.
+The project SHALL provide a command that verifies the prerequisites it cannot install automatically — the project generator and a full Xcode toolchain — and reports clearly which are missing along with how to install each, without attempting privileged installation itself.
 
 #### Scenario: Missing prerequisite is reported
 - **WHEN** a required prerequisite is not present
