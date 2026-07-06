@@ -19,7 +19,7 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 | `test-image-bash-shell` | implemented — pending archive | bash guest login shell → exact CI parity; Local-Network modal root-caused | `research/03-analysis/local-network-privacy-forensics.md` |
 | `harden-churn-shell-readiness` | proposed (0/12) | churn-flake fix: computed-marker readiness gate + `.common`-modes dump timer | `research/03-analysis/confirm-close-shell-readiness.md` |
 | `add-ci-pipeline` | implemented — owner steps left | CI is live; remaining: repo public, pr-lint PR, branch protection, archive | `research/03-analysis/github-actions-ci-cd.md` |
-| `slim-agents-context` | applying | this restructure (AGENTS.md rules/history split + probe verification) | `openspec/changes/slim-agents-context/` |
+| `slim-agents-context` | implemented — pending archive | AGENTS.md rules/history split; landed `d2a11fd` — −21,548 startup tokens, probe A/B slim 36/36 vs fat 34/36 | `openspec/changes/slim-agents-context/`; `research/03-analysis/agents-md-context-budget.md` |
 
 **Shipped and archived** (full narratives: [HISTORY.md](HISTORY.md); what is true: `openspec/specs/`; mechanisms: `research/`):
 
