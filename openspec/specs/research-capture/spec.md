@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Defines xtty's **research-capture** development tooling and the workflow it drives: committed Claude Code tooling (the auto-triggering `xtty-capture-research` skill + the thin `/xtty:capture-research` command) plus the documented capture-and-reconcile checklist. It covers writing settled research into `research/` (following the Provenance/Sources/✅❌❓ doc conventions; a dated addendum, not a rewrite, for an evolving decision), indexing it in `research/README.md`, reconciling the related trackers (AGENTS.md **Current status** + `research/04-design/02-milestones.md`), and — the step that catches stale trackers — **verifying the trackers against the actual repository state** (`openspec list` / `ls openspec/changes/archive/` / `ls openspec/specs/`). The tooling is version-controlled via a precise `.gitignore` exception (the committed `.claude/commands/xtty/` + `.claude/skills/xtty-*/` + `.claude/agents/xtty-*` are tracked — the agents entry added by the `test-validation` capability's tooling — while machine-local and tool-generated `.claude` files stay ignored); AGENTS.md is the source of truth for the rules and the skill defers to it. The research-*doing* method (OSS cloning, multi-agent workflows, adversarial verification) is explicitly out of scope.
+Defines xtty's **research-capture** development tooling and the workflow it drives: committed Claude Code tooling (the auto-triggering `xtty-capture-research` skill + the thin `/xtty:capture-research` command) plus the documented capture-and-reconcile checklist. It covers writing settled research into `research/` (following the Provenance/Sources/✅❌❓ doc conventions; a dated addendum, not a rewrite, for an evolving decision), indexing it in `research/README.md`, reconciling the related trackers (the bounded AGENTS.md **Current status** table/snapshot + the full narrative appended to `HISTORY.md` + `research/04-design/02-milestones.md`), and — the step that catches stale trackers — **verifying the trackers against the actual repository state** (`openspec list` / `ls openspec/changes/archive/` / `ls openspec/specs/`). The tooling is version-controlled via a precise `.gitignore` exception (the committed `.claude/commands/xtty/` + `.claude/skills/xtty-*/` + `.claude/agents/xtty-*` are tracked — the agents entry added by the `test-validation` capability's tooling — while machine-local and tool-generated `.claude` files stay ignored); AGENTS.md is the source of truth for the rules and the skill defers to it. The research-*doing* method (OSS cloning, multi-agent workflows, adversarial verification) is explicitly out of scope.
 ## Requirements
 ### Requirement: Committed research-capture tooling
 
@@ -39,9 +39,11 @@ The version-control ignore configuration SHALL track the project's committed `.c
 
 ### Requirement: Documented capture-and-reconcile workflow with verify-against-disk
 
-The canonical project guide (AGENTS.md) SHALL document the capture-and-reconcile workflow as an explicit checklist: write the research into the correct `research/` location following the research-doc conventions, index it, reconcile the related trackers (the status/milestone documents), and **verify the trackers against the actual repository state** so a stale status (e.g. a change still marked pending after it was archived) is caught. AGENTS.md SHALL also state the precise tracked-tooling exception to the `.claude/` ignore policy (replacing any blanket "do not track `.claude/`" statement), so contributors and agents understand what is committed and why.
+The canonical project guide (AGENTS.md) SHALL document the capture-and-reconcile workflow as an explicit checklist: write the research into the correct `research/` location following the research-doc conventions, index it, reconcile the related trackers (the status/milestone documents and the history log), and **verify the trackers against the actual repository state** so a stale status (e.g. a change still marked pending after it was archived) is caught. AGENTS.md SHALL also state the precise tracked-tooling exception to the `.claude/` ignore policy (replacing any blanket "do not track `.claude/`" statement), so contributors and agents understand what is committed and why.
 
 The documented research-doc conventions SHALL include a **capture-depth bar, scaled to the finding**: any capture that records **measured claims or retired theories** SHALL settle the *mechanism* (not just the conclusion), make its measured claims **reproducible** (the probes/commands used, including what each can and cannot prove and instruments that did not work), record each **retired theory alongside the evidence that refuted it**, and state how to **re-verify the headline claim by its effect** (never by a syntax or read-back check). When a finding generalizes to a class of future problems, the capture SHALL distill the method as a reusable guideline. Lightweight captures (e.g. a tooling landscape or comparison with no measurements) are NOT required to carry these elements.
+
+The tracker-reconcile step SHALL keep the always-loaded canonical guide **lean**: the guide's status surface is a bounded orientation layer — a current-state snapshot, a tabular per-change entry (state, one-line summary, pointer to detail), and inline one-line statements of **learned refutations** (decisions expensively settled in the negative, stated with their conclusion so they cannot be silently re-proposed) — while the **full per-change narrative** is recorded in a dedicated history log that is **not loaded at session start**. Reconciling a completed change SHALL NOT grow the guide's status surface beyond a bounded entry; narrative content moves to the history log with nothing lost.
 
 #### Scenario: The workflow checklist is documented
 
@@ -58,4 +60,14 @@ The documented research-doc conventions SHALL include a **capture-depth bar, sca
 - **WHEN** a capture records an investigation that measured something or retired a theory
 - **THEN** the documented conventions require it to include the mechanism, the reproduction/verification probes (with their limits and dead ends), each retired theory with its refuting evidence, and an effect-based re-verification of the headline claim
 - **AND** a capture with no measured claims is not required to carry those elements
+
+#### Scenario: Status stays lean while history is preserved
+
+- **WHEN** a change completes and the trackers are reconciled
+- **THEN** the canonical guide's status update is a bounded entry (snapshot/table row with a detail pointer, plus an inline refutation line only when the change settled one), the full narrative is appended to the history log, and no narrative content is lost from the repository
+
+#### Scenario: Learned refutations survive the slimming
+
+- **WHEN** the canonical guide's status surface is read after history has been moved to the history log
+- **THEN** the expensively-learned refutations remain stated inline with their conclusions (not as bare pointers), so a session that never opens the history log still cannot re-propose them
 

@@ -19,7 +19,6 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 | `test-image-bash-shell` | implemented — pending archive | bash guest login shell → exact CI parity; Local-Network modal root-caused | `research/03-analysis/local-network-privacy-forensics.md` |
 | `harden-churn-shell-readiness` | proposed (0/12) | churn-flake fix: computed-marker readiness gate + `.common`-modes dump timer | `research/03-analysis/confirm-close-shell-readiness.md` |
 | `add-ci-pipeline` | implemented — owner steps left | CI is live; remaining: repo public, pr-lint PR, branch protection, archive | `research/03-analysis/github-actions-ci-cd.md` |
-| `slim-agents-context` | implemented — pending archive | AGENTS.md rules/history split; landed `d2a11fd` — −21,548 startup tokens, probe A/B slim 36/36 vs fat 34/36 | `openspec/changes/slim-agents-context/`; `research/03-analysis/agents-md-context-budget.md` |
 
 **Shipped and archived** (full narratives: [HISTORY.md](HISTORY.md); what is true: `openspec/specs/`; mechanisms: `research/`):
 
@@ -30,7 +29,7 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 | Semantics (P4) | OSC 7/133 capture + zsh auto-inject + alt-screen gating; file-link open (D7 scheme guard); spatial blocks (jump-to-prompt, copy-output; the 2-accessor SwiftTerm patch); block sidebar | `p4-semantic-capture-decisions.md`, `p4b-2-spatial-blocks-decisions.md` |
 | Sidebar + git (P5–P6) | session activity sidebar; git-review panel + intra-line diff polish + flat↔tree toggle | `p5-sidebar-and-p4b-sequencing.md`, `p6-file-diff-decisions.md` |
 | Performance (P7) | latency/memory harness; trustworthy `SCStream` latency probe → **keep CoreGraphics, skip Phase 8**; lifecycle census (leak guard) | `p7-measurement-methodology.md`, `p7c-leak-retain-audit.md` |
-| Tooling | local signing identity; CI pipeline; bash-banner silence; wrap-tolerant focus matcher; **menu-clobber fix (`NSApplicationMain`)**; `xtty-test-validator` agent (v4); capture-research tooling + depth bar | `github-actions-ci-cd.md`, `swiftui-mainmenu-clobber-forensics.md`, `claude-code-subagent-execution-forensics.md` |
+| Tooling | local signing identity; CI pipeline; bash-banner silence; wrap-tolerant focus matcher; **menu-clobber fix (`NSApplicationMain`)**; `xtty-test-validator` agent (v4); capture-research tooling + depth bar; **AGENTS.md rules/history split (`slim-agents-context`** — −21.5k startup tokens, probe-verified 36/36 vs fat 34/36**)** | `agents-md-context-budget.md`, `github-actions-ci-cd.md`, `swiftui-mainmenu-clobber-forensics.md`, `claude-code-subagent-execution-forensics.md` |
 
 **Established specs** (must match `ls openspec/specs/`): `app-shell`, `build-workflow`, `terminal-configuration`, `terminal-keybindings`, `terminal-links`, `terminal-multiplexing`, `quick-terminal`, `terminal-session`, `terminal-semantics`, `shell-integration`, `session-sidebar`, `git-review`, `terminal-spatial-blocks`, `lifecycle-census`, `verification-harness`, `performance-harness`, `research-capture`, `test-validation`.
 
