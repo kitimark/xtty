@@ -69,11 +69,17 @@ is memory-parity-controlled.
 
 ## Evidence layout
 
-`~/Downloads/xtty-vm-poc/artifacts/2026-07-06-slim-agents-probes/` (repo evidence convention):
-`context/<variant>-rep<N>.json`, `probes/<variant>/<probe>-rep<N>.json`, `results.md` (graded table,
-written incrementally), `ledger.log` (every run appended as launched). The graded results table is also
-copied into the change dir at judgment time. Worktrees are ephemeral (cleanup manifest lists them);
-evidence is not.
+The audit layer is **committed** in `evidence/` next to this file (moved in from the machine-local run
+dir after the apply, so the change is self-contained): `grading-v{0..3}.md` (the extraction sheets the
+grades were made from), `context/<variant>-rep<N>.json` (the raw token-number source records),
+`max-turns-tool-trails.md` (verbatim text+tool trails of the 7 `error_max_turns` runs graded from
+behavior), `subagent-inheritance-probe.md` (the task-1.4 record), `ledger.log` + `*batch.log`
+(provenance). `results.md` (one level up) is the graded table.
+
+Only the **raw per-probe transcripts** (96 full message-array JSONs, ~3.7 MB) stay machine-local at
+`~/Downloads/xtty-vm-poc/artifacts/2026-07-06-slim-agents-probes/probes/` — treated as ephemeral: every
+graded fact is derivable from the committed layer, and fresh transcripts are regenerable in kind with
+`run-batch.sh` + `probes.json`. Worktrees are ephemeral (removed post-landing).
 
 ## Subagent-inheritance probe (task 1.4, design D8)
 

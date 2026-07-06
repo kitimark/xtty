@@ -121,8 +121,10 @@ the refutation, not endorse the trap.
 ## Sources
 
 - `/context` outputs (2026-07-06, this session — fat file); git history of AGENTS.md (79 commits)
-- Run evidence: `~/Downloads/xtty-vm-poc/artifacts/2026-07-06-slim-agents-probes/` (context/*.json,
-  probes/<variant>/*.json, grading-*.md, ledger.log, subagent-inheritance-probe.md)
+- Run evidence (committed): `openspec/changes/slim-agents-context/probes/evidence/` — grading sheets,
+  context-run JSONs, max-turns tool trails, the subagent-probe record, ledger. Only the raw per-probe
+  transcripts (~3.7 MB) were left machine-local (ephemeral; regenerable via the committed
+  `run-batch.sh` + `probes.json`)
 - Change artifacts: `openspec/changes/slim-agents-context/` (probes/README.md = rubric + envelope,
   probes/results.md = graded tables, design.md D1–D8)
 - Prior art this builds on: `claude-code-subagent-execution-forensics.md` (in-context probe technique;
