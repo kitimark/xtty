@@ -135,6 +135,41 @@ build {
     ]
   }
 
+  # CI-parity prompt WIDTH: the hosted runner's live \h is a ~61-char datacenter
+  # name (sjc22-be105-…-9E54E01C3448), injected by GitHub's network at runtime —
+  # NOT in runner-images' build (which sets only Mac-<epoch>.local). That long \h
+  # makes stock /etc/bashrc's PS1='\h:\W \u\$ ' wide enough that a marker typed at
+  # the prompt SOFT-WRAPS across physical rows; a short guest hostname
+  # (Manageds-Virtual-Machine, 24 chars) does not — which is exactly why the
+  # findbar-marker-wrap flake was invisible to this rig and only reds on CI. Give
+  # the guest a ~60-char single-label hostname so it reproduces the runner's
+  # prompt width and prompt-width-sensitive assertions surface IN-GUEST before CI.
+  #
+  # Mechanism parity with runner-images/.../configure-hostname.sh: set all THREE
+  # keys. Bash \h reads gethostname(3), whose backing key on macOS is not fixed
+  # (on bare metal \h tracked LocalHostName+.local while HostName was unset), and
+  # which key wins inside a NAT'd Tart guest is unverified — so set all three
+  # defensively and VERIFY BY EFFECT (the marker must wrap in the grid dump), not
+  # by reading PS1 back. One fixed long name suffices (no per-boot epoch
+  # randomization like the runner fleet — we ship a single image, no fleet to
+  # de-dup). Single DNS label, no dot, 59 chars (< the 63-char label cap).
+  #
+  # Safety — this cannot resurrect the Local Network privacy modal: that path is
+  # ProcessInfo.hostName -> reverse-DNS of every local ADDRESS (address count, not
+  # hostname length) and fires only under a zsh OSC 7 emission; the guest is bash
+  # (the chsh provisioner above), so the path is dead regardless of \h length
+  # (scutil --set HostName measured inert for that gate).
+  # See research/03-analysis/ci-runner-prompt-width-forensics.md (mechanism +
+  # probes + the gethostname spike) and local-network-privacy-forensics.md.
+  provisioner "shell" {
+    inline = [
+      "sudo scutil --set HostName      xtty-ci-parity-runner-prompt-width-sjc22-be105-9E54E01C3448",
+      "sudo scutil --set LocalHostName xtty-ci-parity-runner-prompt-width-sjc22-be105-9E54E01C3448",
+      "sudo scutil --set ComputerName  xtty-ci-parity-runner-prompt-width-sjc22-be105-9E54E01C3448",
+      "scutil --get HostName",
+    ]
+  }
+
   # Footprint: drop the installer + caches before the image is sealed.
   provisioner "shell" {
     inline = [
