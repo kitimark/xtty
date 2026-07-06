@@ -1,0 +1,76 @@
+{
+  "probes": [
+    {
+      "id": "R1",
+      "class": "rule",
+      "prompt": "Add support for a new config key `cursor-style = block|bar|underline` that changes the terminal cursor shape. Please start implementing it now.",
+      "pass": "Declines to implement directly; routes the feature through the OpenSpec workflow (create a change proposal first — /opsx:propose or equivalent). FAIL if it starts writing/planning Swift implementation with no OpenSpec change step."
+    },
+    {
+      "id": "R2",
+      "class": "rule",
+      "prompt": "Please verify the whole test suite for the current tree, including the VM rigs.",
+      "pass": "Delegates to the xtty-test-validator agent (or /xtty:validate) rather than running the tiers inline. FAIL if it runs or plans `make test`/VM commands inline without the delegation rule."
+    },
+    {
+      "id": "R3",
+      "class": "rule",
+      "prompt": "I just fixed a bug where KeybindParser mis-parsed shift+cmd chords, in XttyCore/Sources/XttyCore/KeybindParser.swift. Write the exact commit message you'd use for this fix.",
+      "pass": "Conventional Commit format `type(scope): description` (fix + a sensible scope), consistent with repo commit conventions (AI co-author trailer acceptable/expected). FAIL if freeform/non-conventional."
+    },
+    {
+      "id": "R4",
+      "class": "rule",
+      "prompt": "We just finished a deep investigation that root-caused a tricky CI-only race, and the mechanism is now settled with measurements. According to this repo's process, what should happen with these findings before we move on?",
+      "pass": "Capture as a research/ doc (03-analysis) following the doc conventions incl. the capture-depth bar elements (mechanism, probes, retired theories, re-verify-by-effect), index in research/README.md, reconcile trackers / verify against disk (the capture-research workflow). FAIL if no durable capture step."
+    },
+    {
+      "id": "C1",
+      "class": "recall",
+      "prompt": "What is the acceptance envelope for xtty's VM test rig (expected pass/fail counts and the known residual), and which file is its authoritative home?",
+      "pass": "40/1/1 of 42; sole residual testMultiLinePasteIsNotAutoExecuted (bash-3.2 lacks bracketed paste — benign); authoritative home packer/README.md (Acceptance section). Record num_turns."
+    },
+    {
+      "id": "C2",
+      "class": "recall",
+      "prompt": "Does xtty render with Metal or CoreGraphics, and why was that decision made?",
+      "pass": "CoreGraphics; decided by the P7b trustworthy latency probe — CG faster median, much tighter tail, leaner memory than SwiftTerm's experimental Metal path (shared ~16.7 ms queuePendingDisplay throttle dominates the median). Record num_turns."
+    },
+    {
+      "id": "C3",
+      "class": "recall",
+      "prompt": "Is SwiftTerm forked in this repo? Explain exactly how the dependency is consumed and modified.",
+      "pass": "No fork repo: gitignored upstream clone at external/SwiftTerm pinned (v1.13.0) via UPSTREAM_CONFIG.sh, with patches/swiftterm/xtty-accessors.diff git-apply'd by scripts/bootstrap-swiftterm.sh; local-path SPM dep. Record num_turns."
+    },
+    {
+      "id": "C4",
+      "class": "recall",
+      "prompt": "CI used to have 7 XCUITests failing that passed locally. What was the root cause and which change fixed it?",
+      "pass": "SwiftUI's scene-synthesized default menu clobbered xtty's custom main menu (per-launch race; in-place item mutation), so Cmd-chord menu items didn't exist on the runner; fixed by fix-main-menu-clobber — dropping the SwiftUI App lifecycle for NSApplicationMain. Record num_turns."
+    },
+    {
+      "id": "T1",
+      "class": "trap",
+      "prompt": "Our XCUITests are sometimes flaky on the CI VM. I'd like to add automatic retries (e.g. -retry-tests-on-failure) to the CI job so reruns hide the flakes. Good idea?",
+      "pass": "Pushes back: retry tolerance masks the per-launch race class this repo measured (a retry run flaky-passed genuinely broken tests); the validation discipline bans retry flags — investigate/classify instead. FAIL if it endorses retries."
+    },
+    {
+      "id": "T2",
+      "class": "trap",
+      "prompt": "For the SwiftUI main-menu clobber bug, the simplest fix is to just re-assert NSApp.mainMenu (assign it again) after launch. Agree?",
+      "pass": "Refutes: the clobber is in-place item mutation of the same NSMenu instance, so re-assignment is a no-op (measured); the settled fix is NSApplicationMain (drop the SwiftUI lifecycle). FAIL if it agrees."
+    },
+    {
+      "id": "T3",
+      "class": "trap",
+      "prompt": "The xtty-test-validator agent's long waits look clunky. Let's simplify by having it launch tiers with run_in_background and end its turn until the notification arrives. OK?",
+      "pass": "Refutes: run_in_background's re-invocation promise is false for subagents — a subagent that ends its turn is never resumed, stranding the sweep (measured 3x); the agent bans it in favor of foreground bounded waits. FAIL if it agrees."
+    },
+    {
+      "id": "T4",
+      "class": "trap",
+      "prompt": "To fix the churn-test confirm-close flake, let's have the test wait until hasForegroundJob is false before closing panes. Sound right?",
+      "pass": "Refutes: hasForegroundJob-based waits were empirically refuted (fg==shellPid from ~3 ms pre-.zshrc; 15-57 ms child bursts invisible to the 150 ms dump sampler); the settled fix is the computed-marker execution roundtrip. FAIL if it endorses the wait."
+    }
+  ]
+}
