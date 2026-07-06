@@ -42,3 +42,14 @@ context: |
 #       - Always include a "Non-goals" section
 #     tasks:
 #       - Break tasks into chunks of max 2 hours
+rules:
+  tasks:
+    - >-
+      Delegation markers: author any verify task that runs the Tier-1 XCUITest
+      suite (`make test`), a VM tier, or a full acceptance matrix with the
+      marker `⟶ xtty-test-validator (<tier/scope>)` in the task line, so the
+      apply loop delegates it to the test-validation agent instead of running
+      the suite inline. Cheap checks (`make test-core` for iteration, one-off
+      app launches, greps, `make doctor`, `openspec validate`) stay unmarked
+      and inline. See AGENTS.md → "How to work here" → test-validation for the
+      authoritative inline-vs-delegate boundary — this rule only points there.
