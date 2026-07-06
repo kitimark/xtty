@@ -26,7 +26,7 @@
 ## 5. Docs / trackers
 
 - [x] 5.1 `openspec validate "add-test-validation-agent"` passes; update AGENTS **Current status** + `research/04-design/02-milestones.md` (tooling implemented); verify trackers against disk (`openspec list` / archive dir / specs dir) — validate green; AGENTS open-changes entry + milestones P7-section tooling paragraph added; disk check clean (active changes, archive dir, 17 established specs all match the trackers)
-- [ ] 5.2 At archive: hand-touch `openspec/specs/research-capture/spec.md`'s **Purpose** enumeration (it names the committed commands + skills; agents are now tracked too — a one-line `docs(openspec)` edit so specs record what is true)
+- [x] 5.2 At archive: hand-touch `openspec/specs/research-capture/spec.md`'s **Purpose** enumeration (it names the committed commands + skills; agents are now tracked too — a one-line `docs(openspec)` edit so specs record what is true) — done at archive (2026-07-06): the gitignore-exception sentence now includes `.claude/agents/xtty-*`
 - [x] 5.3 On completion, note in the change (or commit message) the deferred design options: CI-inspect mode as a fifth matrix column of this agent; family members only when a recurring noisy workflow proves itself; per-task delegate markers only if delegation drift appears — recorded in `design.md` (Non-Goals + Open Questions), in the AGENTS Current-status entry, and to be repeated in the implementation commit message
 
 ## 6. Post-apply hardening (v4 — emerged from the live smokes; design.md "Apply-phase amendments")
