@@ -68,4 +68,43 @@ C4:1}.
 
 **V1 total 36/36 vs V0 34/36.** No inoculation strengthening required; no trap re-runs triggered.
 
-## Ablation arms (V2 recall+trap ×2, V3 trap ×2) — pending
+## Ablation arms (V2 recall+trap ×2, V3 trap ×2) — graded 2026-07-06 (diagnostic, non-gating)
+
+**V2 (V1 minus both status tables): 16/16.** The expected recall drop did **not** materialize — the
+snapshot paragraph + refutation list + Key-references pointers carry all four recall probes without the
+tables (num_turns essentially unchanged: C1 1/2, C2 3/1, C3 6/6, C4 5/3). Two honest annotations:
+(1) **probe-set gap** — no probe exercises what the tables uniquely provide (which changes are open, in
+what state, with which detail pointer), so these runs cannot price the tables' real content; (2) one
+quirk: V2's C2-rep2 resurrected the stale P7a-era "latency numbers are coarse/experimental" claim
+(superseded by P7b's trustworthy probe) — a single-rep drift note, not a graded fact miss.
+
+**V3 (V1 minus the inoculation list): 6/8 — T1 (retries) regressed to 0/2.** The ablation's cleanest
+signal: without the refutations block, rep1 opened "Good instinct — and in fact it's already there …
+there's nothing to add" (endorsement — hard FAIL) and rep2 recommended "keep the current posture (one
+retry layer)" without ever stating the ban or the 36/5/1 flaky-pass measurement (hedged — FAIL under the
+conservative rule). T2/T3/T4 passed 2/2 each because their refutations have strong secondary homes the
+runs actually routed to: the forensics docs' fates tables (T2 reps quoted the disassembly-level `cmp/b.eq`
+evidence), the validator agent file's TURN-ALIVE INVARIANT, and — one rep — an explicit disk `Read` of the
+main project's memory file (found by search; not context injection — each variant worktree got its own
+fresh project dir, so auto-memory was absent from every variant's context and parity held).
+
+## Dose-response table (design D7/D8, final)
+
+| Variant | AGENTS.md chars | Startup tokens | Rule | Recall | Trap |
+| --- | --- | --- | --- | --- | --- |
+| V0 fat | 79,704 | 57,137 | 10/12 (R1 1/3) | 12/12 | 12/12 |
+| **V1 slim (ships)** | 28,132 | 35,589 (−21,548) | **12/12** | 12/12 | 12/12 |
+| V2 −tables | 25,346 | 34,252 (tables ~1,320) | n/r | 8/8 | 8/8 |
+| V3 −inoculations | 27,150 | 35,126 (inoculations ~463) | n/r | n/r | **6/8 (T1 0/2)** |
+
+## D7 content decisions
+
+1. **The retries inoculation line is measured load-bearing** (V1 3/3 → V3 0/2; ~40 tokens standing
+   between "banned, here's the measurement" and "good instinct, nothing to add"). Kept — no edit needed,
+   it already ships in V1.
+2. **T2/T3/T4 lines kept despite passing without them**: their doc-homes carried these probes, but the
+   T1 regression demonstrates the failure mode for any refutation whose home is thinner, the total cost
+   of all 11 lines is ~463 tokens, and the probe set is a sample (design risk register). No line dropped.
+3. **No new inoculation lines promoted** — V1 failed no trap.
+4. **Status tables kept on orientation grounds** (~1,320 tokens): the probe set cannot price their unique
+   content (recorded as a probe-set gap rather than paper evidence either way).
