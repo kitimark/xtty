@@ -8,14 +8,14 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 
 ## Current status
 
-**Snapshot (2026-07-06):** P0–P7 are all implemented and archived — xtty is a daily-drivable native terminal: tabs/splits/windows, quake terminal, profiles, OSC 7+133 semantic capture on auto-injected zsh, session + block sidebars, file-link open, spatial block navigation, git review panel (flat/tree), and the perf harness that settled the renderer question (**keep CoreGraphics**). Test posture: **235 `XttyCore` unit + 42 XCUITests**; local `make test` green except the churn confirm-close race (fix proposed — see table); VM-rig acceptance envelope **40/1/1 of 42** (sole benign residual: multi-line paste on the rig's bash-3.2), authoritative home `packer/README.md` → Acceptance. CI: `test-core` is the green required gate; `build-and-test` non-blocking — the menu-clobber product bug is fixed and CI-confirmed; 2 residual rig fragilities deferred to a harness-truthing follow-up.
+**Snapshot (2026-07-06):** P0–P7 are all implemented and archived — xtty is a daily-drivable native terminal: tabs/splits/windows, quake terminal, profiles, OSC 7+133 semantic capture on auto-injected zsh, session + block sidebars, file-link open, spatial block navigation, git review panel (flat/tree), and the perf harness that settled the renderer question (**keep CoreGraphics**). Test posture: **232 `XttyCore` unit + 41 XCUITests** (post-`retire-metal-renderer`); local `make test` green except the churn confirm-close race (fix proposed — see table; VM-arbitrated local-only 2026-07-06); VM-rig acceptance envelope **39/1/1 of 41** (sole benign residual: multi-line paste on the rig's bash-3.2), authoritative home `packer/README.md` → Acceptance. CI: `test-core` is the green required gate (Metal-guard-free); `build-and-test` non-blocking — the menu-clobber product bug is fixed and CI-confirmed; 2 residual rig fragilities deferred to a harness-truthing follow-up.
 
 **Open changes** (must match `openspec list`):
 
 | Change | State | What it is | Detail |
 | --- | --- | --- | --- |
-| `retire-metal-renderer` | proposed (0/24) | drop the Metal renderer option + Metal-toolchain build dep (P7b gate closed) | `openspec/changes/retire-metal-renderer/`; `research/03-analysis/local-macos-vm-ci-reproduction.md` §10b/§11g |
-| `add-xtty-test-image` | 16/20 — gated on `retire-metal-renderer` | reproducible ~40 GB minimal Packer/Tart test-VM image | `packer/README.md`; same research doc §10/§11 |
+| `retire-metal-renderer` | implemented (24/24) — pending archive | Metal renderer option + Metal-toolchain build dep dropped; zero-Metal build CI-proven + graphics-VM-validated (39/1/1 of 41) | `openspec/changes/retire-metal-renderer/`; `research/03-analysis/local-macos-vm-ci-reproduction.md` §10b/§11g |
+| `add-xtty-test-image` | 16/20 — gate lifted 2026-07-06 | reproducible ~40 GB minimal Packer/Tart test-VM image | `packer/README.md`; same research doc §10/§11 |
 | `test-image-bash-shell` | implemented — pending archive | bash guest login shell → exact CI parity; Local-Network modal root-caused | `research/03-analysis/local-network-privacy-forensics.md` |
 | `harden-churn-shell-readiness` | proposed (0/12) | churn-flake fix: computed-marker readiness gate + `.common`-modes dump timer | `research/03-analysis/confirm-close-shell-readiness.md` |
 | `add-ci-pipeline` | implemented — owner steps left | CI is live; remaining: repo public, pr-lint PR, branch protection, archive | `research/03-analysis/github-actions-ci-cd.md` |

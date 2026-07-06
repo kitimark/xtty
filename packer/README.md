@@ -227,11 +227,13 @@ proof is that the xtty build succeeds without the component.
 
 ### Acceptance (measured — post `fix-main-menu-clobber`)
 
-**Envelope: `39/1/1` of 41** (arithmetic from the measured 2026-07-05
-`40/1/1` of 42 — 3 runs, headless ×2 + graphics, all identical — after
-`retire-metal-renderer` (2026-07-06) deleted the always-passing Metal e2e
-`testConfiguredMetalRendererIsReported`; re-confirm the 41 total on the next
-VM sweep). The 7
+**Envelope: `39/1/1` of 41, measured** (graphics-rig validation run,
+2026-07-06, after `retire-metal-renderer` deleted the always-passing Metal
+e2e `testConfiguredMetalRendererIsReported` — the churn census test passed
+on the same run, re-confirming the confirm-close class as local-only.
+Lineage: the 2026-07-05 measured `40/1/1` of 42, 3 runs — headless ×2 +
+graphics — all identical. Evidence:
+`~/Downloads/xtty-vm-poc/artifacts/2026-07-06-graphics-retire-metal-renderer/`). The 7
 menu-dispatch tests that made this rig's pre-fix envelope now **pass**; the
 single expected residual is **`testMultiLinePasteIsNotAutoExecuted`**, and it
 is **NOT a product bug** — the image's `/bin/bash` login shell is macOS **bash
