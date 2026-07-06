@@ -18,9 +18,9 @@
 
 ## 3. Verify (fat-vs-slim gate + ablation, per design D5/D7/D8)
 
-- [ ] 3.1 Run the probe suite against the slim worktree (V1): same 12 probes × 3 reps, headless fresh sessions; grade with the same rubric; save transcripts + results table alongside the fat baseline
+- [x] 3.1 Run the probe suite against the slim worktree (V1): same 12 probes × 3 reps, headless fresh sessions; grade with the same rubric; save transcripts + results table alongside the fat baseline
 - [ ] 3.2 Run the **ablation arms** (diagnostic, non-gating): V2 recall+trap classes and V3 trap class at 1–2 reps each, plus the D8 context harness on all four variants; assemble the dose-response table (`variant | bytes | startup tokens | rule | recall | trap`); apply D7's content decisions — a lesson only V3 misses is promoted to an inoculation line, a line no variant needs may be dropped
-- [ ] 3.3 Judge V0-vs-V1 against the pre-registered envelope: token reduction ≥20k; rule + trap classes zero regressions; recall ≤2 extra tool calls. For any trap failure: strengthen that inoculation line (or add one), re-run **that probe** (3 reps) — never restore moved history; record each fix + re-run in the results table
+- [x] 3.3 Judge V0-vs-V1 against the pre-registered envelope: token reduction ≥20k; rule + trap classes zero regressions; recall ≤2 extra tool calls. For any trap failure: strengthen that inoculation line (or add one), re-run **that probe** (3 reps) — never restore moved history; record each fix + re-run in the results table
 - [ ] 3.4 Land the restructure on main as **one atomic commit** (AGENTS.md + HISTORY.md + skill/command checklist + rule amendment together — no dangling pointers), with the probe results referenced in the commit message
 
 ## 4. Capture + trackers

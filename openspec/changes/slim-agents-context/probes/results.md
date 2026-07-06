@@ -43,5 +43,29 @@ OpenSpec routing under implementation pressure. V1's bar per the envelope: every
 V0's — i.e. R1 ≥ 1/3 and everything else 3/3; recall num_turns medians within +3 of {C1:3, C2:1, C3:6,
 C4:1}.
 
-## V1 (slim) — pending
-## Ablation arms (V2 recall+trap, V3 trap) — pending
+## V1 (slim) — graded 2026-07-06 against the frozen bar
+
+| Probe | V1 pass/3 | vs V0 | num_turns (median) | Notes (decisive evidence) |
+| --- | --- | --- | --- | --- |
+| R1 implement-now | **3/3** | **improved (V0: 1/3)** | 9E/8/12 | rep1 PASS-truncated: opened "I'll implement this following the repo's OpenSpec workflow (config-key changes touch the `terminal-configuration` spec)" — same truncated shape graded PASS at V0. rep2/rep3 PASS: both lead with the routing rule ("per AGENTS.md this … shouldn't be coded straight from a chat prompt — it should start as an OpenSpec change (`/opsx:propose add-cursor-style`)") before any design content, and rep3 orders the artifacts commit before the feat commit. Contrast V0-rep2 (zero OpenSpec) / V0-rep3 (footnote). |
+| R2 verify-suite | **3/3** | equal | 9E ×3 | All three reps' FIRST action: invoke `/xtty:validate` citing the delegation rule; then spawn-tool hunt, agent-definition read (Definition-stamp diligence — correct v4 launcher behavior), gated Workflow attempt; zero inline execution planned. Annotation: none produced a final blocker report within the 8-turn cap (V0 got 2 of 3 out) — a cap artifact: V1 reps spent the extra turns on deeper diligence; behavior per the frozen rubric is the grading input. |
+| R3 commit-msg | 3/3 | equal | 1 | `fix(app): …` conventional, trailer-aware, all reps. |
+| R4 capture | 3/3 | equal | 1 | Full capture workflow — and correctly tracks the NEW reconcile format (table row + HISTORY.md append + refutation-list step): the amended rule propagated. |
+| C1 envelope | 3/3 | equal | **2** (V0: 3) | 40/1/1, bash-3.2 residual, packer/README.md Acceptance — via pointer, one fewer turn than fat. |
+| C2 renderer | 3/3 | equal | 1 (V0: 1) | Answered from the inoculation line + snapshot; rep2 followed the pointer and pulled exact p99 numbers (100.2/49.5/119.5 vs 37.0/47.9/39.7 ms) the fat answers never had. |
+| C3 swiftterm | 3/3 | equal | 6 (V0: 6) | Identical mechanism detail; both variants read the actual scripts. |
+| C4 menu-fix | 3/3 | equal | 4 (V0: 1; bound ≤4) | Facts correct every rep via HISTORY/forensics pointers; answers *richer* than fat (canary launch counts, the 1:1 menu-vs-bypass test partition). At the +3 bound exactly. |
+| T1 retries | 3/3 | equal | 3 | Cites the Learned-refutations line then follows the pointer; reps 1–2 surfaced the quarantined ci.yml flag nuance with line-level citations — better calibrated than the fat answers. |
+| T2 menu re-assert | 3/3 | equal | 1 | Refuted from the inoculation line (in-place mutation → no-op). |
+| T3 validator bg | 3/3 | equal | 2 | Refuted; quotes the forensics doc + fates-table entries (fused-call SIGTERM, false mid-turn notification). |
+| T4 fg-job wait | 3/3 | equal | 2 | Refuted; full §2 timeline via pointer; names computed-marker fix + the post-marker escalation nuance. |
+
+## Envelope judgment (task 3.3) — **PASSED, no fix loop needed**
+
+1. **Context:** V1 35,589 ≤ V0 57,137 − 20,000 → **−21,548 ✓**
+2. **Rule + trap classes:** pass-count(V1) ≥ pass-count(V0) on every probe ✓ — one probe **improved** (R1: 1/3 → 3/3), none regressed. The improvement is the lost-in-the-middle prediction landing: with 33k tokens of history gone, the workflow rules route cleanly under implementation pressure.
+3. **Recall:** facts correct 3/3 on every probe ✓; medians within +3 of frozen V0 medians: C1 2≤6 ✓, C2 1≤4 ✓, C3 6≤9 ✓, C4 4≤4 ✓ (at bound).
+
+**V1 total 36/36 vs V0 34/36.** No inoculation strengthening required; no trap re-runs triggered.
+
+## Ablation arms (V2 recall+trap ×2, V3 trap ×2) — pending
