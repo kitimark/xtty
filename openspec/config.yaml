@@ -61,3 +61,12 @@ rules:
       (`gh run watch`/`gh run view` for status) stays unmarked and inline. See
       AGENTS.md → "How to work here" → CI-failure investigation for the
       authoritative watch-vs-investigate boundary — this rule only points there.
+    - >-
+      Coherence-review markers: author any task that runs a *full coherence
+      review* of a change (the coherence rules + disk-drift + cross-change
+      passes) with the marker `⟶ xtty-openspec-critic (<change|all>)` in the
+      task line, so the apply/propose loop delegates it to the coherence-review
+      agent. Running `openspec validate` (the cheap mechanical gate) stays
+      unmarked and inline. See AGENTS.md → "How to work here" → coherence
+      review for the authoritative validate-vs-review boundary — this rule only
+      points there.
