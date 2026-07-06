@@ -58,6 +58,12 @@ Alternative rejected: shipping the diet unverified ("it's just docs") — the fi
 **D6 — Fat baseline is measured too, not assumed perfect.**
 The rule-compliance probes run against today's file first. If the fat variant itself fails probes (plausible given 33k tokens of dilution), that is recorded — it reframes the change from "hopefully harmless" to "measurably corrective", and it sets the real bar (slim must beat *measured* fat, not imagined-perfect fat).
 
+**D7 — Ablation variants: each tier of the status surface earns its tokens with data, not argument.**
+Four variants, not two: **V0** fat (baseline), **V1** slim with all three D3 tiers (the shipping candidate and the only gated comparison), **V2** = V1 minus the status table, **V3** = V1 minus the inoculation list. V2/V3 are *diagnostic* arms at reduced repetitions (1–2 reps): V2's expected recall-probe drop measures the table's marginal value; V3's expected trap-probe drop measures the inoculations' — and the specific traps V3 fails decide the final inoculation set empirically (a lesson only V3 misses is promoted to a one-liner; one no variant needs can be dropped). The gate stays fat-vs-V1 at 3 reps; ablation arms inform content, never block landing. Alternative rejected: gating on all four variants — quadruples run count for arms whose purpose is tuning, not acceptance.
+
+**D8 — Context usage is probed empirically per variant, including the subagent multiplier.**
+Two instruments, cross-checked: (a) headless first-turn usage — `claude -p --output-format json` in each variant's worktree, summing `input_tokens + cache_creation_input_tokens`, 3 reps (should be deterministic; variance is itself a finding); (b) a fresh interactive session's `/context` *Memory files* number. Results land in one dose-response table: `variant | bytes | startup tokens | rule score | recall score | trap score`. Separately, the **subagent-inheritance probe**: spawn a trivial Task-tool subagent in the fat checkout and ask it whether a distinctive marker string that exists *only* in AGENTS.md's history blob appears in its context (the in-context presence-probe technique from the validator forensics — transcripts don't record system prompts, so only the agent can witness its own context). If subagents inherit the file, every agent of this repo's routine 7–24-agent workflows pays the full cost (24 × 32.8k ≈ 790k tokens of AGENTS.md copies per big workflow; ~615k saved at V1) and the multiplier goes in the research capture with the arithmetic; if refuted, subagents are already lean and that negative result is captured instead — the claim is made only after the probe, never from assumption.
+
 ## Risks / Trade-offs
 
 - **[Silent non-recall: a session re-proposes a refuted idea it no longer sees]** → the trap-probe class gates the change; the inoculation tier (D3) carries conclusions inline; any post-ship recurrence is fixed by adding one line to the inoculation list (cheap, targeted).
@@ -67,6 +73,8 @@ The rule-compliance probes run against today's file first. If the fat variant it
 - **[File re-inflates after the diet]** → D4's bounded-entry rule + the reviewable convention that status edits are table-row-sized; if a future entry needs a paragraph, that paragraph belongs in HISTORY.md by rule.
 - **[Verbatim move leaves HISTORY.md internally rough (single 33 KB lines)]** → accepted; HISTORY.md is an archive read by grep/on-demand `Read`, not a startup cost; light heading scaffolding is added around the pasted blocks without editing them.
 - **[Stochastic probe noise produces a false regression signal]** → 3 reps per cell + rubric grading; a 0/3 vs 3/3 flip is signal, a 2/3 vs 3/3 wobble triggers more reps on that probe before judgment.
+- **[Ablation arms inflate the run budget]** → V2/V3 run at 1–2 reps and only the recall/trap classes (the classes they exist to differentiate); they tune content and never gate, so a noisy ablation cell costs nothing but a re-run.
+- **[The subagent-inheritance probe comes back ambiguous (e.g. partial/truncated injection)]** → the probe asks for a verbatim quote of the surrounding line, not a yes/no (same discipline as the validator's definition-version probe); if still ambiguous, the multiplier claim is omitted from the capture rather than hedged into it.
 
 ## Migration Plan
 
