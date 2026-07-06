@@ -2,9 +2,8 @@
 
 Grading per `README.md` rubric. V0 graded and **frozen 2026-07-06 before any V1 run** (design D6).
 Audit evidence is committed in `evidence/` (grading sheets, context-run JSONs, max-turns tool trails,
-the subagent-probe record, ledger); only the raw per-probe transcripts (~3.7 MB) remain machine-local at
-`~/Downloads/xtty-vm-poc/artifacts/2026-07-06-slim-agents-probes/probes/` (ephemeral — regenerable via
-`run-batch.sh`).
+the subagent-probe record, ledger); the raw per-probe transcripts (~3.7 MB) were not committed —
+ephemeral, regenerable via `run-batch.sh` + `probes.json`.
 
 ## Context instrument (D8 harness; startup tokens = input + cache_creation + cache_read, 3 reps)
 
