@@ -36,3 +36,4 @@
 ## 7. On completion (post-verify)
 
 - [ ] 7.1 Reconcile trackers per AGENTS.md "Keep progress current": Current-status table row + snapshot (the suite is split; both rigs' per-plan envelopes), append the narrative to `HISTORY.md`, advance `research/04-design/02-milestones.md` if applicable, and flip `research/03-analysis/shell-dependent-test-partitioning.md` from "decided" to "built + split". Confirm this change archives **after** `add-zsh-test-image`.
+- [ ] 7.2 Archive + reconcile: run the full ritual — `openspec archive split-shell-dependent-testplan` (merge the `verification-harness` + `test-validation` deltas), finish-by-hand (correct the merged text to what shipped, `openspec validate --all --type spec`), confirm the trackers reconciled (7.1) + the archive ordering (**after** `add-zsh-test-image`), and verify against disk (`openspec list`, `ls openspec/changes/archive/`, `ls openspec/specs/`). ⟶ archive-ritual

@@ -70,3 +70,12 @@ rules:
       unmarked and inline. See AGENTS.md → "How to work here" → coherence
       review for the authoritative validate-vs-review boundary — this rule only
       points there.
+    - >-
+      Archive-ritual marker: author the change's completion task — archive +
+      reconcile — with the marker `⟶ archive-ritual` in the task line, so the
+      apply loop runs the full ritual (`openspec archive` + finish-by-hand +
+      tracker reconcile + verify-against-disk) rather than leaving archive
+      implicit in an "on completion" clause. Unlike the delegation markers this
+      points to an inline committed procedure, not an agent. See AGENTS.md →
+      "How to work here" → Keep progress current (the standard change tail) for
+      the authoritative archive ritual — this rule only points there.

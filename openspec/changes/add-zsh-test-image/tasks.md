@@ -36,3 +36,4 @@
 
 - [ ] 7.1 Reconcile trackers per AGENTS.md "Keep progress current": AGENTS.md Current-status table row + snapshot (a zsh rig now exists; both envelopes), append the narrative to `HISTORY.md`, advance `research/04-design/02-milestones.md` if applicable, and update `research/03-analysis/shell-dependent-test-partitioning.md` from "decided/unbuilt" to "built + measured".
 - [ ] 7.2 (verify — coherence, pre-archive) Review the change for coherence against AGENTS.md's rulebook + disk state. ⟶ xtty-openspec-critic (add-zsh-test-image)
+- [ ] 7.3 Archive + reconcile: run the full ritual — `openspec archive add-zsh-test-image` (merge the `build-workflow` delta), finish-by-hand (correct the merged text to what shipped, `openspec validate --all --type spec`), confirm the trackers reconciled (7.1), and verify against disk (`openspec list`, `ls openspec/changes/archive/`, `ls openspec/specs/`). ⟶ archive-ritual

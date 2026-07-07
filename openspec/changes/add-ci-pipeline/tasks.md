@@ -28,4 +28,5 @@
 
 ## 6. Spec reconcile
 
-- [ ] 6.1 `openspec validate add-ci-pipeline`, then on completion archive and merge the `build-workflow` delta; update trackers (AGENTS.md Current status, milestones) per the repo's keep-progress-current rule
+- [ ] 6.1 (verify, inline) `openspec validate add-ci-pipeline` passes (the archive + reconcile itself is the marked task 6.2)
+- [ ] 6.2 Archive + reconcile: run the full ritual — `openspec archive add-ci-pipeline` (merge the `build-workflow` delta), finish-by-hand (correct the merged text to what shipped, `openspec validate --all --type spec`), reconcile the trackers per AGENTS.md "Keep progress current" (Current-status row + snapshot, `HISTORY.md` narrative, milestones), and verify against disk (`openspec list`, `ls openspec/changes/archive/`, `ls openspec/specs/`). ⟶ archive-ritual
