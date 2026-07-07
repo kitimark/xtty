@@ -481,7 +481,7 @@ The §10a/§10g mechanism ("a native app can't reliably own the shared session's
 
 > **Provenance:** 2026-07-06. Consolidates the per-addendum residual findings above (esp. §18's CI-measured pair) into a single crisp table + job map for the committed **`xtty-ci-investigator`** agent (`.claude/agents/xtty-ci-investigator.md`) to defer to at run time. This is the CI counterpart to `packer/README.md`'s VM expected-difference matrix. When a narrative addendum above and this matrix disagree, **this matrix wins** (it is the latest consolidation).
 
-This section is the **classification target** for CI-failure investigation: given a failed run, every red maps to exactly one row below (a named benign bucket) **or** is **UNEXPLAINED** — and any UNEXPLAINED red forbids an in-envelope verdict. Re-verified grid-first against run `28801860582` (2026-07-06): both residuals reproduced with the documented causes.
+This section is the **classification target** for CI-failure investigation: given a failed run, every red maps to exactly one row below (a named benign bucket) **or** is **UNEXPLAINED** — and any UNEXPLAINED red forbids an in-envelope verdict. Re-verified grid-first against run `28801860582` (2026-07-06): both residuals reproduced with the documented causes (the `findbar-marker-wrap` residual has since been **fixed** — §19b below).
 
 ### 19a. Job map — which jobs gate merges
 
@@ -493,16 +493,17 @@ This section is the **classification target** for CI-failure investigation: give
 
 ### 19b. Known-benign residual buckets (hosted `macos-26` runner)
 
-Both are on the **non-blocking** `build-and-test` job, both grid-proven (§11–§18), both with a known fix deferred to a harness-truthing successor. **Neither is a product bug.**
+**One** known-benign residual remains on the **non-blocking** `build-and-test` job (the `findbar-marker-wrap` bucket was **fixed** 2026-07-07 — see below). It is grid-proven (§11–§18), **not a product bug**, its guard-shell fix deferred to a harness-truthing successor.
 
 | Failing test | Runner-specific cause | Why benign | Bucket |
 | --- | --- | --- | --- |
-| `testFindBarOpensLocatesAndDismisses` (`XttyUITests.swift:192`) | The runner's ~68–72-char hostname prompt soft-wraps the typed `AFTERFIND####` focus marker across two grid rows (`…runner$ A` / `FTERFIND####`); the line-192 focus-restore check uses the **strict** `waitForContains` — the wrap-tolerant matcher was applied only to the focus-typing test (`:54`). | Focus **does** return: the marker reached the grid, just wrapped. Product behavior is correct; the assertion is prompt-width-fragile. | `findbar-marker-wrap` |
 | `testMultiLinePasteIsNotAutoExecuted` (`XttyUITests.swift:84`) | The runner's login shell is `/bin/bash` = GNU bash 3.2.57, whose readline has **no `enable-bracketed-paste`**; the pasted `\n` executes the first line (`-bash: alpha####: command not found`). | Real users get bracketed paste (zsh default; bash 5.1+). The test encodes the zsh guarantee; the rig shell can't honor it. | `bash32-no-bracketed-paste` |
 
-**Fixes (deferred to the harness-truthing successor — not a product change):** extend the wrap-tolerant matcher to the find-bar focus-restore assertion; guard the paste test on a bracketed-paste-capable shell (or seed one in the injected env).
+**Fixed — `findbar-marker-wrap` (shipped 2026-07-07, `harden-findbar-wrap-assertion`):** the find-bar focus-restore assertion now uses the wrap-tolerant `waitForContains(…, ignoringLineWraps: true)` (`XttyUITests.swift:198`, mirroring `:53`), plus a deterministic self-validating soft-wrap guard `testSoftWrapGuardIsWrapTolerant` that reproduces the wrap class in `make test`. Proven **red→green in-guest** on the wide-prompt VM (the `add-vm-prompt-width-parity` pair; `40/1/1` of 42, validator-delegated). **A recurrence of `testFindBarOpensLocatesAndDismisses` failing is now a REGRESSION, not a benign residual.**
 
-**Mechanism (why `findbar-marker-wrap` is runner-only):** verified from `actions/runner-images` source in [`ci-runner-prompt-width-forensics.md`](ci-runner-prompt-width-forensics.md) — stock macOS `PS1='\h:\W \u\$ '` (the image sets **no** `PS1`), so prompt width = `len(\h)`; the runner's ~61-char `\h` is **GitHub-network-injected at runtime** (the image build sets only `Mac-<epoch>.local`), which is why the short-`\h` local Tart VM's `39/1/1` envelope does **not** include this red and why it can't be reproduced by rebuilding the image. The only reproduction lever is hostname length.
+**Deferred fix (the remaining residual — not a product change):** guard the paste test on a bracketed-paste-capable shell (or seed one in the injected env).
+
+**Mechanism (historical — how `findbar-marker-wrap` arose, now fixed):** verified from `actions/runner-images` source in [`ci-runner-prompt-width-forensics.md`](ci-runner-prompt-width-forensics.md) — stock macOS `PS1='\h:\W \u\$ '` (the image sets **no** `PS1`), so prompt width = `len(\h)`; the runner's ~61-char `\h` is **GitHub-network-injected at runtime** (the image build sets only `Mac-<epoch>.local`). The short-`\h` local Tart VM was blind to it until `add-vm-prompt-width-parity` gave the image a 59-char `\h` (the only reproduction lever is hostname length), reproducing the red in-guest; `harden-findbar-wrap-assertion` then fixed the assertion. Retained as the causal record so a recurrence is classified as a regression.
 
 ### 19c. Reverse duty
 

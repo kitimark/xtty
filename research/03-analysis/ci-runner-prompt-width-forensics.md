@@ -54,7 +54,7 @@ The DEBUG grid dump (`App/UITestDump.swift`) joins the terminal's **physical row
  dump string:       "…runner$ A\nFTERFIND4215"
 ```
 
-`GridDumpReader.waitForContains(needle, timeout:)` defaults to `ignoringLineWraps: false` → `haystack.contains(needle)` (`XttyUITestSupport.swift:165–168`), which a `\n`-split token can never satisfy. The **wrap-tolerant** mode strips `"\n"` before matching. The focus-typing test (`XttyUITests.swift:53–54`) already passes `ignoringLineWraps: true` for exactly this reason; the find-bar focus-restore check (`:192`) does **not** — that asymmetry is the whole bug.
+`GridDumpReader.waitForContains(needle, timeout:)` defaults to `ignoringLineWraps: false` → `haystack.contains(needle)` (`XttyUITestSupport.swift:165–168`), which a `\n`-split token can never satisfy. The **wrap-tolerant** mode strips `"\n"` before matching. The focus-typing test (`XttyUITests.swift:53–54`) already passes `ignoringLineWraps: true` for exactly this reason; the find-bar focus-restore check (`:192`) originally did **not** — that asymmetry was the whole bug (**fixed 2026-07-07** by `harden-findbar-wrap-assertion`; the assertion, now `:198`, is wrap-tolerant — see the §6 landing addendum).
 
 ### 2c. Where the runner's long hostname actually comes from
 
@@ -129,6 +129,12 @@ So the earlier framing "A vs C" became "C then A" — reproduce, then fix — tu
 - **Measured interim envelope: `38/2/1` of 41** (was `39/1/1`), byte-identical across all three rigs. `testFindBarOpensLocatesAndDismisses` (`:192`) **reds in-guest** as the pre-registered repro proof — transient, greened next by `harden-findbar-wrap-assertion`; not a standing residual.
 - **One §6 prediction corrected by measurement:** the paste residual's failing line did **not** shift `:87`→`:84` — it **stayed `:87`** (the `command not found` check). Bash 3.2 executes the pasted newline, so line B (`beta####`) echoes contiguously and fits before col 80; the `:84` `waitForContains(lineB)` still passes and the failure remains the downstream `:87`. The wide prompt does not move it. Exactly the "measured, not predicted" discipline D3 exists for.
 - Evidence: `~/Downloads/xtty-vm-poc/artifacts/2026-07-06-vm-prompt-width-parity-rebaseline/` (REVIEW.md + `run1-headless`/`run2-headless`/`run3-graphics` `.xcresult` + attachments). `packer/README.md` Acceptance/matrix updated to `38/2/1` interim in the same session.
+
+**Addendum (2026-07-07) — Options A + B landed: `harden-findbar-wrap-assertion`.** The find-bar focus-restore assertion (`:192` → now `:198`) was made **wrap-tolerant** (`ignoringLineWraps: true`, mirroring `:53` — option **A**), and a deterministic self-validating soft-wrap guard `testSoftWrapGuardIsWrapTolerant` was added (option **B** — it types a ~165-char contiguous marker and asserts the wrap-tolerant match succeeds while a strict whole-token match fails; the column-pinning spike stays dissolved). Test-only; no product code.
+
+- **Red→green proven in-guest** on the same wide-prompt image (no rebuild — source isn't baked in), validator-delegated full sweep: `testFindBarOpensLocatesAndDismisses` flipped from the `38/2/1`-of-41 interim red to **green**. **D2 verified by effect** on all three VM runs: the `AFTERFIND####` marker genuinely soft-wraps behind the 58-char `\h` prompt (the wrap-tolerant matcher joins the split rows; a strict match would fail), and the new guard's ~165-char marker spans **3 physical rows** (strict whole-token match returns False), so neither passes vacuously.
+- **Final measured VM envelope: `40/1/1` of 42**, byte-identical across headless ×2 + graphics — find-bar + guard green, `+1` test from the guard; the sole residual is the `testMultiLinePasteIsNotAutoExecuted` bash-3.2 paste `:87` (unchanged). The interim carve-out closes; any second non-paste failure is again a regression.
+- Evidence: `~/Downloads/xtty-vm-poc/artifacts/2026-07-07-findbar-wrap-fix-green-proof/` (REVIEW.md + `tier2-h1`/`tier2-h2`/`tier3-g1` `.xcresult` + grid dumps). `github-actions-ci-cd.md` §19b moved `findbar-marker-wrap` residual→fixed; `packer/README.md` Acceptance/matrix updated to `40/1/1` in the same session.
 
 ## 7. Reusable guideline (generalizes to any hosted-CI-only red)
 
