@@ -189,7 +189,13 @@ final class XttyUITests: XCTestCase {
         app.typeText(marker)
         attachGridDump("find-focus-restored-grid")
         if GridDumpReader.isAvailable {
-            XCTAssertTrue(GridDumpReader.waitForContains(marker, timeout: 5),
+            // Wrap-tolerant (mirrors :53): behind a long shell prompt — the
+            // hosted-runner findbar-marker-wrap case — the marker soft-wraps
+            // across physical rows, which the dump joins with "\n". Focus
+            // restoration is still what's asserted: the marker reached the
+            // terminal grid, it just wrapped; a genuinely absent marker (routed
+            // to the search field) still fails. See ci-runner-prompt-width-forensics.md.
+            XCTAssertTrue(GridDumpReader.waitForContains(marker, timeout: 5, ignoringLineWraps: true),
                           "focus did not return to the terminal after dismissing find")
         }
         app.typeKey("u", modifierFlags: .control) // clear staged marker
@@ -238,5 +244,45 @@ final class XttyUITests: XCTestCase {
         } else {
             XCTAssertTrue(app.mainWindow.exists)
         }
+    }
+
+    // 7. Deterministic soft-wrap regression guard (harden-findbar-wrap-assertion).
+    //    Types a single contiguous marker far wider than the focused pane so it is
+    //    GUARANTEED to soft-wrap across ≥2 physical rows in the grid dump —
+    //    reproducing the hosted-runner findbar-marker-wrap phenomenon on bare metal
+    //    in `make test`, independent of the ambient hostname/prompt width. This
+    //    keeps the wrap class from silently respawning. Self-validating: the
+    //    wrap-tolerant match MUST succeed while a STRICT physical-row match of the
+    //    same whole token MUST fail (a "\n" row boundary split it) — so the guard
+    //    can never pass without a genuine wrap. If the pane is wider than the marker
+    //    it fails loudly (widen the marker). See ci-runner-prompt-width-forensics.md.
+    func testSoftWrapGuardIsWrapTolerant() throws {
+        try XCTSkipUnless(GridDumpReader.isAvailable,
+                          "grid dump hook required (DEBUG build launched with -UITestGridDump)")
+        app.activate()
+        XCTAssertTrue(app.mainWindow.waitForExistence(timeout: 5))
+
+        // Unique prefix (no collisions) + wide alphanumeric padding: the whole
+        // contiguous token is far wider than any reasonable default pane, so it
+        // must wrap. No spaces/metacharacters, so the shell stages it verbatim.
+        let marker = "WRAPGUARD\(Int.random(in: 100000...999999))"
+            + String(repeating: "Z", count: 150)
+        app.typeText(marker)
+        attachGridDump("softwrap-guard-grid")
+
+        // First confirm the marker reached the grid at all, recovering it across
+        // the wrap boundary. This also gates the strict check below on the marker
+        // actually being rendered, so a false strict match means "wrapped", not
+        // "not yet echoed".
+        XCTAssertTrue(GridDumpReader.waitForContains(marker, timeout: 5, ignoringLineWraps: true),
+                      "wrap-tolerant matcher failed to find the typed marker")
+        // Now prove it GENUINELY wrapped: a strict, physical-row match of the whole
+        // contiguous token must fail because a "\n" row boundary splits it. If this
+        // succeeds the marker did not wrap (pane wider than the marker) — fail loudly.
+        let grid = GridDumpReader.read() ?? ""
+        XCTAssertFalse(GridDumpReader.gridContains(grid, marker, ignoringLineWraps: false),
+                       "marker did not soft-wrap (pane wider than the marker) — widen the marker")
+
+        app.typeKey("u", modifierFlags: .control) // clear staged input
     }
 }
