@@ -24,4 +24,5 @@
 ## 5. Close-out
 
 - [x] 5.1 `openspec validate add-vm-prompt-width-parity` and confirm the `build-workflow` ADDED requirement reads mechanism-neutral (the *how* — scutil/hostname — stays in design/tasks, not the requirement).
-- [ ] 5.2 On archive: update the AGENTS.md Current-status snapshot (VM envelope/fidelity note) and append the narrative to HISTORY.md (per Keep-progress-current). The Learned-refutations reproducibility bullet is unaffected.
+- [x] 5.2 On archive: update the AGENTS.md Current-status snapshot (VM envelope/fidelity note) and append the narrative to HISTORY.md (per Keep-progress-current). The Learned-refutations reproducibility bullet is unaffected.
+      - Done (2026-07-07 archive): AGENTS snapshot → `2026-07-07`, `42 XCUITests`, VM envelope `40/1/1 of 42` on the wide-prompt image (prompt-width fidelity note); open-changes row removed + entry added to the Shipped/Tooling row; HISTORY.md narrative appended (pair #1). Learned-refutations reproducibility bullet left as-is (only hostname *length* drives the wrap; exact name still not derivable).
