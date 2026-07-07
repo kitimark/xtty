@@ -37,6 +37,21 @@ variable "xcode_version" {
   description = "Xcode version installed from the pre-downloaded ~/XcodesCache/Xcode_<version>.xip (never downloaded during the build)."
 }
 
+variable "shell" {
+  type    = string
+  default = "bash"
+  # The guest's auto-login interactive shell. `bash` = the CI-parity,
+  # acceptance-bearing rig (byte-identical to today's image, tag xtty-test).
+  # `zsh` = the supplement rig that exercises xtty's zsh-only OSC 7/133 shell
+  # integration for real (tag xtty-test-zsh) and neutralizes the Local Network
+  # gate at the rig level. See openspec/changes/add-zsh-test-image + design.md.
+  description = "Guest login shell: bash (CI-parity rig) or zsh (real-shell-integration supplement rig)."
+  validation {
+    condition     = contains(["bash", "zsh"], var.shell)
+    error_message = "The shell variable must be \"bash\" or \"zsh\"."
+  }
+}
+
 variable "disk_size" {
   type    = number
   # A MAX, not the footprint (the built image materializes ~40 GB). 60 (> the
@@ -47,7 +62,10 @@ variable "disk_size" {
 
 source "tart-cli" "tart" {
   vm_base_name = var.base_image
-  vm_name      = "xtty-test:${var.xcode_version}"
+  # bash -> xtty-test:<ver> (unchanged); zsh -> xtty-test-zsh:<ver>. One
+  # template, two tags — the only build-time difference is the login shell +
+  # (zsh only) the Local Network neutralization daemon.
+  vm_name      = "xtty-test${var.shell == "zsh" ? "-zsh" : ""}:${var.xcode_version}"
   # Build-time resources only. The race-reproducing 3-vCPU constraint is a
   # RUN-time property of the test clone (tart set <clone> --cpu 3), not baked in.
   cpu_count    = 4
@@ -110,28 +128,66 @@ build {
     ]
   }
 
-  # CI-parity login shell: GitHub's hosted macOS runners set the runner
-  # account's shell to bash (runner-images configure-shell.sh: chsh -s /bin/bash),
-  # so the in-guest suite must run under bash here too. This also removes the
-  # macOS Local Network privacy modal from graphics runs. Measured root cause
-  # (2026-07-05, lldb backtrace + per-config log captures — supersedes the
-  # earlier "XCUITest IPC over the routable vmnet address" theory): xtty reads
-  # its own host name via ProcessInfo.hostName → NSHost → a reverse-DNS lookup
-  # of every local address, and that code path runs only when the shell emits
-  # OSC 7 — i.e. under zsh (xtty injects shell integration into zsh only),
-  # never bash. Setting a static HostName does NOT help (the reverse lookups
-  # still fire, measured 20/launch either way); TN3179's
-  # Allowed*LocalNetworkAddresses defaults were separately screenshot-refuted.
-  # Under bash there is no OSC 7, no reverse DNS, and nothing for the Local
-  # Network gate to prompt about — the same reason the hosted runners and the
-  # frozen macos-tahoe-xcode rig never show the dialog. Semantic-capture tests
-  # take their graceful-degradation arms under bash, exactly as on CI.
-  # See research/03-analysis/local-macos-vm-ci-reproduction.md §12.
+  # Login shell (parameterized — var.shell, default bash). GitHub's hosted
+  # macOS runners set the runner account's shell to bash (runner-images
+  # configure-shell.sh: chsh -s /bin/bash), so the CI-parity rig runs under
+  # bash. That also removes the macOS Local Network privacy modal from graphics
+  # runs. Measured root cause (2026-07-05, lldb backtrace + per-config log
+  # captures — supersedes the earlier "XCUITest IPC over the routable vmnet
+  # address" theory): xtty reads its own host name via ProcessInfo.hostName →
+  # NSHost → a reverse-DNS lookup of every local address, and that code path
+  # runs only when the shell emits OSC 7 — i.e. under zsh (xtty injects shell
+  # integration into zsh only), never bash. Setting a static HostName does NOT
+  # help (the reverse lookups still fire, measured 20/launch either way);
+  # TN3179's Allowed*LocalNetworkAddresses defaults were separately
+  # screenshot-refuted for the guest-side modal (the zsh variant bakes them in
+  # and re-tests by effect at owner request — see the zsh block below). Under
+  # bash there is no OSC 7, no reverse DNS, and
+  # nothing for the Local Network gate to prompt about — the same reason the
+  # hosted runners and the frozen macos-tahoe-xcode rig never show the dialog.
+  # Semantic-capture tests take their graceful-degradation arms under bash,
+  # exactly as on CI.
+  #
+  # The zsh variant (var.shell=zsh) deliberately re-enables that OSC 7 path so
+  # the shell-dependent half of the suite asserts for real, and neutralizes the
+  # Local Network gate at the rig level via the daemon installed below (never in
+  # xtty product code). See research/03-analysis/local-macos-vm-ci-reproduction.md
+  # §12, local-network-privacy-forensics.md, and add-zsh-test-image/design.md.
   provisioner "shell" {
     inline = [
-      "sudo chsh -s /bin/bash admin",
-      "sudo chsh -s /bin/bash root",
+      "sudo chsh -s /bin/${var.shell} admin",
+      "sudo chsh -s /bin/${var.shell} root",
       "dscl . -read /Users/admin UserShell",
+    ]
+  }
+
+  # zsh variant ONLY: apply the Tart FAQ's Local Network permission workaround at
+  # the rig level (no xtty product-code change) —
+  # https://tart.run/faq/#avoiding-the-local-network-permission-pop-up. The FAQ
+  # excludes the RFC-1918 private ranges from the Local Network privacy gate via
+  # two `defaults write` to com.apple.network.local-network, and requires a reboot
+  # to take effect — which the sealed image gets for free when a test clone boots.
+  #
+  # OWNER-DIRECTED RE-TEST (2026-07-07): the FAQ is written for the HOST-side
+  # Packer→VM pop-up; a prior *runtime* application of these exact keys inside a
+  # booted guest was refuted by effect for xtty's guest-side com.xtty.app modal
+  # (20 gate events + modal survived, persisted across reboot —
+  # local-network-privacy-forensics.md §12d). The mechanism (the gate fires at
+  # DNS query-classification, pre-send, keyed on the queried reverse zone — not on
+  # the connection destination the FAQ whitelists) predicts the baked-in variant
+  # fails identically. This bakes it into the image so it is present before first
+  # boot and re-verifies by effect on the graphics rig. bash skips it entirely
+  # (no OSC 7 → no prompt), so its sealed image stays byte-identical.
+  provisioner "shell" {
+    inline = [
+      "if [ '${var.shell}' = 'zsh' ]; then",
+      "  sudo defaults write com.apple.network.local-network AllowedEthernetLocalNetworkAddresses -array '10.0.0.0/8' '172.16.0.0/12' '192.168.0.0/16'",
+      "  sudo defaults write com.apple.network.local-network AllowedWiFiLocalNetworkAddresses -array '10.0.0.0/8' '172.16.0.0/12' '192.168.0.0/16'",
+      "  echo 'zsh variant: applied Tart FAQ Local Network address exclusions (com.apple.network.local-network)';",
+      "  echo '--- read-back ---'; sudo defaults read com.apple.network.local-network 2>/dev/null || true",
+      "else",
+      "  echo 'bash variant: no Local Network workaround (no OSC 7, no prompt)';",
+      "fi",
     ]
   }
 
