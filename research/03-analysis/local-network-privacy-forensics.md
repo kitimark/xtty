@@ -23,7 +23,7 @@ zsh login shell (xtty injects OSC 7 integration into zsh ONLY)
 - ❌ **Not the macOS version** — a fresh code identity prompts on bare-metal **26.2**. (§12b's "26.5 gates where 26.4 did not" retracted.)
 - ❌ **Not the XCUITest runner↔app IPC** — plain launches trigger it too; the runner/testmanagerd issue **zero** dnssd requests in every capture. (§12c retracted.)
 - ❌ **Not fixable by `scutil --set HostName`** — measured ineffective (still 20 reverse-DNS queries/launch); `NSHost.name` ignores the static key.
-- ✅ **Fix classes that work:** (a) don't run the resolver — bash shell (shipped for the test image as `test-image-bash-shell`) or a non-resolving product API (`gethostname(2)`/`SCDynamicStoreCopyLocalHostName` — proposed, **dropped by owner decision**, test-image scope only); (b) satisfy `getnameinfo` before mDNS — `/etc/hosts` entries for **every local address** (proven: 0 gate events; needs per-boot regeneration, superseded by (a)).
+- ✅ **Fix classes that work:** (a) don't run the resolver — bash shell (shipped for the test image as `test-image-bash-shell`) or a non-resolving product API (`gethostname(2)`/`SCDynamicStoreCopyLocalHostName` — proposed, **dropped by owner decision**, test-image scope only; source now pinned to **`gethostname`** to match the shell's `$HOST`, confirmed behavior-preserving — **§8d**); (b) satisfy `getnameinfo` before mDNS — `/etc/hosts` entries for **every local address** (proven: 0 gate events; needs per-boot regeneration, superseded by (a)).
 
 ## 2. The machinery (internals worth keeping)
 
@@ -32,7 +32,7 @@ zsh login shell (xtty injects OSC 7 integration into zsh ONLY)
 - **Decision + presentation live in `nehelper`** (`/usr/libexec/nehelper`, NetworkExtension). Log lines at the moment of truth: `Local network preference not yet set, prompting for xtty (com.xtty.app)` and `First prompt, starting the queue with TEAMID.<bundle-id> and prompting` — note the **prompt queue**: multiple pending identities queue behind one visible dialog.
 - **The gate for DNS-class traffic sits in `mDNSResponder`** under subsystem `com.apple.mdns`, category `trust`: `Local network access to query(<private>) policy 'pending'|'granted' for (<bundle-id>)`. Reverse zones for RFC-1918/link-local/ULA addresses are locally-scoped → answering requires multicast → the trust gate evaluates the **responsible app**.
 - **State is the NetworkExtension store, not TCC:** `/Library/Preferences/com.apple.networkextension{,.control,.necp,.uuidcache}.plist` (root-owned, **world-readable** — inspectable without sudo). A per-app record is a keyed-archiver pathRule: `SigningIdentifier = <bundle-id>`, **`DenyMulticast = true` (pending/denied) or `false` (granted)**, `DenyAll = false`. Records are also created **silently** (no prompt) — e.g. `com.xtty.appUITests.xctrunner` on every rig, and a `com.amazon.codewhisperer` record baked into the cirruslabs `-xcode` image.
-- ❌ **No supported pre-seed:** `tccutil` doesn't cover LN (not a TCC service); Apple ships no MDM payload (TN3179 states it); hand-editing the NE plists is daemon-reconciled and SIP-adjacent; TN3179's `AllowedEthernet/WiFiLocalNetworkAddresses` exemption arrays were **screenshot-refuted** for this trigger (§12d) — they exempt unicast *addresses*, and this gate fires on *queries*.
+- ❌ **No supported pre-seed:** `tccutil` doesn't cover LN (not a TCC service); Apple ships no MDM payload (TN3179 states it); hand-editing the NE plists is daemon-reconciled and SIP-adjacent; TN3179's `AllowedEthernet/WiFiLocalNetworkAddresses` exemption arrays were **screenshot-refuted** for this trigger (§12d) — they exempt unicast *addresses*, and this gate fires on *queries*. **The pre-seed refutation is now *measured* end-to-end** (boot-pruning mechanism + a three-tier provenance map: **§8b**); TN3179's *macOS considerations* read in full in **§8a**.
 - ❓ **Whether the modal (vs a silent gate) appears for a given launch could not be reduced to one variable**: a fresh identity prompted on bare-metal 26.2 and on the 26.5 VM, but the same fresh identity (`com.xtty.g1`) fired the identical 20-query volley on *both* an unmodified 26.4 guest and the 26.5 guest **without** prompting, while `com.xtty.app` (carrying an older pending record) *did* prompt on 26.5. Prior NE-store state and environment both move the arbiter. **Practical consequence: don't chase the arbiter — remove its input** (§5, G9).
 
 ### 2b. `ProcessInfo.hostName` / `NSHost` resolution internals
@@ -40,7 +40,7 @@ zsh login shell (xtty injects OSC 7 integration into zsh ONLY)
 - lldb-proven chain (source lines, caught live on the 26.2 host): `ProcessInfo.hostName.getter` → `-[NSHost name]` → `-[NSHost blockingResolveUntil:]` → **`dispatch_semaphore_wait` on the calling thread** while a background block runs `getnameinfo` → `mdns_hostbyaddr` → `DNSServiceCreateConnection` + ~20 `DNSServiceQueryRecord` PTR requests (one per local address: the vmnet IPv4, ~5 × `fe80::` link-locals, an `fdd5::` ULA, loopbacks).
 - **The calling thread blocks** — in xtty that was the **main actor** (the OSC 7 delegate), i.e. a UI freeze for the duration of the (gated, unanswered) lookups. Measured: the same single UI test took **7.6 s** where the resolver never ran vs **38–62 s** where it ran gated.
 - ❌ `scutil --set HostName x.local` does **not** short-circuit it: `Host.current().name` still returned the mDNS-derived name and the PTR volley still fired (measured on the 26.5 rig, set → 20 queries, unchanged).
-- ✅ **Non-resolving alternatives verified:** `gethostname(2)` returns a usable name (`<LocalHostName>.local`) instantly with zero dnssd traffic even when the static `HostName` key is unset; `SCDynamicStoreCopyLocalHostName` likewise. Shells emit OSC 7 authorities from `$HOST` (= `gethostname`), so these are also the *more correct* comparison source.
+- ✅ **Non-resolving alternatives verified:** `gethostname(2)` returns a usable name (`<LocalHostName>.local`) instantly with zero dnssd traffic even when the static `HostName` key is unset; `SCDynamicStoreCopyLocalHostName` likewise. Shells emit OSC 7 authorities from `$HOST` (= `gethostname`), so these are also the *more correct* comparison source (call-site now locked: the injected emitter uses `${HOST}` — **§8d**).
 - Public precedent: `-[NSProcessInfo hostName]` triggering the LN prompt is attested back to Sequoia 15.x; the `mdns:trust` gate was publicly logged on 26.2 (eclecticlight). Apple DTS has confirmed undocumented point-release LN enforcement changes hitting the XCTest stack (iPadOS 26.3) — the arbiter's behavior is a moving target; the *trigger removal* is the durable defense.
 
 ### 2c. The xtty linkage
@@ -57,6 +57,8 @@ zsh login shell (xtty injects OSC 7 integration into zsh ONLY)
 | T4 | Static `HostName` unset is the factor | ❌ retracted | `scutil --set HostName` on the popping rig → volley unchanged (20); host 26.2 has it unset *and* was quiet under the granted identity |
 | T5 | The login shell (bash = unreachable trigger) | ✅ confirmed | same rig, same binary: zsh → 20 queries; bash → **0**; GitHub `configure-shell.sh` does `chsh -s /bin/bash` — the hosted-runner config |
 | T6 | xtty's `ProcessInfo.hostName` is the call site | ✅ confirmed | lldb breakpoint → full backtrace with `PaneController.swift:92/94/263/265` frames; TextEdit control = 0 dnssd requests |
+
+*2026-07-07 additions (T7–T10 — the build-time / rig-level grant refutations): **§8e**.*
 
 The two mid-course confounds that produced T2/T4 are instructive: the §8/§9 "quiet" rigs carried **two bundled deltas** (`chsh -s /bin/bash` **and** `scutil --set HostName`) applied as one "runner parity" step — so the 26.4-vs-26.5 comparison silently varied three things (OS, shell, hostname) at once. Un-bundling them (T4/T5) took two extra controlled runs on a single rig.
 
@@ -126,16 +128,84 @@ plutil -p /Library/Preferences/com.apple.networkextension.plist | grep -B8 '"<bu
 ## 6. Residual unknowns
 
 - ❓ The arbiter's modal-vs-silent decision (§2a) — deliberately not chased further; moot for xtty while no gated call exists.
-- ❓ The product-side trigger still ships for real zsh users of xtty on every macOS (one first-launch dialog + a main-thread block on first OSC 7). A non-resolving product fix was proposed (`gethostname` + `SCDynamicStoreCopyLocalHostName` in `localHostNames`) and **dropped by owner decision** (test-image scope only). Recorded so it isn't rediscovered from scratch; the trigger will re-surface if xtty is dogfooded under zsh with a fresh identity or on user machines.
+- ❓ The product-side trigger still ships for real zsh users of xtty on every macOS (one first-launch dialog + a main-thread block on first OSC 7). A non-resolving product fix was proposed (`gethostname` + `SCDynamicStoreCopyLocalHostName` in `localHostNames`) and **dropped by owner decision** (test-image scope only). Recorded so it isn't rediscovered from scratch; the trigger will re-surface if xtty is dogfooded under zsh with a fresh identity or on user machines. **(2026-07-07: the fix is behavior-preserving and *more correct* — §8d; and T7/T8/T10 close every build-time / rig-level alternative — §8b/§8c/§8e — so the product `gethostname` swap is the only durable path besides running headless.)**
 - ❓ Whether future macOS gates something the *XCTest stack itself* does (the DTS iPadOS-26.3 precedent) — the rig's canary is the P1/P2 zero-count check in the verification recipe; a regression shows up as a named count, not a mystery flake.
 
 ## 7. Artifacts
 
 `~/Downloads/xtty-vm-poc/artifacts/` — `ln-diagnosis/` (pre-fix captures: the 20-query volleys, the trust/pending/prompting lines, `run1-modals-and-clobbered-menu.png` with two stacked consent dialogs); `bash-image-verify/` (post-fix: `REVIEW.md`, full-suite `.xcresult`, `ln-suite.log` with 0/0/0, suite log — the 34/7/1 exact CI envelope); `minimal-image-run/` (§12 originals incl. the TN3179 refutation screenshots). VMs kept: `xtty-verify` (pre-fix zsh rig), `xtty-verify2` (post-fix bash rig), both stopped.
 
+## 8. Addendum (2026-07-07) — TN3179 *macOS considerations* read, the build-time-grant refutation (three-tier NE-store provenance map), the SSH-child refutation, and the `$HOST`=`gethostname` call-site lock
+
+> **Provenance:** 2026-07-07 graphics-VM session on the freshly-built goldens `xtty-test-zsh:26.5` (zsh) and `xtty-test:26.5` (bash), plus a full read of TN3179's *macOS considerations* (the JSON behind the SPA) and a repo call-site trace. Method: **by effect throughout** — modal presence in a windowed Tart clone + NE-store `plutil` transitions across cold boots. Extends §2a (no supported pre-seed → now *measured*, with the mechanism) and §1/§2b/§6 (the non-resolving product fix → source pinned). Artifacts in §8h.
+
+### 8a. TN3179 *macOS considerations*, read in full
+
+macOS **auto-allows** local-network access for **(i)** any daemon started by `launchd`, **(ii)** any program running as **root**, **(iii)** command-line tools run from Terminal or over **SSH — and any child processes they spawn**. The exception does **not** extend to `launchd` *agents*. When a process performs a local-network operation, macOS "tracks down the **responsible code**" and "considers **the app** to be the responsible code" — recording the choice per-app.
+
+- The `AllowedEthernet/WiFiLocalNetworkAddresses` keys are **destination-address exemptions**: *"the system treats every address on that network as if it were not a local network address. Every program can access that address, regardless of its Local Network privilege state."* → confirms §2a: they gate *connections to addresses* (unicast-address axis); xtty's trigger is a reverse-DNS **query** (name axis) — orthogonal, which is why baking them in fails (8e/T7).
+- *"Device managers aren't able to configure local network privacy using MDM."* — no profile path (confirms §2a).
+
+### 8b. Build-time grant is refuted every way — the three-tier NE-store provenance map
+
+§2a's "no supported pre-seed; hand-editing is daemon-reconciled" is now **measured**. Extracted xtty's *granted* NE-store record, baked it into a fresh golden clone **before first boot** (the faithful pkr.hcl-bake simulation), cold-booted, and read the store:
+
+| Record provenance | Survives cold boot? | Suppresses the prompt? |
+|---|---|---|
+| **Hand-baked** (build-time injection) | ❌ **pruned on boot** | ❌ re-prompts |
+| **Implicit** (prompt timed out, no click) | ✅ survives | ❌ **re-prompts** on next launch |
+| **Explicit** (a real *Allow* click) | ✅ survives | ✅ **silent** thereafter |
+
+- **Mechanism:** `nesessionmanager` **rewrites the NE store on every boot and prunes records lacking live-consent provenance.** Apple system-app records (`com.apple.TV`, `com.tcltk.wish`) transplant fine; a hand-baked `com.xtty.app` record is stripped — **even with xtty installed and LaunchServices-registered.** Only a record the OS itself created via the live consent flow persists, and only an **explicit** decision both persists *and* silences.
+- **The record is `SigningIdentifier`-keyed, NOT cdhash-keyed:** it carries `SigningIdentifier = com.xtty.app` with an **empty `DesignatedRequirement` + `AllowEmptyDesignatedRequirement = true`** (ad-hoc-signed → no requirement to bind). So a pre-seed *would* match across ad-hoc rebuilds — the killer is **provenance-pruning at boot**, not identity drift (retires the cdhash hypothesis, 8e/T9).
+- **By effect:** baked store count `1` (granted, `DenyMulticast=false`) → cold boot → `0` (pruned) → launch xtty → a **new** record appears (`DenyMulticast=true, MulticastPreferenceSet=false`, i.e. fresh/implicit) and the **modal fires** in the graphics VM.
+
+### 8c. The SSH/CLI-child exception does **not** cover xtty (responsible-code attribution)
+
+Hypothesis from 8a(iii): launch xtty as an SSH child → auto-allowed. Tested by `exec`-ing the binary directly over SSH so xtty's parent is `sshd-session: admin@notty` (confirmed via `ps`). **The modal still appeared.** macOS attributes the LN operation to the **app bundle's own identity** (`com.xtty.app` is its own responsible code), not the sshd ancestor — the exception covers CLI tools and their *non-bundled* children, not a GUI app bundle.
+- **Corollary — this is *not* why the headless rig is quiet.** Headless is quiet because there is **no interactive WindowServer to raise the modal** (the gated op resolves to the default deny; the semantic tests take their graceful-degradation arms), and the XCUITest runner launches xtty via `testmanagerd` (attributed to the app), *not* as an SSH child. The "SSH exception explains headless" guess is refuted (8e/T10).
+
+### 8d. The product fix, locked: `localHostNames` from `gethostname()` (matches the shell's `$HOST`)
+
+§2b/§6 noted shells emit OSC 7 authorities from `$HOST` (= `gethostname`). The exact injected emitter is now pinned — `App/Resources/shell-integration/zsh/xtty-integration:30`:
+```zsh
+printf '\e]7;kitty-shell-cwd://%s%s\a' "${HOST}" "${PWD}"
+```
+zsh's `$HOST` is `gethostname(3)` (no reverse-DNS). The **only** consumer of the hostname is `PaneController.localHostNames` (`App/PaneController.swift:92`), built today from `ProcessInfo.hostName` (**reverse-DNS**) and fed to `OSC7.decode` for the local-vs-remote cwd classification. So the current match-set is sourced from a *different* API than what the shell emits — it works only via the short-form-fallback overlap.
+
+Building `localHostNames` from **`gethostname()`** instead:
+- matches the **exact syscall behind `$HOST`** → a guaranteed match, strictly *more correct* than the reverse-DNS source (closes the edge case where a corporate reverse-DNS FQDN diverges from the emitted `$HOST`);
+- is **behavior-preserving** in the common case (both APIs return the same name);
+- removes the reverse-DNS → **kills the trigger under zsh too.**
+
+**Refinement to §6:** use **`gethostname()`**, *not* `SCDynamicStoreCopyLocalHostName()` — the latter is the Bonjour `LocalHostName`, which can differ from `$HOST`. The fix is a one-call-site swap plus one `localHostNames`-contains-`gethostname` unit test.
+
+### 8e. New theory fates (appends §3)
+
+| # | Theory | Fate | Killing/confirming experiment |
+|---|---|---|---|
+| T7 | Baking TN3179 `Allowed*` ranges into the image (vs runtime) suppresses it | ❌ refuted | baked `10/8`+`172.16/12`+`192.168/16` (⊇ the VM's `192.168.64.x`) into `xtty-test-zsh:26.5`; modal still fired in the graphics VM |
+| T8 | Pre-seed a granted NE-store record at build time | ❌ refuted | baked granted store → cold boot → xtty record **pruned to 0**; only a live *explicit* click is durable+silent (8b) |
+| T9 | cdhash-binding is what kills the pre-seed | ❌ retracted | record has empty `DesignatedRequirement`+`AllowEmptyDesignatedRequirement=true` → `SigningIdentifier`-keyed, not cdhash; the real killer is boot provenance-pruning (T8) |
+| T10 | The SSH/CLI-child auto-grant exception covers xtty | ❌ refuted | `exec`'d over SSH (parent=`sshd-session`); modal still appeared — app bundle is its own responsible code (8c) |
+
+### 8f. New guideline (appends §5)
+
+**G11 — A privacy grant needs live-consent provenance; you can't fabricate one at build time.** `nesessionmanager` prunes pre-seeded third-party Local-Network records on boot; only OS-created (live-flow) records persist, and only an explicit user decision both persists *and* silences. Corollary for a build-time rig: there is **no grant to bake** — the only levers are removing the trigger (G9: the `gethostname` swap) or running headless (no WindowServer → no modal). Generalizes G9 from "the arbiter is unstable" to "the arbiter's *grant* is unforgeable."
+
+### 8g. Re-verify by effect
+
+- **Pre-seed refutation:** clone the zsh golden → bake a granted `com.apple.networkextension.plist` → `sudo reboot` → `plutil -p …networkextension.plist | grep -c com.xtty.app` **expect 0** (pruned); `open` xtty in graphics → **modal appears**.
+- **The product fix:** apply the `gethostname()` swap → run a zsh login shell under **P1/P2** → **expect 0/0/0** (no reverse-DNS volley, no `pending`, no prompt).
+
+### 8h. Artifacts (this session)
+
+Graphics-VM screenshots (bake-refuted zsh modal; SSH-child modal; the Settings ▸ Privacy ▸ Local Network toggle showing xtty ON after an explicit Allow; the clean bash launch), NE-store `plutil` dumps across cold boots, and the TN3179 JSON read — under this session's `$CLAUDE_JOB_DIR/tmp/` (`zsh-manual-capture.png`, `preseed-*.png`, `ne-store-dump.txt`, `sshchild-shot.png`, `ln-now.png`, `bash-xtty-launch.png`). Session clones (stopped, disposable): `zsh-manual`, `zsh-preseed`, `zsh-sshtest`, `bash-manual`; goldens `xtty-test:26.5` + `xtty-test-zsh:26.5` untouched.
+
 ## Sources
 
 - Live measurements this session (primary): unified-log captures + greps on the four rigs; lldb backtrace (`DNSServiceCreateConnection` → `PaneController.swift:92/94/263/265`); NE-store `plutil` reads on all rigs; the T2 bare-metal 26.2 fresh-identity repro; the T4/T5 same-rig A/B; the `test-image-bash-shell` verification run.
 - Repo ground truth: `App/PaneController.swift`, `XttyCore/Sources/XttyCore/OSC7.swift`, `openspec/specs/shell-integration/spec.md`; `packer/xtty-test.pkr.hcl` + `packer/README.md` (post-change).
 - External source reads: `actions/runner-images` `images/macos/scripts/build/configure-shell.sh` (+ `configure-hostname.sh`, `configure-tccdb-macos.sh`); `cirruslabs/macos-image-templates` full-repo grep (zero LN/hostname handling; `update-tcc-database.sh` scope).
+- §8 addendum (2026-07-07): live graphics-VM by-effect measurements on `xtty-test-zsh:26.5` + `xtty-test:26.5` (modal presence + NE-store `plutil` transitions across cold boots — the three-tier provenance map; the SSH-child `ps`-confirmed parentage repro); the injected-emitter call-site trace (`App/Resources/shell-integration/zsh/xtty-integration:30` → `${HOST}`); TN3179 *macOS considerations* read in full from the doc JSON (`.../tn3179-understanding-local-network-privacy.json` — the daemon/root/SSH-child auto-grant exceptions, responsible-code attribution, the `Allowed*` destination-exemption definition, the no-MDM statement).
 - Prior/companion docs: [`local-macos-vm-ci-reproduction.md`](local-macos-vm-ci-reproduction.md) §12–§12f; Apple TN3179 (exemption semantics; no MDM payload); eclecticlight.co LN-privacy internals (the `mdns:trust`/pathRule log vocabulary, observed on 26.2); Apple DTS forum precedent (XCTest LN change at iPadOS 26.3); Sequoia-era reports of `NSProcessInfo.hostName` triggering the prompt.
