@@ -89,13 +89,24 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
     /// Lowercased names that denote the local machine, so an OSC 7 cwd reported by
     /// the local host is treated as a local path and a foreign host (e.g. over ssh)
     /// is flagged remote. Computed once.
-    static let localHostNames: Set<String> = {
-        var names: Set<String> = ["", "localhost"]
-        let host = ProcessInfo.processInfo.hostName.lowercased()  // e.g. marks-mbp.local
-        names.insert(host)
-        if let short = host.split(separator: ".").first { names.insert(String(short)) }
-        return names
-    }()
+    ///
+    /// Sourced from `gethostname(2)` — the same syscall behind the shell's `$HOST`,
+    /// which is the authority zsh emits in OSC 7, so this set matches by
+    /// construction. Deliberately **not** `ProcessInfo.hostName`: that resolves via
+    /// reverse-DNS, which raised the macOS Local Network privacy modal and blocked
+    /// the main actor 38–62 s on the first prompt (and misclassified local cwds as
+    /// remote whenever a corporate reverse-DNS FQDN diverged from `$HOST`). See
+    /// `research/03-analysis/local-network-privacy-forensics.md` (§2b, §8d, §8g).
+    static let localHostNames: Set<String> = LocalHost.names(from: systemHostName())
+
+    /// The system host name via `gethostname(2)` — no network I/O (contrast the
+    /// reverse-DNS `ProcessInfo.hostName`). Returns `""` if the syscall fails, in
+    /// which case the derived set degrades to the always-local constants.
+    private static func systemHostName() -> String {
+        var buffer = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+        guard gethostname(&buffer, buffer.count) == 0 else { return "" }
+        return String(cString: buffer)
+    }
 
     #if DEBUG
     /// DEBUG-only live-instance count for the P7c lifecycle census (absent in
