@@ -203,6 +203,12 @@ $SSH admin@$IP \
 #    Deleting the clone here is a human's optional last step, not an automated
 #    one — a caller like the xtty-test-validator agent lists the clone in its
 #    cleanup manifest instead, so a red result stays up for follow-on review.
+#    For a GRAPHICS-arm screenshot, capture the Tart VM WINDOW host-side
+#    (`screencapture -l<windowid>`) — NOT guest `screencapture`-over-ssh, which
+#    trips the macOS ScreenCaptureKit private-window-picker consent attributed
+#    to com.apple.sshd-session (responsible-code attribution). The host already
+#    has Screen Recording consent (xtty-dev / make bench); do not pre-seed a
+#    guest grant. See research/03-analysis/local-network-privacy-forensics.md §9c.
 DEST=~/Downloads/xtty-vm-poc/artifacts/my-run; mkdir -p "$DEST"
 scp -r -i ~/.ssh/xtty-vm -o StrictHostKeyChecking=accept-new \
   admin@$IP:~/xtty-build/result.xcresult "$DEST/"

@@ -202,10 +202,62 @@ Building `localHostNames` from **`gethostname()`** instead:
 
 Graphics-VM screenshots (bake-refuted zsh modal; SSH-child modal; the Settings ▸ Privacy ▸ Local Network toggle showing xtty ON after an explicit Allow; the clean bash launch), NE-store `plutil` dumps across cold boots, and the TN3179 JSON read — under this session's `$CLAUDE_JOB_DIR/tmp/` (`zsh-manual-capture.png`, `preseed-*.png`, `ne-store-dump.txt`, `sshchild-shot.png`, `ln-now.png`, `bash-xtty-launch.png`). Session clones (stopped, disposable): `zsh-manual`, `zsh-preseed`, `zsh-sshtest`, `bash-manual`; goldens `xtty-test:26.5` + `xtty-test-zsh:26.5` untouched.
 
+## 9. Addendum (2026-07-08) — the product `gethostname` fix measured GREEN on the zsh graphics rig; P5 is not a clean discriminator on a build-used golden; and the instrument's own privacy gate (Screen Capture), refused a pre-seed
+
+Provenance: live by-effect capture on a fresh **graphics** clone of `xtty-test-zsh:26.5` running the `fix-osc7-hostname-reverse-dns` build (HEAD `4ebe0cb`, the `gethostname(2)` swap), via the `xtty-test-validator` agent, 2026-07-08. This executes §8g's "product fix" re-verify line. Evidence: `~/Downloads/xtty-vm-poc/artifacts/2026-07-08-fix-osc7-hostname-lncapture/`.
+
+### 9a. The fix is GREEN by effect — §8g's product-fix line, executed
+
+The `gethostname()` swap (`PaneController.localHostNames = LocalHost.names(from: systemHostName())`) built and launched on a fresh, uniquely-named clone (`xtty-osc7-lncap-0708`) of the **zsh** golden, 3 vCPU, **graphics** boot (live WindowServer — a modal *would* render if the trigger survived), under P1/P2:
+
+| Probe | Pre-fix (the `add-zsh-test-image` 4.1 baseline) | Fixed build (measured) |
+| --- | --- | --- |
+| P2a reverse-DNS volley `client pid … (xtty)` | ~20/launch | **0** |
+| P2b modal raised (`Showing local network`) | 1 | **0** |
+| P2c gate `policy 'pending'` | ≥1 | **0** |
+| mDNSResponder lines mentioning xtty | — | **0 of 453** |
+| modal on screen | present | **absent** (clean zsh prompt) |
+| first-prompt UI freeze | 38–62 s | **none** (prompt painted in ≤28 s) |
+
+This is the **GREEN complement** of `add-zsh-test-image` task 4.1's RED baseline (same graphics zsh rig, the *unfixed* build → volley + `pending` + modal). It confirms **G9 by effect**: removing the trigger (don't resolve) is version-proof, where every grant-shaped fix was refuted.
+
+### 9b. New fate + G3 corollary — P5 is not a clean discriminator on a golden that has built xtty
+
+P5 (`plutil … networkextension.plist | grep -c com.xtty.app`) read **1**, not the expected 0 — but it is **benign**, not a gate event. `nesessionmanager` logged a **`UUID cache hit`** for `com.xtty.app` (the UUID *pre-existed* — baked into this golden by prior xtty build/test runs — not minted this launch), enumerated in the same bulk **default-deny** pass as pre-installed `com.tcltk.wish`/`com.apple.TV` (`Policy IDs not present` → `Deny Policy IDs added`), with **no** `local network`/consent/pending/denied-flow semantics (P2c=0 corroborates).
+
+**G3 corollary (appends §5):** the arbiter keys on **bundle-id** and remembers — so a golden that has *ever* built or run xtty carries a `com.xtty.app` NE record into **every** clone. "Fresh clone" ≠ "NE-store-pristine." Therefore **P5 alone is not a clean LN-gate discriminator on a build-used golden**; the decisive signals are **P2a/P2b/P2c + mDNSResponder xtty-absence + the on-screen modal**. For a truly pristine P5 baseline, reset the *identity* (P3 bundle-id swap), not the machine — or use a golden never used to build xtty.
+
+### 9c. The instrument tripped a sibling privacy gate — and we refused to pre-seed it (G9, one gate over)
+
+During the capture, running `screencapture` **over SSH** in the guest raised the macOS 15+/26 **ScreenCaptureKit private-window-picker bypass** consent — *"com.apple.sshd-session is requesting to bypass the system private window picker and directly access your screen and audio."* Note the requester is **`com.apple.sshd-session`**, not `screencapture`: TCC walks up to the **responsible** process (the login session), the same responsible-code attribution as §8c's SSH-child.
+
+A build-time **pre-seed** of this grant was considered — the cirruslabs base ships the `update-tcc-database.sh` TCC-write mechanism (used today for *automation*, `kTCCServiceAppleEvents`) — and **rejected**, for the same reasons this whole doc rejects LN pre-seeds:
+
+1. **Wrong, moving client** — the responsible process is a **system daemon** (`sshd-session`), whose code identity churns across OS updates; a baked grant is cdhash-fragile.
+2. **Possibly the wrong gate** — the picker-bypass is a *newer* layer than classic `kTCCServiceScreenCapture`; a Screen-Recording TCC row may not silence it on 26.x at all (unverified — would need its own by-effect spike).
+3. **It argues with a churning arbiter (G9/G11)** — Apple's screen-capture consent policy shifts across point releases; a grant-shaped fix inherits that instability, exactly as the LN pre-seeds did.
+
+And it is **unnecessary**: the load-bearing evidence (P1/P2 log counts, P5 store read) is **screen-independent** — it sits at rungs 1 & 4 of the G7 hierarchy, while the screenshot is rung 3 — and the corroborating visual is obtainable **host-side** (a Tart graphics VM is a *window on the host*; the host already has Screen Recording consent via the `xtty-dev`/`make bench` setup). **Convention: capture the graphics-arm visual host-side (`screencapture -l<windowid>`), never guest `screencapture`-over-ssh** (recorded in `packer/README.md` Runtime workflow).
+
+### 9d. New fate (appends §3 / §8e)
+
+| # | Theory / lever | Fate | Reason |
+| --- | --- | --- | --- |
+| T11 | Pre-seed the guest **Screen-Capture** TCC to silence the `sshd-session` picker-bypass prompt | ❌ **rejected by design** (not spiked) | Wrong/moving client (system daemon), maybe-wrong-gate (picker-bypass ≠ classic `kTCCServiceScreenCapture`), and G9/G11 (argues with a churning arbiter) — *and* unnecessary: the evidence is screen-independent and the visual is host-capturable. §9c. |
+
+### 9e. New guideline (appends §5)
+
+**G12 — Don't pre-seed a privacy grant to rescue *low-rung* evidence; verify at the highest rung and route the instrument around its own gate.** When an *instrument* (here `screencapture`) trips a privacy arbiter, the fix is not to grant it — it is to lean on the rung-1/rung-4 evidence that does not need it (G7), and to take the low-rung corroboration from a context that already has consent (the host), not to bake a fragile guest grant. Generalizes G9 from the *target's* trigger to the *instrument's* trigger.
+
+### 9f. Re-verify by effect (appends §8g)
+
+- **The product fix, on the zsh graphics rig (done 2026-07-08):** fresh clone of a zsh golden → graphics boot → host-build the `gethostname`-fixed app → launch under P1 → grep P2 → **measured 0/0/0** + mDNS xtty-absent + no modal + no freeze. Re-run identically to re-check. **Caveat:** on a build-used golden, P5 may read `1` benignly (§9b) — read P2a/b/c, not P5, as the discriminator.
+
 ## Sources
 
 - Live measurements this session (primary): unified-log captures + greps on the four rigs; lldb backtrace (`DNSServiceCreateConnection` → `PaneController.swift:92/94/263/265`); NE-store `plutil` reads on all rigs; the T2 bare-metal 26.2 fresh-identity repro; the T4/T5 same-rig A/B; the `test-image-bash-shell` verification run.
 - Repo ground truth: `App/PaneController.swift`, `XttyCore/Sources/XttyCore/OSC7.swift`, `openspec/specs/shell-integration/spec.md`; `packer/xtty-test.pkr.hcl` + `packer/README.md` (post-change).
 - External source reads: `actions/runner-images` `images/macos/scripts/build/configure-shell.sh` (+ `configure-hostname.sh`, `configure-tccdb-macos.sh`); `cirruslabs/macos-image-templates` full-repo grep (zero LN/hostname handling; `update-tcc-database.sh` scope).
 - §8 addendum (2026-07-07): live graphics-VM by-effect measurements on `xtty-test-zsh:26.5` + `xtty-test:26.5` (modal presence + NE-store `plutil` transitions across cold boots — the three-tier provenance map; the SSH-child `ps`-confirmed parentage repro); the injected-emitter call-site trace (`App/Resources/shell-integration/zsh/xtty-integration:30` → `${HOST}`); TN3179 *macOS considerations* read in full from the doc JSON (`.../tn3179-understanding-local-network-privacy.json` — the daemon/root/SSH-child auto-grant exceptions, responsible-code attribution, the `Allowed*` destination-exemption definition, the no-MDM statement).
+- §9 addendum (2026-07-08): live by-effect graphics capture (`xtty-test-validator`) on a fresh `xtty-test-zsh:26.5` clone of the `fix-osc7-hostname-reverse-dns` build (HEAD `4ebe0cb`) — P1/P2 log-stream + P5 NE-store greps (**0/0/0**, mDNSResponder xtty-absent, benign `P5=1` `UUID cache hit`), the no-modal on-screen screenshot, and the `com.apple.sshd-session` ScreenCaptureKit picker-bypass consent observation. Artifacts: `~/Downloads/xtty-vm-poc/artifacts/2026-07-08-fix-osc7-hostname-lncapture/` (`ln.log`, `verdict.txt`, `lncap-shot.png`, `host-build.log`, `REVIEW.md`).
 - Prior/companion docs: [`local-macos-vm-ci-reproduction.md`](local-macos-vm-ci-reproduction.md) §12–§12f; Apple TN3179 (exemption semantics; no MDM payload); eclecticlight.co LN-privacy internals (the `mdns:trust`/pathRule log vocabulary, observed on 26.2); Apple DTS forum precedent (XCTest LN change at iPadOS 26.3); Sequoia-era reports of `NSProcessInfo.hostName` triggering the prompt.
