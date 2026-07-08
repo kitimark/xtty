@@ -305,18 +305,36 @@ Lineage: pre-wide-prompt `39/1/1` of 41 (graphics run 2026-07-06 after
 `retire-metal-renderer` deleted the always-passing Metal e2e
 `testConfiguredMetalRendererIsReported`; from the 2026-07-05 `40/1/1` of 42,
 headless ×2 + graphics) → the `38/2/1` of 41 wide-prompt interim (find-bar
-reproduced red) → **this `40/1/1` of 42**: find-bar greened by the wrap-tolerant
-fix, `+1` test from the pair's new self-validating
-`testSoftWrapGuardIsWrapTolerant` guard). The 7 menu-dispatch tests that made
-this rig's pre-fix envelope **pass**, and both
-`testFindBarOpensLocatesAndDismisses` and the new soft-wrap guard are **green**;
-the single expected residual is **`testMultiLinePasteIsNotAutoExecuted`**, and it
-is **NOT a product bug** — the image's `/bin/bash` login shell is macOS **bash
-3.2.57**, whose readline lacks `enable-bracketed-paste`, so a pasted newline
-executes (grid-proven; zsh + bash 5.1+ users are unaffected). A future harness
-change guards that test on a no-bracketed-paste shell; until then it is the
-image's one known-benign red. (The envelope above is the **bash** golden
-`xtty-test:26.5`.)
+reproduced red) → the `40/1/1` of 42 find-bar-green state (paste `:87` still red).
+
+> **`split-shell-dependent-testplan` retired the bash paste red (2026-07-08).** The
+> multi-line-paste test — renamed `testMultiLinePasteIsNotAutoExecuted` →
+> **`testMultiLinePasteMatchesShellBracketing`** — now branches on the focused
+> pane's **observed** `bracketedPasteMode` (a new DEBUG state-dump field) and
+> **asserts the correct behavior for each shell**: on the **bash** golden
+> (bracketed-paste OFF) it asserts the newline-terminated first line **executed**
+> (`command not found` present, exactly once) while the tail line stayed staged —
+> xtty's faithful forwarding (design D2). So the former `:87` red is now an
+> **asserted green bash arm**, not a residual. Simultaneously the OSC 133/7
+> **semantic-capture family** stopped vacuous-passing on bash: each formerly-silent
+> `guard waitForCaptureActive else { return }` now asserts a **crisp negative**
+> (no command boundaries / no semantic action on a non-injecting shell) — still a
+> pass, but now a real one. **Bash-golden envelope: `41/0/1` of 42 — MEASURED**
+> (the paste red flipped to green; no test added/removed — the rename + the crisp
+> negatives keep the pass count, `+1` from the greened paste). Confirmed by the
+> change's full matrix (`split-shell-dependent-testplan` task 6.1, 2026-07-08):
+> headless bash ×2 both `41/0/1`, carrying **16** `semantic-capture-absent-arm-asserted`
+> crisp-negative attachments and **0** `…capture inactive…` (no vacuous pass),
+> paste `bracketed-mode-false` (first line executed once / tail staged). Evidence:
+> `~/Downloads/xtty-vm-poc/artifacts/2026-07-08-split-shell-dependent-testplan-fullmatrix/`.
+
+The 7 menu-dispatch tests that made this rig's pre-fix envelope **pass**, and both
+`testFindBarOpensLocatesAndDismisses` and the soft-wrap guard are **green**; with
+`split-shell-dependent-testplan` the paste test asserts the bash execution arm
+**green** too, so the bash golden `xtty-test:26.5` carries **no known-benign
+paste red** (the image's `/bin/bash` is macOS **bash 3.2.57**, whose readline
+lacks `enable-bracketed-paste` — that shell-specific behavior is now the test's
+*asserted* expectation, not a failure).
 
 **zsh rig envelope: `41/0/1` of 42, measured** (headless + graphics on
 `xtty-test-zsh:26.5`; 2026-07-08, `harden-paste-wrap-assertion` task 3.3 — evidence
@@ -346,10 +364,12 @@ proven by effect):
   the dump inserts between physical rows. The **wrap-tolerant matcher** at
   `:82`/`:84` (mirroring `:53` / `:198`) greens it; a recurrence is now a
   **regression**. This **retires** the residual `split-shell-dependent-testplan`
-  was slated to `XCTSkip` — it is **fixed, not skipped**; that change now skips
-  only the **bash `:87`** execution arm (bracketed-paste-absent), not the zsh
-  `:82` arm. A zsh run that instead showed `…capture inactive…` attachments would
-  still be a vacuous pass and would **fail** acceptance — it did not (0).
+  was slated to `XCTSkip` — it is **fixed, not skipped**. `split-shell-dependent-testplan`
+  then went further and **asserts** (not skips) the **bash `:87`** execution arm
+  too, keeping the zsh `:82`/`:84` wrap-tolerance intact — so **neither** arm is
+  skipped now; both **assert** their shell's behavior. A zsh run that showed
+  `…capture inactive…` attachments would still be a vacuous pass and would **fail**
+  acceptance — it did not (0).
 
 The **graphics** zsh run matched headless exactly — `41/0/1`, 0 capture-inactive,
 no modal (`harden-paste-wrap-assertion` task 3.3; the earlier `add-zsh-test-image`
@@ -357,13 +377,15 @@ graphics pre-check was `40/1/1`, `…/2026-07-08-graphics-both-goldens/`).
 
 **The CI `findbar-marker-wrap` gap is CLOSED — reproduced, then fixed, in-guest.** That flake is a pure **prompt-width** artifact — a long `\h` soft-wraps the typed marker, defeating a strict grid match. `add-vm-prompt-width-parity` gave the image a 59-char single-label `\h` (all three `scutil` keys, mirroring `runner-images`' runtime name), so the marker wraps in-guest and the find-bar red **reproduced here**; `harden-findbar-wrap-assertion` then made the find-bar focus-restore assertion (`:198`) **wrap-tolerant** and it flipped **green** — D2-confirmed against a genuine in-guest soft-wrap (`AFTERFIND####` splitting behind the 58-char `\h` prompt), not trivially. The image now mirrors CI on **race class**, **shell capability**, *and* **prompt width**. **Measured correction:** a long `\h` does **NOT** flip the paste test's failing line `:87`→`:84` as `ci-runner-prompt-width-forensics.md` §6 (option C) predicted — measurement shows it **stays at `:87`** (the `command not found` check). Bash 3.2 executes the pasted newline, so line B (`beta####`) echoes contiguously and fits before col 80, leaving the `:84` `waitForContains(lineB)` still passing; the failure remains the downstream `:87`. Verified mechanism + the gethostname spike (**T6, now closed**) + the options menu: `research/03-analysis/ci-runner-prompt-width-forensics.md`.
 
-Acceptance = **this measured envelope**, *not* a bare all-green (the paste
-residual is inherent to the bash rig). Now that the red→green pair has closed
-(find-bar green), the interim carve-out is retired: a regression is **any
-menu-dispatch or prompt-width test going red again** (find-bar included — its
-wrap-tolerant fix has shipped), or **any second non-paste failure**.
-Graphics and headless match exactly (the fix's `windowCount` state-dump
-assertion removed the old graphics-mode focus-steal red).
+Acceptance = **this measured envelope**. With `split-shell-dependent-testplan` the
+former bash paste residual is retired (asserted green on both goldens), so the
+expected envelope is **`41/0/1` of 42 on _both_ goldens** (the sole skip is the
+opt-in benchmark e2e). A regression is now **any test going red** — menu-dispatch,
+prompt-width (find-bar included), the paste test on either arm, or a
+semantic-capture test that either reds *or* reverts to a **vacuous pass** (a
+`…capture inactive…` attachment without an assertion is itself a defect now).
+Graphics and headless match exactly (the `windowCount` state-dump assertion
+removed the old graphics-mode focus-steal red).
 
 **Confirm-close class (update 2026-07-06):** `harden-churn-shell-readiness`
 landed its computed-marker shell-readiness gate; a full sweep (Tier 0 `232/0/0`,
@@ -389,10 +411,10 @@ above; this table never duplicates a number, only causes.**
 
 | Class | Where it shows up | Cause |
 | --- | --- | --- |
-| **Shell arm (zsh vs bash)** | Local bare metal (zsh) + the **`xtty-test-zsh:26.5`** VM rig (zsh) vs the bash VM rig `xtty-test:26.5` + hosted CI (bash) | xtty injects OSC 7/133 shell integration into **zsh only** (`ZDOTDIR` redirection). Under **bash** the semantic-capture family takes its graceful-degradation arm — a **vacuous pass** carrying `…capture inactive…` attachments — parity with the (also-bash) hosted runner, not a regression. Under **zsh** the family **asserts for real** (0 capture-inactive attachments; measured `add-zsh-test-image` task 5.1) — the real coverage the zsh rig exists to provide. Also the source of the bash deprecation-banner grid corruption measured (and fixed) in `github-actions-ci-cd.md` §12. |
+| **Shell arm (zsh vs bash)** | Local bare metal (zsh) + the **`xtty-test-zsh:26.5`** VM rig (zsh) vs the bash VM rig `xtty-test:26.5` + hosted CI (bash) | xtty injects OSC 7/133 shell integration into **zsh only** (`ZDOTDIR` redirection). Since `split-shell-dependent-testplan` the semantic-capture family **asserts per shell** (no more vacuous passes): under **zsh** it takes the **capability-present** arm and asserts the real behavior (blocks form, cwd tracks, sidebar populates — 0 capture-inactive attachments); under **bash** it takes the **capability-absent** arm and asserts the **crisp negative** (`assertSemanticCaptureInactive` — no command boundaries / no semantic action, proving OSC 133 did not leak into a non-injecting shell). Both arms are **real assertions and green** — a bash test that *reverts* to a silent early-return (`…capture inactive…` attachment without asserting) is now itself a defect. Also the source of the bash deprecation-banner grid corruption measured (and fixed) in `github-actions-ci-cd.md` §12. |
 | **Menu-race sensitivity by machine speed** | Pre-`fix-main-menu-clobber`: ~100% on the constrained 3-vCPU VM, ~0% on unconstrained bare metal | The SwiftUI main-menu clobber (`swiftui-mainmenu-clobber-forensics.md`) was a per-launch race whose odds scale with machine load — the VM's CPU constraint is *why* this rig reproduced it when bare metal didn't. Retired as a live source now that the fix has landed (validated 3× — the counts live in Acceptance above; `github-actions-ci-cd.md` §18); kept here because a **regression** in this class would reproduce the pre-fix menu-dispatch failing pattern recorded in Acceptance's pre-fix history. |
-| **Bracketed-paste — bash execution arm** | The bash VM rig `xtty-test:26.5` + hosted CI (both `/bin/bash` 3.2.57); **not** the zsh rig, not local zsh, not Homebrew bash 5.1+ | macOS's stock **bash 3.2.57** readline lacks `enable-bracketed-paste` — a pasted multi-line string **executes** instead of staging. `testMultiLinePasteIsNotAutoExecuted` reds at **`:87`** ("pasted text appears to have been executed"). Known-benign residual (`github-actions-ci-cd.md` §19b). |
-| **Bracketed-paste — zsh soft-wrap arm (FIXED)** | The zsh VM rig `xtty-test-zsh:26.5` | zsh **has** bracketed paste, so the paste correctly does **not** auto-execute (product behavior is right). The former `:82` red ("first pasted line missing from grid") was **not** a grid-scrape/staged-region miss but the **prompt-width soft-wrap** class (find-bar wrap class): behind the 59-char parity `\h` the 70-col zsh prompt wraps the 9-char pasted first line past the 78-col boundary. **Fixed** by `harden-paste-wrap-assertion` (wrap-tolerant matcher at `:82`/`:84`, mirroring `:53`/`:198`) — zsh rig `40/1/1` → **`41/0/1`**; a recurrence is now a **REGRESSION**. This retires the residual `split-shell-dependent-testplan` was slated to skip — **fixed, not skipped**; that change now skips only the bash `:87` execution arm. |
+| **Bracketed-paste — bash execution arm (ASSERTED, was a red)** | The bash VM rig `xtty-test:26.5` + hosted CI (both `/bin/bash` 3.2.57); **not** the zsh rig, not local zsh, not Homebrew bash 5.1+ | macOS's stock **bash 3.2.57** readline lacks `enable-bracketed-paste` — a pasted multi-line string forwards line-by-line, so the newline-terminated first line **executes** while the unterminated tail stages. Since `split-shell-dependent-testplan`, `testMultiLinePasteMatchesShellBracketing` (renamed from `testMultiLinePasteIsNotAutoExecuted`) branches on the observed `bracketedPasteMode` and **asserts exactly that** on the bash arm (`command not found` present exactly once; tail staged) — so it is **green**, not the old `:87` red. A recurrence of the *old* red (an unconditional not-executed assertion failing on bash) would be a regression. See `github-actions-ci-cd.md` §19b. |
+| **Bracketed-paste — zsh soft-wrap arm (FIXED)** | The zsh VM rig `xtty-test-zsh:26.5` | zsh **has** bracketed paste, so the paste correctly does **not** auto-execute (product behavior is right). The former `:82` red ("first pasted line missing from grid") was **not** a grid-scrape/staged-region miss but the **prompt-width soft-wrap** class (find-bar wrap class): behind the 59-char parity `\h` the 70-col zsh prompt wraps the 9-char pasted first line past the 78-col boundary. **Fixed** by `harden-paste-wrap-assertion` (wrap-tolerant matcher at `:82`/`:84`, mirroring `:53`/`:198`) — zsh rig `40/1/1` → **`41/0/1`**; a recurrence is now a **REGRESSION**. This retires the residual `split-shell-dependent-testplan` was slated to skip — **fixed, not skipped**; that change then **asserts** the bash `:87` execution arm (rather than skipping it) while preserving this zsh wrap-tolerance, so neither paste arm is skipped. |
 | **Prompt-width wrap** | Both VM rigs (since `add-vm-prompt-width-parity`) + hosted CI; not local zsh (short bare-metal `\h`) | The guest's 59-char `\h` reproduces the hosted runner's prompt width, so a marker typed at the `\h:\W \u\$ ` prompt **soft-wraps** across physical grid rows; a strict (wrap-intolerant) grid match then reds while a wrap-tolerant one passes. This surfaced `testFindBarOpensLocatesAndDismisses` in-guest — the **intended** fidelity of `add-vm-prompt-width-parity` (`ci-runner-prompt-width-forensics.md`; grid-verified by effect). **The find-bar instance is now fixed** — `harden-findbar-wrap-assertion` shipped the wrap-tolerant matcher on that assertion (`:198`) + a deterministic `testSoftWrapGuardIsWrapTolerant` guard (the red→green pair, proven in-guest); **no current test reds on width**, and a recurrence is a regression. But **the width parity itself is durable**, guarding *future* type-at-prompt assertions. Distinct from the CI-only artifact it reproduces: on the runner the long `\h` is runtime-injected; here it is `scutil`-set in the image. |
 | **Confirm-close / interference flake sources** | Local bare metal only (not observed on either VM rig) | (a) **live mouse/keyboard interference** during `make test` driving the real GUI (the hands-off requirement the agent surfaces before that tier) — still a live local-only hazard. (b) a **confirm-close race** when a churn test closed a freshly-split pane before its shell settled (a heavier interactive `~/.zshrc` widened the race window locally vs the VM/CI's leaner bash startup) — **fixed** by `harden-churn-shell-readiness` (a computed-marker shell-readiness gate: the churn test proves the fresh shell executed a command before closing it). The churn test now passes green across local **and** both VM rigs (full-sweep-validated 2026-07-06). Root-caused in `github-actions-ci-cd.md` §13; retained here because a regression would reproduce the pre-fix churn-flake pattern. |
 
@@ -403,10 +425,14 @@ touching the agent's own definition. **Reverse duty:** any change that alters
 test counts or expected residuals (e.g. `retire-metal-renderer`,
 `harden-churn-shell-readiness`, `add-vm-prompt-width-parity`, and its pair
 `harden-findbar-wrap-assertion`, `add-zsh-test-image` — which added the zsh
-rig's envelope + the zsh paste arm — and `harden-paste-wrap-assertion`, which
-greened that zsh paste arm `:82` `40/1/1` → `41/0/1`) MUST update this section —
-and Acceptance — in the same session, or the "runtime read" promise just
-relocates the staleness.
+rig's envelope + the zsh paste arm — `harden-paste-wrap-assertion`, which
+greened that zsh paste arm `:82` `40/1/1` → `41/0/1`, and
+`split-shell-dependent-testplan`, which parameterized the shell-dependent tests
+per shell — flipping the **bash** paste `:87` red to an **asserted green** arm
+(bash golden → expected `41/0/1`) and turning the bash semantic-capture vacuous
+passes into **asserted crisp negatives**) MUST update this section — and
+Acceptance — in the same session, or the "runtime read" promise just relocates
+the staleness.
 
 ## Maintenance
 

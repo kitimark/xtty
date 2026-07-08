@@ -9,8 +9,15 @@
 > the divergence below is now confirmed by effect on real rigs (zsh headless envelope `40/1/1` at that time,
 > semantic family asserting-for-real with 0 capture-inactive; the paste `:82` residual in that envelope was a
 > **prompt-width soft-wrap**, since **fixed** by `harden-paste-wrap-assertion` → `41/0/1`, so only the bash
-> `:87` execution arm is now shell-dependent); the second, `split-shell-dependent-testplan`, remains
-> proposed (the honest-`XCTSkip` follow-up for the bash execution arm). This doc is the *why*; the actionable *what* lives in the changes.
+> `:87` execution arm is now shell-dependent); the second, **`split-shell-dependent-testplan`, is built +
+> parameterized** (archived 2026-07-08) — it **pivoted away from the honest-`XCTSkip`/two-`.xctestplan`
+> partition** below to **parameterize-and-assert**: each shell-dependent test asserts the correct behavior
+> for the terminal's *observed* capability (paste asserts the bash `:87` execution arm rather than skipping
+> it; the semantic family asserts a crisp negative on the incapable shell — 0 last-resort skips needed), so
+> the suite runs whole on every rig with **no test-plan partition**. Measured `41/0/1` on both goldens, 0
+> vacuous passes. This doc is the *why* (and the record of the superseded partition option); the actionable
+> *what* lives in the changes. **See the fates table below — the "two explicit sets + honest skip"
+> option was superseded by parameterize-and-assert.**
 >
 > **Confidence tags:** ✅ grep-proven in this repo · ✅ᶠ measured in a cited forensics doc · ❓ run-to-verify
 > (depends on a rig not yet built).
@@ -109,9 +116,10 @@ The line is exactly the OSC-injection / bracketed-paste boundary; membership fal
 | Pre-grant / suppress the Local Network modal so the rig can just use zsh | ❌ | Not pre-grantable — `tccutil` doesn't cover LN, no MDM payload, NE-plist edits are daemon-reconciled, the arbiter is "irreducible" (`local-network-privacy-forensics.md` §2a, G9). |
 | Swap the rig to Homebrew **bash 5.1+** (has bracketed paste) | ❌ | Fixes *one* test, not the family (bash still gets no OSC injection → semantic tests stay vacuous), and breaks hosted-runner parity (runner is bash 3.2). Image bloat + network dep. |
 | `XCTSkip` the shell-dependent tests everywhere | ❌ alone | Honest, but throws away the coverage entirely — nothing ever exercises the real arm. Only acceptable **paired** with a rig that does run them. |
-| Assert the degraded behavior (first line executes) on bash | ❌ | Inverts the test's intent — asserts the *shell*, not xtty. Zero product value. |
-| Force `terminal.bracketedPasteMode` on and assert xtty emits the brackets, shell-free | ⚠️ candidate | Tests xtty's *half* deterministically (good), but the wrapping is SwiftTerm's, so it partly re-tests upstream; kept as a possible add in the split change, not the core fix. |
-| **Two explicit sets + honest skip + a zsh rig that runs the dependent set** | ✅ decided | Makes the partition real, converts vacuous-pass/red → honest skip on incapable shells, and gives the dependent set *real* coverage where a capable shell exists. |
+| Assert the degraded behavior (first line executes) on bash | ⊘ superseded → **partly adopted, reframed** | Originally rejected as "asserts the *shell*, not xtty, zero product value." The `split-shell-dependent-testplan` explore **reframed** it via the three-layer model (design D2): at **layer 2 xtty forwards the paste faithfully**, and the shell's capability decides the outcome — so asserting the bash execution arm asserts xtty's *forwarding fidelity*, which **is** product value (and flips red→green if a future layer-3 confirm-paste guard lands). Adopted as the bash arm of the winning option below. |
+| Force `terminal.bracketedPasteMode` on and assert xtty emits the brackets, shell-free | ⚠️ candidate → not needed | Tests xtty's *half* deterministically, but the wrapping is SwiftTerm's (partly re-tests upstream); the parameterize-and-assert option reads the *observed* `bracketedPasteMode` from the dump instead, so this was not needed. |
+| Two explicit sets + honest skip + a zsh rig that runs the dependent set | ⊘ superseded | Was the decided strategy, but a *skip* is a coverage hole (verifies nothing on the incapable shell) and the two-`.xctestplan` partition adds machinery + XcodeGen-fidelity risk. Superseded by parameterize-and-assert (below), which needs no skip and no partition. |
+| **Parameterize each shell-dependent test by the terminal's _observed_ capability, assert per-shell (no skip, no partition)** | ✅ **SHIPPED** (`split-shell-dependent-testplan`, archived 2026-07-08) | Each test asserts the correct behavior for the observed `bracketedPasteMode` / capture-active state: paste asserts the bash execution arm *and* the zsh staged arm; the semantic family asserts a crisp negative where capture is absent (0 last-resort skips were needed). The suite runs whole on every rig — the bash golden takes the capability-absent arm, the zsh golden the capability-present arm — measured `41/0/1` on both, 0 vacuous passes. Strictly more informative than skip (catches regressions on **both** shells) and drops the partition entirely. |
 
 ## The decided strategy — two changes, measurement-first ordering
 
@@ -132,20 +140,23 @@ zsh rig is the instrument.
    behind the 70-col wide zsh prompt so the strict matcher missed it at `:82`).** The
    critical evidence held: the zsh rig takes the **real arm** (0 capture-inactive attachments), so its green is
    genuine coverage, not another vacuous pass. Measured surprise: the paste test reds on *both* shells — but for
-   **different reasons that fix differently**: bash execution `:87` (a shell-capability miss, skipped by change 2)
-   ↔ zsh `:82` a **prompt-width soft-wrap**. The zsh `:82` is **not** a change-2 skip candidate but a matcher
+   **different reasons that fix differently**: bash execution `:87` (a shell-capability miss, now **asserted**
+   by change 2) ↔ zsh `:82` a **prompt-width soft-wrap**. The zsh `:82` is **not** a change-2 skip candidate but a matcher
    bug, **fixed** by `harden-paste-wrap-assertion` (wrap-tolerant matcher, zsh rig `40/1/1` → `41/0/1`); change 2
-   skips only the bash `:87` arm.
-2. **`split-shell-dependent-testplan` — SECOND (informed by the measured divergence).** Two `.xctestplan`s
-   (`Intersection` + `ShellInteractive`) wired via the XcodeGen scheme; convert the family's silent `return`
-   and the paste test's hard assertion into **honest `XCTSkip`/`XCTSkipUnless`** keyed on the true capability
-   predicate (semantic-capture-active for the family; the terminal's reported `bracketedPasteMode` for paste,
-   sampled **after** the computed-marker shell-readiness gate of `harden-churn-shell-readiness`, never before
-   the first prompt). Exposing `bracketedPasteMode` in the DEBUG state dump is a **new harness observation** →
-   carries a `verification-harness` spec delta + task (AGENTS.md harness-coupling rule).
+   then **asserts** the bash `:87` arm (rather than skipping it).
+2. **`split-shell-dependent-testplan` — SECOND (informed by the measured divergence) — ✅ BUILT + PARAMETERIZED
+   (archived 2026-07-08).** **Pivoted** from the original two-`.xctestplan` + honest-`XCTSkip` sketch to
+   **parameterize-and-assert** (see the fates table): the partition was **dropped, never introduced** (no
+   `Intersection`/`ShellInteractive` plans, no XcodeGen scheme wiring). Each shell-dependent test **asserts the
+   correct behavior for the observed capability** — the paste test branches on the reported `bracketedPasteMode`
+   (sampled **after** the computed-marker shell-readiness gate of `harden-churn-shell-readiness`, never before
+   the first prompt) and asserts the bash execution arm *and* the zsh staged arm; the semantic family asserts a
+   **crisp negative** where capture is absent (0 last-resort skips were needed). Exposing `bracketedPasteMode`
+   in the DEBUG state dump is a **new harness observation** → carried a `verification-harness` spec delta + task
+   (AGENTS.md harness-coupling rule). Measured `41/0/1` on both goldens, 0 vacuous passes.
 
 Both changes have a **reverse duty** to update `packer/README.md` Acceptance/matrix + `github-actions-ci-cd.md`
-§19b in the same session (bash rig: paste red → skip; new zsh-rig envelope), or the validator/investigator
+§19b in the same session (bash rig: paste red → **asserted green arm**; new zsh-rig envelope), or the validator/investigator
 "runtime read" just relocates the staleness. The zsh rig is a **supplement**, not a replacement — the bash rig
 keeps proving CI-parity; a future GitHub-Actions zsh job is out of scope for now but is the eventual target.
 

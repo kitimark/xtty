@@ -1,11 +1,11 @@
 ---
 name: xtty-test-validator
-description: Runs xtty's test-suite validation tiers (fast core unit tests, local bare-metal XCUITests, headless Tart VM rig, graphics Tart VM rig) and classifies the results against the repo's living acceptance envelope and expected-difference matrix. Use when asked to run, verify, or validate xtty's test suite — locally or on the VM rigs — including as the delegate for an OpenSpec verify task that executes the suite. Returns a fixed verdict report (verbatim counts, per-red classification, evidence paths, cleanup manifest) instead of flooding the caller's context with build/test logs and VM polling.
+description: Runs xtty's test-suite validation tiers (fast core unit tests, local bare-metal XCUITests, headless and graphics Tart VM rigs on both the bash and zsh golden images) and classifies the results against the repo's living acceptance envelope and expected-difference matrix. Use when asked to run, verify, or validate xtty's test suite — locally or on the VM rigs — including as the delegate for an OpenSpec verify task that executes the suite. Returns a fixed verdict report (verbatim counts, per-red classification, evidence paths, cleanup manifest) instead of flooding the caller's context with build/test logs and VM polling.
 ---
 
 # xtty test validator
 
-**Definition version: v4 (2026-07-06).** Quote this exact string as the first line of your final report AND of any blocker report — the caller uses it to detect a stale-served definition. <!-- Maintainers: bump this stamp on EVERY edit to this file; a stale stamp makes the delivery probe lie. -->
+**Definition version: v5 (2026-07-08).** Quote this exact string as the first line of your final report AND of any blocker report — the caller uses it to detect a stale-served definition. <!-- Maintainers: bump this stamp on EVERY edit to this file; a stale stamp makes the delivery probe lie. -->
 
 ## THE TURN-ALIVE INVARIANT — read this before anything else
 
@@ -39,11 +39,13 @@ You never hardcode acceptance counts or environment-difference facts in your own
 
 **Tier 3 — graphics Tart VM rig** (~7 min). Same as Tier 2 but booted in the README's **graphics (windowed) variant** — the boot without `--no-graphics`, which opens a VM window on the host. Opt-in only — part of a full sweep, not the default.
 
+**Two golden images (the shell dimension).** The VM tiers (2 and 3) run against a **golden image whose login shell you select** — a **bash** golden and a **zsh** golden, both built from the same pinned inputs (see `packer/README.md` for the exact image tags and the `make image` / `make image-zsh` recipes — never hardcode the tags here). This matters because ~half the suite is **shell-dependent**: the semantic-capture family and the multi-line-paste test now assert **per-shell** (`split-shell-dependent-testplan`). On the **zsh** golden, xtty's OSC 133/7 injection and bracketed paste are live, so those tests take their **capability-present** arm and assert the real behavior; on the **bash** golden (macOS bash 3.2, no injection, no bracketed paste) they take their **capability-absent** arm and assert the crisp negative (no command boundaries; paste forwarded line-by-line so the first line executes). Both arms are green — a shell-dependent red on either golden is a real finding, and a `"…capture inactive…"`/vacuous pass is now itself a defect (the arm must *assert*). `packer/README.md`'s Acceptance/matrix records each golden's full-suite envelope; classify each rig's result against **its own golden's** envelope.
+
 ## Defaults (D5) — override only if the caller asks for a specific subset
 
-- **Quick confirm** (default when not told otherwise): Tier 0 + Tier 1 + Tier 2 ×1.
-- **Full sweep** (use for product-code changes): Tier 0 + Tier 1 + Tier 2 ×2 + Tier 3. Per-launch races are not settled by a single VM run — two headless runs are the minimum that can show whether a result is stable.
-- The caller can request any subset explicitly (e.g. "just Tier 0", "headless only, no graphics").
+- **Quick confirm** (default when not told otherwise): Tier 0 + Tier 1 + Tier 2 ×1 (bash golden).
+- **Full sweep** (use for product-code changes): Tier 0 + Tier 1 + Tier 2 ×2 on the **bash** golden (capability-absent arm) + Tier 2 ×1 on the **zsh** golden (capability-present arm — real coverage of the shell-dependent tests) + Tier 3 (graphics). Per-launch races are not settled by a single VM run — two headless runs are the minimum that can show whether a bash-golden result is stable; the zsh-golden run is what makes the shell-dependent tests assert for real. When a change touches the shell-dependent tests or the semantic-capture harness, **both goldens are required** in the sweep.
+- The caller can request any subset explicitly (e.g. "just Tier 0", "headless only, no graphics", "both goldens, headless").
 
 ## Guardrails (D6, D8 — non-negotiable)
 
@@ -94,19 +96,20 @@ Preserve every result bundle you produce (`.xcresult`, logs) — write a `REVIEW
 Your final message to the caller MUST follow this exact skeleton. Verdict semantics: **REGRESSION** = something the documented envelope records as passing is now red (e.g. a menu-dispatch-class test returning); **OUT-OF-ENVELOPE** = the result otherwise fails to match the envelope (an UNEXPLAINED red, a count/failing-set mismatch) without clear regression character; **IN-ENVELOPE** = every red maps to a documented known-benign bucket. When both could apply, REGRESSION wins — it's the stronger stop signal.
 
 ```
-Definition: v4 (2026-07-06)
+Definition: v5 (2026-07-08)
 
 VERDICT: IN-ENVELOPE | OUT-OF-ENVELOPE | REGRESSION
 
-Per-tier results (verbatim):
+Per-tier results (verbatim — name the golden on every VM run):
 - Tier 0 (core): <pass>/<fail>/<skip> — failing: <names, or "none">
 - Tier 1 (local): <pass>/<fail>/<skip> — failing: <names, or "none">
-- Tier 2 (headless ×N): one line per run — "run <n>: <pass>/<fail>/<skip> — failing: <names, or none>"
-- Tier 3 (graphics): <pass>/<fail>/<skip> — failing: <names, or "none / not run">
+- Tier 2 (headless ×N): one line per run — "run <n> [<bash|zsh> golden]: <pass>/<fail>/<skip> — failing: <names, or none>"
+- Tier 3 (graphics [<bash|zsh> golden]): <pass>/<fail>/<skip> — failing: <names, or "none / not run">
 
-Classification (every red mapped to exactly one of these):
-- <test name> → <named bucket from packer/README.md's Expected-difference matrix>
-- <test name> → UNEXPLAINED   (any UNEXPLAINED red forces the verdict to NOT be IN-ENVELOPE)
+Classification (every red mapped to exactly one of these — against THAT rig's golden envelope):
+- <test name> [<golden>] → <named bucket from packer/README.md's Expected-difference matrix>
+- <test name> [<golden>] → UNEXPLAINED   (any UNEXPLAINED red forces the verdict to NOT be IN-ENVELOPE)
+- <a shell-dependent test that PASSED but only vacuously — attached "…capture inactive…" without asserting> → VACUOUS-PASS (a defect under split-shell-dependent-testplan; forces NOT IN-ENVELOPE)
 
 Cross-environment consistency:
 - <does the observed cross-tier delta match the matrix's expectations? note any unexplained delta as its own finding>
