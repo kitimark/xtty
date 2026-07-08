@@ -127,5 +127,7 @@ printf '\033[?1002h\033[?1006h'; cat -v      # enable button-event + SGR mouse r
 
 ## 8. Status & artifacts
 
+> **Follow-up (2026-07-09):** this doc settled the **routing** policy (shipped as `fix-scroll-wheel-mouse-reporting`, archived 2026-07-08). The distinct **smoothness / momentum** dimension it left open (D5 anti-flood shape + the physical-mouse re-confirm ❓) is settled in **[`scroll-momentum-smoothness-research.md`](scroll-momentum-smoothness-research.md)** — the routing fix's own momentum guard + cap turned out to regress trackpad feel.
+
 - **Not yet an OpenSpec change** — this is captured root-cause research feeding a **candidate change** (e.g. `fix-scroll-wheel-mouse-reporting`): a SwiftTerm-patch rewrite of `scrollWheel` + a `verification-harness` delta exposing wheel-report emission, with the §5 probes as verify tasks. No product code shipped; trackers unchanged except this doc + its README index.
 - **Evidence:** workflow run `wf_5857687e-56f` transcript (`…/subagents/workflows/wf_5857687e-56f/journal.jsonl` — 5 reader records + synthesis + critic verbatim); the §5 `cat -v` probe is the durable re-verification; session A/B screenshots (xtty vs iTerm htop before/after) were captured to the session scratchpad (ephemeral — re-run the probe to reproduce).
