@@ -6,9 +6,11 @@
 > widened into a test-architecture finding. Grounded in direct repo greps (file:line cited inline) and
 > synthesises the existing VM/CI forensics rather than re-measuring them. **Status (updated 2026-07-08):**
 > the first change, **`add-zsh-test-image`, is built + measured** — the `xtty-test-zsh:26.5` golden exists and
-> the divergence below is now confirmed by effect on real rigs (zsh headless envelope `40/1/1`, semantic
-> family asserting-for-real with 0 capture-inactive); the second, `split-shell-dependent-testplan`, remains
-> proposed (the honest-`XCTSkip` follow-up). This doc is the *why*; the actionable *what* lives in the changes.
+> the divergence below is now confirmed by effect on real rigs (zsh headless envelope `40/1/1` at that time,
+> semantic family asserting-for-real with 0 capture-inactive; the paste `:82` residual in that envelope was a
+> **prompt-width soft-wrap**, since **fixed** by `harden-paste-wrap-assertion` → `41/0/1`, so only the bash
+> `:87` execution arm is now shell-dependent); the second, `split-shell-dependent-testplan`, remains
+> proposed (the honest-`XCTSkip` follow-up for the bash execution arm). This doc is the *why*; the actionable *what* lives in the changes.
 >
 > **Confidence tags:** ✅ grep-proven in this repo · ✅ᶠ measured in a cited forensics doc · ❓ run-to-verify
 > (depends on a rig not yet built).
@@ -126,10 +128,14 @@ zsh rig is the instrument.
    `fix-osc7-hostname-reverse-dns` (the `gethostname` swap, landed 2026-07-08). Ran the *existing* suite on
    both rigs and recorded the **divergence** as the acceptance criterion (not all-green): **measured — bash
    `40/1/1` (family vacuous, 16–17 "capture inactive" attachments; paste executes `:87`) ↔ zsh `40/1/1`
-   (family asserting-for-real, 0 "capture inactive"; paste stages but grid-capture misses line 1 `:82`).** The
+   (family asserting-for-real, 0 "capture inactive"; paste stages correctly but the first line soft-wrapped
+   behind the 70-col wide zsh prompt so the strict matcher missed it at `:82`).** The
    critical evidence held: the zsh rig takes the **real arm** (0 capture-inactive attachments), so its green is
-   genuine coverage, not another vacuous pass. Measured surprise: the paste test reds on *both* shells (bash
-   execution `:87` ↔ zsh grid-capture `:82`) — the latter is exactly what change 2 skips.
+   genuine coverage, not another vacuous pass. Measured surprise: the paste test reds on *both* shells — but for
+   **different reasons that fix differently**: bash execution `:87` (a shell-capability miss, skipped by change 2)
+   ↔ zsh `:82` a **prompt-width soft-wrap**. The zsh `:82` is **not** a change-2 skip candidate but a matcher
+   bug, **fixed** by `harden-paste-wrap-assertion` (wrap-tolerant matcher, zsh rig `40/1/1` → `41/0/1`); change 2
+   skips only the bash `:87` arm.
 2. **`split-shell-dependent-testplan` — SECOND (informed by the measured divergence).** Two `.xctestplan`s
    (`Intersection` + `ShellInteractive`) wired via the XcodeGen scheme; convert the family's silent `return`
    and the paste test's hard assertion into **honest `XCTSkip`/`XCTSkipUnless`** keyed on the true capability
@@ -157,9 +163,13 @@ trigger entirely (0 gate events, headless *and* graphics). Measuring zsh-first p
 - **The divergence — ✅ CONFIRMED 2026-07-08 (`xtty-test-zsh:26.5` headless ×2 + a graphics pre-check):** the
   same binary + same suite yielded a *different* result on the zsh rig — the semantic family attachments showed
   the live-capture arm (**0** "capture inactive" vs bash's 16–17), proving same-binary divergence across shells
-  by effect. (The paste test still reds on zsh, but via a grid-capture miss `:82`, not execution `:87` — a
-  distinct arm change 2 converts to an honest skip; it does *not* "stage both lines" in the grid as first
-  predicted — measured, not inferred.)
+  by effect. (`add-zsh-test-image` first saw the paste test red on zsh at `:82`, not the bash execution arm
+  `:87`. That `:82` red was **not** a grid-capture miss and **not** a change-2 skip candidate but the
+  **prompt-width soft-wrap** class: the pasted first line *did* stage — the wide 70-col zsh prompt just wrapped
+  it past the 78-col boundary so the strict matcher couldn't span the `\n`. `harden-paste-wrap-assertion`
+  **fixed** it with the wrap-tolerant matcher (`40/1/1` → `41/0/1`, red→green on both VM arms) — a matcher fix,
+  not a skip. So the paste *does* stage both lines on zsh; the earlier "does not stage both lines" reading was a
+  strict-matcher artifact — measured, not inferred.)
 
 ## Reusable guideline
 

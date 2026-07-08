@@ -79,9 +79,18 @@ final class XttyUITests: XCTestCase {
         attachGridDump("paste-grid")
 
         if GridDumpReader.isAvailable {
-            XCTAssertTrue(GridDumpReader.waitForContains(lineA, timeout: 5),
+            // Wrap-tolerant: behind a long shell prompt (e.g. the wide-prompt zsh
+            // VM rig, where the 70-col prompt pushes a 9-char pasted line past the
+            // 78-col wrap) a pasted line can soft-wrap across physical rows, which
+            // the dump joins with "\n". Paste insertion is still exactly what's
+            // asserted — the line reached the focused pane's grid — so match across
+            // the wrap; a line that genuinely never landed still fails. The
+            // not-executed check below stays strict: paste-vs-execute is the
+            // bash-3.2 execution arm (:87), a shell-capability concern owned by
+            // split-shell-dependent-testplan, not a soft-wrap concern.
+            XCTAssertTrue(GridDumpReader.waitForContains(lineA, timeout: 5, ignoringLineWraps: true),
                           "first pasted line missing from grid")
-            XCTAssertTrue(GridDumpReader.waitForContains(lineB, timeout: 5),
+            XCTAssertTrue(GridDumpReader.waitForContains(lineB, timeout: 5, ignoringLineWraps: true),
                           "second pasted line missing (multi-line paste not inserted)")
             let grid = GridDumpReader.read() ?? ""
             XCTAssertFalse(grid.lowercased().contains("command not found"),
