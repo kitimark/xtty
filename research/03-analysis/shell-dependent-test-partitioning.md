@@ -4,9 +4,11 @@
 > question — "how do we fix `XttyUITests.testMultiLinePasteIsNotAutoExecuted`?" (the sole standing
 > `build-and-test` red, `bash32-no-bracketed-paste`, confirmed IN-ENVELOPE on run `28841237111`) — and
 > widened into a test-architecture finding. Grounded in direct repo greps (file:line cited inline) and
-> synthesises the existing VM/CI forensics rather than re-measuring them. **Decision captured, not yet
-> implemented:** the two OpenSpec changes named below were scoped in this session; neither exists on disk
-> yet. This doc is the *why*; the actionable *what* will live in the changes.
+> synthesises the existing VM/CI forensics rather than re-measuring them. **Status (updated 2026-07-08):**
+> the first change, **`add-zsh-test-image`, is built + measured** — the `xtty-test-zsh:26.5` golden exists and
+> the divergence below is now confirmed by effect on real rigs (zsh headless envelope `40/1/1`, semantic
+> family asserting-for-real with 0 capture-inactive); the second, `split-shell-dependent-testplan`, remains
+> proposed (the honest-`XCTSkip` follow-up). This doc is the *why*; the actionable *what* lives in the changes.
 >
 > **Confidence tags:** ✅ grep-proven in this repo · ✅ᶠ measured in a cited forensics doc · ❓ run-to-verify
 > (depends on a rig not yet built).
@@ -115,16 +117,19 @@ Scoped in this session (owner-confirmed). Ordering was **deliberately reversed**
 hypothesis is proven on real rigs *before* the suite is restructured — this repo settles by measurement, and a
 zsh rig is the instrument.
 
-1. **`add-zsh-test-image` — FIRST (observe-only, no test-code changes).** ❓ Parameterise the packer template
-   (`shell = bash | zsh`): keep `xtty-test:26.5` (bash, unchanged) + add `xtty-test-zsh:26.5`. The zsh variant
-   carries the one new mechanism a zsh guest needs — a **per-boot LaunchDaemon that seeds `/etc/hosts` with
-   every local interface address** (`ifconfig` inet + inet6) so `getnameinfo` answers the reverse-PTR from the
-   files module before mDNS, neutralising the LN gate (**fix-class (b)**, measured 0 gate events in
-   `local-network-privacy-forensics.md` P7 — ✅ᶠ there, ❓ on this image until built). Then run the *existing*
-   suite on both rigs and record the **divergence** as the acceptance criterion (not all-green): bash → paste
-   red + family vacuous; zsh → paste green + family asserting for real. The critical evidence is proof the zsh
-   rig takes the **real arm** (no "capture inactive" attachments; paste grid stages both lines), else a green
-   is just another vacuous pass.
+1. **`add-zsh-test-image` — FIRST (observe-only, no test-code changes) — ✅ BUILT + MEASURED (2026-07-08).**
+   Parameterised the packer template (`shell = bash | zsh`): kept `xtty-test:26.5` (bash, unchanged) + built
+   `xtty-test-zsh:26.5`. **The LaunchDaemon `/etc/hosts` fix-class (b) was refuted on this image** — it did
+   not neutralise the gate (the routable-IPv4 reverse PTR escapes the files module; 40 gate events measured,
+   task 4.1 / `local-network-privacy-forensics.md` §8), so no rig-level machinery ships and the divergence is
+   measured **headless** (the modal is graphics-only); the durable fix is the product change
+   `fix-osc7-hostname-reverse-dns` (the `gethostname` swap, landed 2026-07-08). Ran the *existing* suite on
+   both rigs and recorded the **divergence** as the acceptance criterion (not all-green): **measured — bash
+   `40/1/1` (family vacuous, 16–17 "capture inactive" attachments; paste executes `:87`) ↔ zsh `40/1/1`
+   (family asserting-for-real, 0 "capture inactive"; paste stages but grid-capture misses line 1 `:82`).** The
+   critical evidence held: the zsh rig takes the **real arm** (0 capture-inactive attachments), so its green is
+   genuine coverage, not another vacuous pass. Measured surprise: the paste test reds on *both* shells (bash
+   execution `:87` ↔ zsh grid-capture `:82`) — the latter is exactly what change 2 skips.
 2. **`split-shell-dependent-testplan` — SECOND (informed by the measured divergence).** Two `.xctestplan`s
    (`Intersection` + `ShellInteractive`) wired via the XcodeGen scheme; convert the family's silent `return`
    and the paste test's hard assertion into **honest `XCTSkip`/`XCTSkipUnless`** keyed on the true capability
@@ -138,19 +143,23 @@ Both changes have a **reverse duty** to update `packer/README.md` Acceptance/mat
 "runtime read" just relocates the staleness. The zsh rig is a **supplement**, not a replacement — the bash rig
 keeps proving CI-parity; a future GitHub-Actions zsh job is out of scope for now but is the eventual target.
 
-⚠️ **Front-loaded risk (why zsh-first is the smart order):** the LN arbiter is documented as irreducible; the
-`/etc/hosts` daemon relies on enumerating *all* interface addresses. If it can't fully tame the modal, we
-learn it in change 1 before change 2 depends on the rig. Fallback = the owner-dropped non-resolving product
-fix (`gethostname` vs `ProcessInfo.hostName`), a product change to surface for decision, not assume.
+✅ **Front-loaded risk — materialised, then resolved (why zsh-first was the smart order):** the LN arbiter
+*was* irreducible at the rig level; the `/etc/hosts` daemon could **not** tame the modal (change 1 task 4.1),
+and we learned it before change 2 depended on the rig. The fallback became the fix: the product change
+`fix-osc7-hostname-reverse-dns` (`gethostname` vs `ProcessInfo.hostName`) landed 2026-07-08 and removes the
+trigger entirely (0 gate events, headless *and* graphics). Measuring zsh-first paid off exactly as intended.
 
 ## Re-verify by effect
 
 - **The vacuous-pass claim:** run the current suite on the bash rig; in the `.xcresult`, confirm the 19
   family methods carry `"…capture inactive…"` attachments (degrade arm) and the paste grid shows
   `command not found` (executed). If a family test asserted its real payload on bash, this doc is wrong.
-- **The divergence (once `xtty-test-zsh` exists):** the same binary + same suite yields a *different* result
-  on the zsh rig — paste stages both lines, family attachments show the live-capture arm. Same-binary
-  divergence across shells is the whole thesis; observe it, don't infer it.
+- **The divergence — ✅ CONFIRMED 2026-07-08 (`xtty-test-zsh:26.5` headless ×2 + a graphics pre-check):** the
+  same binary + same suite yielded a *different* result on the zsh rig — the semantic family attachments showed
+  the live-capture arm (**0** "capture inactive" vs bash's 16–17), proving same-binary divergence across shells
+  by effect. (The paste test still reds on zsh, but via a grid-capture miss `:82`, not execution `:87` — a
+  distinct arm change 2 converts to an honest skip; it does *not* "stage both lines" in the grid as first
+  predicted — measured, not inferred.)
 
 ## Reusable guideline
 

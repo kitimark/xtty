@@ -125,6 +125,28 @@ the ~25 GiB base image and installs Xcode in-guest — expect tens of minutes to
 a couple of hours depending on the network. The result is a local Tart VM named
 **`xtty-test:26.5`** — the **golden image**.
 
+### Login-shell variant (bash / zsh) — `add-zsh-test-image`
+
+The template is **parameterized by login shell** (`shell = bash | zsh`, default
+`bash`), so one source produces two goldens from the same pinned inputs:
+
+| Command | Golden | Guest login shell |
+| --- | --- | --- |
+| `make image` (default) | `xtty-test:26.5` | `/bin/bash` (macOS bash 3.2.57 — hosted-runner parity) |
+| `make image-zsh` (= `make image IMAGE_SHELL=zsh`) | `xtty-test-zsh:26.5` | `/bin/zsh` |
+
+The **bash** golden is the CI-parity, acceptance-bearing rig; the **zsh** golden
+is a **supplement** that exercises xtty's zsh-only OSC 7/133 shell integration
+for real (the shell-dependent family takes its asserting arm instead of the bash
+rig's vacuous graceful-degradation arm). Use `IMAGE_SHELL=`, **not** `SHELL=` (a
+make built-in). The `shell=bash` build stays byte-identical to today's image.
+Built 2026-07-08: `xtty-test-zsh:26.5` (3m37s; `xcodebuild -showComponent
+MetalToolchain` → `uninstalled`, same as bash). **Note:** a per-boot
+`/etc/hosts`-seeding `LaunchDaemon` (`packer/zsh/`) was built to neutralize the
+Local Network gate on the zsh guest and **refuted by effect** (see the Local
+Network section) — it ships no acceptance-path machinery; the durable fix is the
+product change `fix-osc7-hostname-reverse-dns`.
+
 ## Runtime workflow (golden-clone per run)
 
 Never boot or build in the golden image — it drifts. Clone per run (APFS
@@ -240,6 +262,28 @@ graceful-degradation arms — exactly as they do on the (bash) hosted runners, s
 this is higher CI fidelity, not a loss. Full investigation:
 `research/03-analysis/local-macos-vm-ci-reproduction.md` §12.
 
+**Update (2026-07-08 — the zsh variant + the durable product fix):** the modal
+is now removed at the **product** seam by `fix-osc7-hostname-reverse-dns` —
+`PaneController.localHostNames` sourced from `gethostname(2)` (the syscall behind
+the shell's injected `${HOST}`) instead of reverse-DNS `ProcessInfo.hostName`,
+which removes the reverse-DNS call **entirely**, so no modal arises even under
+zsh. Measured on `xtty-test-zsh:26.5` (fixed build, `add-zsh-test-image` task 5.1
+headless + graphics pre-check): **0** `mDNSResponder … policy 'pending'` events
+and no modal on **both** the headless and graphics arms, and the OSC 7
+cwd-classification tests run on the live/passing arm (no 38–62s freeze). The two
+reasons the modal is gone are now orthogonal and both true: bash emits no OSC 7,
+and the fixed build makes no reverse-DNS call regardless of shell.
+**Rig-level neutralization was refuted** (`add-zsh-test-image` task 4.1 / design
+D2): the per-boot `/etc/hosts`-seeding `LaunchDaemon` did **not** tame the gate —
+macOS answers the IPv6 reverse PTR from the files module but escapes the
+**routable-IPv4** PTR to the local nameserver (40 `policy 'pending'` events on
+the *unfixed* build), and every remaining rig-level lever (TN3179 `Allowed*`
+arrays, NE-store pre-seed, SSH-child auto-grant) was closed (T7–T10). So the zsh
+variant's **standalone** shell-divergence is measured **headless** (the modal is
+graphics-only); the modal-free **graphics** real-arm run rides the product fix.
+Full refutation + fates: `research/03-analysis/local-network-privacy-forensics.md`
+§8–§9.
+
 ### Verifying the Metal-free property
 
 `xcodebuild -showComponent MetalToolchain` in-guest must read **`uninstalled`**.
@@ -271,7 +315,39 @@ is **NOT a product bug** — the image's `/bin/bash` login shell is macOS **bash
 3.2.57**, whose readline lacks `enable-bracketed-paste`, so a pasted newline
 executes (grid-proven; zsh + bash 5.1+ users are unaffected). A future harness
 change guards that test on a no-bracketed-paste shell; until then it is the
-image's one known-benign red.
+image's one known-benign red. (The envelope above is the **bash** golden
+`xtty-test:26.5`.)
+
+**zsh rig headless envelope: `40/1/1` of 42, measured** (headless ×2 on
+`xtty-test-zsh:26.5`, per-launch stable; 2026-07-08, `add-zsh-test-image` task
+5.1 — evidence
+`~/Downloads/xtty-vm-poc/artifacts/2026-07-08-add-zsh-test-image-headless-matrix/`).
+Same **count** as the bash rig, different **kind** — that divergence is the
+change's whole point (design D3, proven by effect):
+
+- The OSC 133/7 **semantic-capture family asserts for real** — **0**
+  `…capture inactive…` attachments (vs 16–17 on the bash rig, which
+  vacuous-passes). The live tests (`testChangingDirectoryUpdatesLiveCwd`,
+  `testRelativeFileLinkResolvesAgainstCwd`, `testCommandsProduceBlocksWithExitCodes`,
+  `testJumpResolvesToEarlierPrompt`, `testCopyCapturesCommandOutput`,
+  `testBlockMenuActionsRecorded`) pass fast (3–9s), no main-actor freeze —
+  `fix-osc7-hostname-reverse-dns` holds by effect even headless (**0** `policy
+  'pending'`).
+- The single red is still **`testMultiLinePasteIsNotAutoExecuted`**, but via a
+  **different arm than bash**: zsh HAS bracketed paste, so the paste correctly
+  does **not** auto-execute (product behavior is right) — but the grid-capture
+  misses the first pasted line, failing at **`:82`** ("first pasted line missing
+  from grid"), distinct from the bash arm's **`:87`** ("pasted text appears to
+  have been executed"). Same one shell-dependent test, its zsh **grid-capture**
+  manifestation — this is the residual `split-shell-dependent-testplan` will
+  convert to an honest `XCTSkip`; until then it is the zsh rig's one
+  known-benign red. A zsh run that instead showed `…capture inactive…`
+  attachments would be a vacuous pass and would **fail** this change's
+  acceptance — it did not.
+
+The **graphics** zsh run (fixed build, user-requested pre-check) matched
+headless exactly — `40/1/1`, 0 capture-inactive, no modal —
+`~/Downloads/xtty-vm-poc/artifacts/2026-07-08-graphics-both-goldens/`.
 
 **The CI `findbar-marker-wrap` gap is CLOSED — reproduced, then fixed, in-guest.** That flake is a pure **prompt-width** artifact — a long `\h` soft-wraps the typed marker, defeating a strict grid match. `add-vm-prompt-width-parity` gave the image a 59-char single-label `\h` (all three `scutil` keys, mirroring `runner-images`' runtime name), so the marker wraps in-guest and the find-bar red **reproduced here**; `harden-findbar-wrap-assertion` then made the find-bar focus-restore assertion (`:198`) **wrap-tolerant** and it flipped **green** — D2-confirmed against a genuine in-guest soft-wrap (`AFTERFIND####` splitting behind the 58-char `\h` prompt), not trivially. The image now mirrors CI on **race class**, **shell capability**, *and* **prompt width**. **Measured correction:** a long `\h` does **NOT** flip the paste test's failing line `:87`→`:84` as `ci-runner-prompt-width-forensics.md` §6 (option C) predicted — measurement shows it **stays at `:87`** (the `command not found` check). Bash 3.2 executes the pasted newline, so line B (`beta####`) echoes contiguously and fits before col 80, leaving the `:84` `waitForContains(lineB)` still passing; the failure remains the downstream `:87`. Verified mechanism + the gethostname spike (**T6, now closed**) + the options menu: `research/03-analysis/ci-runner-prompt-width-forensics.md`.
 
@@ -307,9 +383,10 @@ above; this table never duplicates a number, only causes.**
 
 | Class | Where it shows up | Cause |
 | --- | --- | --- |
-| **Shell arm (zsh vs bash)** | Local bare metal (zsh) vs both VM rigs + hosted CI (bash) | xtty injects OSC 7/133 shell integration into **zsh only** (`ZDOTDIR` redirection). Under bash, semantic-capture-dependent tests take their documented graceful-degradation arm instead of exercising the real path — parity with the (also-bash) hosted runner, not a regression. Also the source of the bash deprecation-banner grid corruption measured (and fixed) in `github-actions-ci-cd.md` §12. |
+| **Shell arm (zsh vs bash)** | Local bare metal (zsh) + the **`xtty-test-zsh:26.5`** VM rig (zsh) vs the bash VM rig `xtty-test:26.5` + hosted CI (bash) | xtty injects OSC 7/133 shell integration into **zsh only** (`ZDOTDIR` redirection). Under **bash** the semantic-capture family takes its graceful-degradation arm — a **vacuous pass** carrying `…capture inactive…` attachments — parity with the (also-bash) hosted runner, not a regression. Under **zsh** the family **asserts for real** (0 capture-inactive attachments; measured `add-zsh-test-image` task 5.1) — the real coverage the zsh rig exists to provide. Also the source of the bash deprecation-banner grid corruption measured (and fixed) in `github-actions-ci-cd.md` §12. |
 | **Menu-race sensitivity by machine speed** | Pre-`fix-main-menu-clobber`: ~100% on the constrained 3-vCPU VM, ~0% on unconstrained bare metal | The SwiftUI main-menu clobber (`swiftui-mainmenu-clobber-forensics.md`) was a per-launch race whose odds scale with machine load — the VM's CPU constraint is *why* this rig reproduced it when bare metal didn't. Retired as a live source now that the fix has landed (validated 3× — the counts live in Acceptance above; `github-actions-ci-cd.md` §18); kept here because a **regression** in this class would reproduce the pre-fix menu-dispatch failing pattern recorded in Acceptance's pre-fix history. |
-| **Bracketed-paste capability** | Both VM rigs + hosted CI (all `/bin/bash`); not local zsh, not Homebrew bash 5.1+ | The rig/CI's `/bin/bash` is macOS's stock **bash 3.2.57**, whose readline lacks `enable-bracketed-paste` — a pasted multi-line string executes instead of staging. One known-benign residual, `testMultiLinePasteIsNotAutoExecuted` (`github-actions-ci-cd.md` §18). |
+| **Bracketed-paste — bash execution arm** | The bash VM rig `xtty-test:26.5` + hosted CI (both `/bin/bash` 3.2.57); **not** the zsh rig, not local zsh, not Homebrew bash 5.1+ | macOS's stock **bash 3.2.57** readline lacks `enable-bracketed-paste` — a pasted multi-line string **executes** instead of staging. `testMultiLinePasteIsNotAutoExecuted` reds at **`:87`** ("pasted text appears to have been executed"). Known-benign residual (`github-actions-ci-cd.md` §19b). |
+| **Bracketed-paste — zsh grid-capture arm** | The zsh VM rig `xtty-test-zsh:26.5` (measured `add-zsh-test-image` task 5.1) | zsh **has** bracketed paste, so the paste correctly does **not** auto-execute (product behavior is right) — but the same test `testMultiLinePasteIsNotAutoExecuted` reds at **`:82`** ("first pasted line missing from grid") because the grid-scrape doesn't match the staged/highlighted paste region. A **grid-capture** residual, not an execution one; the zsh rig's one known-benign red, which `split-shell-dependent-testplan` converts to an honest `XCTSkip`. |
 | **Prompt-width wrap** | Both VM rigs (since `add-vm-prompt-width-parity`) + hosted CI; not local zsh (short bare-metal `\h`) | The guest's 59-char `\h` reproduces the hosted runner's prompt width, so a marker typed at the `\h:\W \u\$ ` prompt **soft-wraps** across physical grid rows; a strict (wrap-intolerant) grid match then reds while a wrap-tolerant one passes. This surfaced `testFindBarOpensLocatesAndDismisses` in-guest — the **intended** fidelity of `add-vm-prompt-width-parity` (`ci-runner-prompt-width-forensics.md`; grid-verified by effect). **The find-bar instance is now fixed** — `harden-findbar-wrap-assertion` shipped the wrap-tolerant matcher on that assertion (`:198`) + a deterministic `testSoftWrapGuardIsWrapTolerant` guard (the red→green pair, proven in-guest); **no current test reds on width**, and a recurrence is a regression. But **the width parity itself is durable**, guarding *future* type-at-prompt assertions. Distinct from the CI-only artifact it reproduces: on the runner the long `\h` is runtime-injected; here it is `scutil`-set in the image. |
 | **Confirm-close / interference flake sources** | Local bare metal only (not observed on either VM rig) | (a) **live mouse/keyboard interference** during `make test` driving the real GUI (the hands-off requirement the agent surfaces before that tier) — still a live local-only hazard. (b) a **confirm-close race** when a churn test closed a freshly-split pane before its shell settled (a heavier interactive `~/.zshrc` widened the race window locally vs the VM/CI's leaner bash startup) — **fixed** by `harden-churn-shell-readiness` (a computed-marker shell-readiness gate: the churn test proves the fresh shell executed a command before closing it). The churn test now passes green across local **and** both VM rigs (full-sweep-validated 2026-07-06). Root-caused in `github-actions-ci-cd.md` §13; retained here because a regression would reproduce the pre-fix churn-flake pattern. |
 
@@ -319,8 +396,10 @@ validation) — editing either re-tunes the agent's classification without
 touching the agent's own definition. **Reverse duty:** any change that alters
 test counts or expected residuals (e.g. `retire-metal-renderer`,
 `harden-churn-shell-readiness`, `add-vm-prompt-width-parity`, and its pair
-`harden-findbar-wrap-assertion`) MUST update this section — and Acceptance — in
-the same session, or the "runtime read" promise just relocates the staleness.
+`harden-findbar-wrap-assertion`, and `add-zsh-test-image` — which added the zsh
+rig's envelope + the zsh grid-capture paste arm) MUST update this section — and
+Acceptance — in the same session, or the "runtime read" promise just relocates
+the staleness.
 
 ## Maintenance
 
