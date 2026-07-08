@@ -58,6 +58,18 @@ Additive; no existing behavior changes.
 4. On completion, flip §11's status in the design doc to "built" and reconcile the trackers.
 - **Rollback:** delete the command file + the two AGENTS.md lines; nothing else depends on them.
 
+## Dogfood result (by effect — 2026-07-08)
+
+`/xtty:research` was driven end-to-end on a real question ("how do native terminals implement bracketed paste / OSC 2004, and how does it map to xtty?"). The launcher drove a **per-invocation Workflow** with the tiered models, and every stage fired:
+
+- **Readers (Sonnet · medium, ∥ fan-out)** — 2/2 returned file:line-grounded records: Ghostty (`ghostty-org/ghostty`) + Alacritty (`alacritty/alacritty`), shallow-cloned to `/tmp`. 4 agents, 0 errors, 0 empty results; ~207k subagent tokens, 394 s.
+- **Synthesis (Opus · high)** — a compact cross-source comparison table + xtty mapping + named load-bearing claims.
+- **Critic (Opus · high)** — *genuinely adversarial*: it read **SwiftTerm's own source (which neither reader touched)** and **refuted** the synthesis's central mechanism claim — that xtty's bash-3.2 first-line-execute residual comes from a `\n`→`\r` CR-rewrite like Ghostty/Alacritty. It also flagged the Ghostty record's missing verbatim snippets and named one unknown to close by effect.
+- **Verify-by-effect (main loop, D5)** — confirmed the refutation firsthand against the actual engine checkout: `MacTerminalView.swift:1202-1208` wraps only when `terminal.bracketedPasteMode` is on and otherwise `send(txt:)`s raw bytes; `send(txt:)` (`AppleTerminalView.swift:1982`) does only `[UInt8](txt.utf8)` — **no CR-rewrite**. `EscapeSequences.bracketedPasteEnd` = `ESC[201~`, byte-identical to both references. The recorded measured ground truth (`AppUITests/XttyUITests.swift:126-139`, bash bracketed-OFF arm) confirms the *effect* (first `\n`-terminated line executes, tail staged) that the synthesis predicted — while the *mechanism* is raw-LF-into-tty-line-discipline, exactly as the critic said.
+- **Capture hand-off (D6)** — fired with an honest **null-delta** conclusion: the owning doc `research/03-analysis/shell-dependent-test-partitioning.md:43-47` already states the correct raw-bytes mechanism (*"xtty legitimately pastes raw bytes → the embedded `\n` executes"*), and the critic's "injection gap" note is an unverified future-hardening idea, correctly **not** minted as durable research.
+
+**Net proof:** the launcher drives the full staged pattern with the D3 tiers, and the adversarial critic + verify-by-effect stages earned their keep by stopping a wrong mechanism claim (CR-rewrite) from reaching `research/`. Run: `wf_7dac0fa9-ea9`.
+
 ## Open Questions
 
 - **Reader `agentType`** — inline workflow prompts (chosen; zero new standing definitions, honors T1) vs. a committed reader agent with a rich reused system prompt (heavier; only if a fixed reader persona proves necessary). Resolution: inline for now.
