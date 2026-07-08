@@ -80,7 +80,7 @@ The history shows 2–5 concurrent changes with **explicit collision protocols**
 | --- | --- | --- | --- |
 | T1 | "Build a **roster of ~4** specialized agents across the loop" | ❌ | The reactive-not-speculative rule + friction ranking (§4): only coherence-checking has proven, every-change friction. Narrowed to **build one + a habit**. |
 | T2 | "The orchestrator needs a **persistent in-flight-change state ledger**" | ❌ | Cross-change coherence is **computable on demand** from `openspec list` + change dirs; a cached ledger just re-introduces the stale-count problem the project already distrusts (§5). |
-| T3 | "`xtty-source-researcher` is a **high-priority** build" | ❌ (demoted) | Git forensics: external-clone deep-reads are **rare**; 91% of research is *reading existing docs* (light — stays in main/fork). Build only if clone-heavy research recurs. |
+| T3 | "`xtty-source-researcher` is a **high-priority** build" | ❌ (demoted) → **revisited §11** | Git forensics: external-clone deep-reads are **rare**; 91% of research is *reading existing docs* (light — stays in main/fork). Build only if clone-heavy research recurs. **[2026-07-08: it recurred — 9 clone-heavy fan-outs; the reactive bar is now met, but built as a *Workflow launcher* (`/xtty:research`), not the agent it was demoted as — see §11.]** |
 | T4 | "A committed **cold-proposal-author** agent" | ❌ | 91% of changes are **warm** (antecedent research a fork inherits); no proven cold-author friction. |
 | T5 | "Delegate more of the loop broadly" | ❌ (bounded) | The ~12k/agent inheritance floor (§2): sub-floor tasks are **net-negative** to delegate; explore/decide is journey-value and stays in main. |
 
@@ -121,3 +121,50 @@ The history shows 2–5 concurrent changes with **explicit collision protocols**
 - **xtty git history** (2026-07-07): `git log` (214 commits), `openspec/changes/archive/` (34), `openspec/specs/` (19), `research/` (49 docs), `.claude/agents|commands|skills/`.
 - **AGENTS.md** §162–177 (Keeping a change coherent + spec-delta format), the Learned-refutations list, the two delegation rules (test-validation, ci-investigation).
 - **Sibling research:** `claude-code-subagent-execution-forensics.md`, `agents-md-context-budget.md`, `agents-and-xtty.md`.
+
+---
+
+## 11. Addendum (2026-07-08) — T3 revisited: build the source-research launcher (`/xtty:research`, Medium)
+
+*An `/opsx:explore` on "set up the agents/workflow for source research (explore → research → critic → verify) with a recommended model per role." Immediate antecedent: the 12-agent `add-install-workflow` comparator sweep (`local-install-workflow-research.md`) — the latest instance of the very pattern §6-T3 had demoted.*
+
+**Headline: the reactive bar for a source-research delegate is now MET — but the mechanism is a *Workflow launcher*, not the agent roster T3 was demoted as. T1 still binds.**
+
+**T3 flips by measurement.** §6-T3 demoted `xtty-source-researcher` because clone-heavy source reads had "appeared once." The recurrence probe (below) now shows **13** research docs citing a multi-agent fan-out, of which **9 cloned external source** (`distribution-signing`, `github-actions-ci-cd`, `local-install-workflow`, `confirm-close-shell-readiness`, `local-macos-vm-ci-reproduction`, `p4-semantic-capture-decisions`, `p4b-2-spatial-blocks-decisions`, `p6-file-diff-decisions`, and this doc's own 3-agent fan-out). Clone-heavy source research has recurred across ~7–9 changes — **§8's reactive test ("if it only appeared once… don't build it") returns *build it*.** T3's explicit escape clause — *"build only if clone-heavy research recurs"* — is satisfied.
+
+**Why this does NOT resurrect the refuted roster (T1).** §3's mechanism rule is decisive: *structured multi-stage at scale → **Workflow***. The reader→synthesis→critic fan-out is precisely that, so the "worker" is **one parameterized Workflow** whose stages are `agent()` calls with per-call model tiers — **not** standing `xtty-source-reader`/`xtty-synth`/`xtty-critic` agents (that would be the roster-of-4 T1 killed). This *completes* the §3 gap ("explore/research… has no `xtty-*` launcher+worker") in the form §3 prescribes, without contradicting the reactive/no-roster rule.
+
+**The model tiering (the ask) is already §3.D**, consistent with the committed agents (validator/investigator = sonnet, openspec-critic = opus):
+
+| Stage | Role | Model · effort | Parallel |
+| --- | --- | --- | --- |
+| explore | main-loop orchestrator | Opus · xhigh | 1 (never delegated — journey-value) |
+| scout *(opt)* | enumerate/grep sources | Haiku · low | N |
+| research | readers: clone + read + extract a structured record | **Sonnet · medium** | N (fan-out, barrier) |
+| synthesis | cross-source compare + recommend | **Opus · high** | 1 |
+| critic | adversarial refute + flag unverified | **Opus · high→xhigh** | 1 (or N refuters) |
+| verify | run the real probes, confirm by effect | **Sonnet · medium** (or main) | few |
+| capture | write `research/` + reconcile | main + `xtty-capture-research` | 1 (serialize) |
+
+*(Fable 5 is intentionally unused — not an analytical-reasoning tier.)*
+
+**Decision: Medium** (of Minimal / Medium / Full). Build a committed **`/xtty:research`** command that *carries* the tier table + the staged pattern + the verify/capture tail; the main loop authors the (heterogeneous) fan-out inline each time.
+- **Over Full** (a rigid committed `.claude/workflows/xtty-*.js`): research shapes have been too varied — per-terminal, per-facet, per-repo, source-forensics — for one parameterized script; revisit Full only if a stable shape emerges across the next several.
+- **Over Minimal** (document the tiers only): banks nothing invokable, leaves the §3 launcher gap open.
+- Medium needs **no new `.gitignore` exception** (`!.claude/commands/xtty/` already covers it) and **no new standing agent** — so, unlike the other three launchers, **no `Definition:`-lag concern** (its worker is a Workflow, not a cached agent definition).
+- **Verify-by-effect placement:** default **main loop** (the orchestrator should see the probes firsthand — as the `add-install-workflow` Release/quarantine/plist spikes were run inline), escalate to a Sonnet verify stage only when probes are many or isolated.
+
+**Reproducible probes** (the recurrence measurement, re-runnable):
+- `grep -rlE '[0-9]+-agent|[0-9]+ (parallel )?agents' research/03-analysis/*.md | wc -l` → **13** (docs citing a fan-out). *Proves:* the fan-out pattern is pervasive. *Cannot prove:* how many were clone-heavy vs doc-only (next probe).
+- `grep -rlE 'clon(e|ed|ing).{0,40}(/tmp|OSS|repo)|shallow.clone|to /tmp' research/03-analysis/*.md` → **9** docs. *Proves:* clone-heavy source research specifically recurred (the T3 condition). *Cannot prove:* per-change frequency going forward (re-run periodically).
+
+**Re-verify by effect:** re-run the two probes over `research/` after the next handful of changes — if clone-heavy fan-outs keep accruing, the launcher stays justified; if a single rigid shape dominates, escalate Medium → Full. (Never a read-back of this file.)
+
+**Reusable guideline (extends §9):**
+7. **Formalize a recurring multi-agent pattern as a *Workflow launcher*, never a roster.** When a fan-out shape recurs across several changes (proven by probe, not memory), package it as `command = launcher / worker = Workflow` with §3.D model tiers baked into the `agent()` calls (haiku scout · sonnet readers/verify · opus synthesis/critic) — leaving the fan-out *width/shape* main-authored per question. This satisfies the reactive rule (§9.2) without a standing-agent roster (T1).
+
+**Fate update:** **T3** ❌(demoted-as-agent) → **reinstated as a *Workflow launcher*** (the reactive bar met by measurement; the mechanism corrected from "agent" to "workflow"). T1 (no speculative roster) and §9.2 (reactive builds) are unchanged and consistent with this.
+
+**Status: decided, NOT yet built.** The build is a small OpenSpec change (working name `add-research-launcher`: the `/xtty:research` command + an AGENTS.md *How-to-work-here* delegation rule mirroring the validate/investigate/review boundary + this addendum), not yet proposed.
+
+**Addendum sources:** the two recurrence probes over `research/03-analysis/*.md` (2026-07-08); the Workflow tool's per-`agent()` `model`/`effort`/`agentType` overrides + the documented quality patterns; the committed launcher family (`.claude/commands/xtty/{validate,investigate-ci,review}.md` + `.claude/agents/xtty-*`); `local-install-workflow-research.md` (the antecedent 12-agent sweep + its inline verify spikes); this doc's §§3–4, 6-T3, 8, 9.

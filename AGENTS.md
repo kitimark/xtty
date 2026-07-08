@@ -15,6 +15,7 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 | Change | State | What it is | Detail |
 | --- | --- | --- | --- |
 | `add-ci-pipeline` | implemented — owner steps left | CI is live; remaining: repo public, pr-lint PR, branch protection, archive | `research/03-analysis/github-actions-ci-cd.md` |
+| `add-install-workflow` | proposed — 0/14 tasks, apply-ready | `make install`: optimized Release build → git version-stamp → `ditto` copy to `/Applications` ($0, no notarization) | `research/03-analysis/local-install-workflow-research.md` |
 
 **Shipped and archived** (full narratives: [HISTORY.md](HISTORY.md); what is true: `openspec/specs/`; mechanisms: `research/`):
 
