@@ -35,12 +35,125 @@ index 3a738ff..f5ae967 100644
          bundles.append(Bundle(for: MetalTerminalRenderer.self))
          bundles.append(Bundle.main)
          return bundles
+diff --git a/Sources/SwiftTerm/Mac/MacTerminalView.swift b/Sources/SwiftTerm/Mac/MacTerminalView.swift
+index 2ce2504..14325d0 100644
+--- a/Sources/SwiftTerm/Mac/MacTerminalView.swift
++++ b/Sources/SwiftTerm/Mac/MacTerminalView.swift
+@@ -2169,18 +2169,106 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations,
+         }
+     }
+     
++    // xtty (fix-scroll-wheel-mouse-reporting): the last routing decision the wheel
++    // handler took, surfaced through xtty's DEBUG state dump so the routing is
++    // assertable on the custom-drawn, accessibility-opaque view (observe-only; see
++    // XttyWheelRouting). Set on every non-horizontal wheel event. NOT part of the
++    // upstream scrollWheel fix — strip these two stored properties + the assignments
++    // below when the fix lands upstream.
++    public var xttyLastWheelRouting: XttyWheelRouting?
++    // Carried sub-row remainder for the program-directed branches' bounded emission
++    // (D5) on precise (trackpad) input.
++    private var xttyWheelRowRemainder: CGFloat = 0
++
+     public override func scrollWheel(with event: NSEvent) {
++        // D8 — a purely horizontal gesture emits no vertical report/scroll (a
++        // spurious wheel-down would otherwise be computed). Horizontal reporting
++        // (buttons 66/67) is deferred.
+         if event.deltaY == 0 {
+             return
+         }
++        // D5 — collapse trackpad momentum so a flick can't flood the child: only
++        // the user-driven phase drives emission, momentum frames are dropped. A
++        // classic mouse wheel always reports an empty momentumPhase, so it is
++        // unaffected.
++        if event.momentumPhase != [] {
++            return
++        }
++
++        let up = event.deltaY > 0
++        let shift = event.modifierFlags.contains(.shift)
++
++        // BRANCH 1 (highest priority) — mouse reporting active: deliver a wheel
++        // mouse-report to the child (D2/D3). The gate reuses mouseDown's exact
++        // predicate (sendButtonPress() = vt200/buttonEventTracking/anyEvent;
++        // excludes .off and .x10). D7 — Shift bypasses reporting to Branch 3.
++        if !shift && allowMouseReporting && terminal.mouseMode.sendButtonPress() {
++            let rows = xttyWheelRowCount(for: event)
++            let displayBuffer = terminal.displayBuffer
++            let hit = calculateMouseHit(with: event)
++            // D4 — reuse sharedMouseEvent's exact math: x is 0-based (sendEvent
++            // adds +1), y is viewport-relative and clamped.
++            let x = hit.grid.col
++            let y = max (0, min (displayBuffer.rows - 1, hit.grid.row - displayBuffer.yDisp))
++            let flags = event.modifierFlags
++            // D3 — button 4→64 (up) / 5→65 (down), press-only (no release).
++            let buttonFlags = terminal.encodeButton(
++                button: up ? 4 : 5, release: false,
++                shift: flags.contains(.shift), meta: flags.contains(.option), control: flags.contains(.control))
++            for _ in 0..<rows {
++                terminal.sendEvent(buttonFlags: buttonFlags, x: x, y: y)
++            }
++            xttyLastWheelRouting = XttyWheelRouting(
++                branch: .report, up: up, count: rows, button: up ? 64 : 65, applicationCursor: nil)
++            return
++        }
++
++        // BRANCH 2 — alternate screen, mouse off: deliver cursor Up/Down keys (D6),
++        // DECCKM-aware (SS3 ESC O A/B when application-cursor mode is on, CSI
++        // ESC [ A/B otherwise). The "alternate scroll" behavior for pagers/editors.
++        if !shift && terminal.isDisplayBufferAlternate {
++            let rows = xttyWheelRowCount(for: event)
++            let appCursor = terminal.applicationCursor
++            let key: [UInt8] = up
++                ? (appCursor ? EscapeSequences.moveUpApp : EscapeSequences.moveUpNormal)
++                : (appCursor ? EscapeSequences.moveDownApp : EscapeSequences.moveDownNormal)
++            for _ in 0..<rows {
++                send (key)
++            }
++            xttyLastWheelRouting = XttyWheelRouting(
++                branch: .cursorKey, up: up, count: rows, button: nil, applicationCursor: appCursor)
++            return
++        }
++
++        // BRANCH 3 — primary screen (or the Shift-bypass): move the local
++        // scrollback viewport (the original behavior, unchanged).
+         let velocity = calcScrollingVelocity(delta: Int (abs (event.deltaY)))
+-        if event.deltaY > 0 {
++        if up {
+             scrollUp (lines: velocity)
+         } else {
+             scrollDown(lines: velocity)
+         }
++        xttyLastWheelRouting = XttyWheelRouting(
++            branch: .scrollback, up: up, count: velocity, button: nil, applicationCursor: nil)
+     }
+-    
++
++    // xtty (fix-scroll-wheel-mouse-reporting): bounded per-event row count for the
++    // program-directed branches (D5). ~1 report/key per accumulated whole row — a
++    // classic wheel notch yields 1; a precise (trackpad) stream accumulates points
++    // into whole rows, carrying the remainder forward; capped per event so a flick
++    // cannot flood the child. Deliberately NOT calcScrollingVelocity, whose >9
++    // bucket returns max(rows,20) → 20–32 reports for one fast notch (over-scroll).
++    private func xttyWheelRowCount (for event: NSEvent) -> Int {
++        let cap = 5
++        if !event.hasPreciseScrollingDeltas {
++            return min (cap, max (1, Int (abs (event.deltaY).rounded())))
++        }
++        xttyWheelRowRemainder += abs (event.scrollingDeltaY) / max (1, cellDimension.height)
++        let whole = Int (xttyWheelRowRemainder)
++        xttyWheelRowRemainder -= CGFloat (whole)
++        return min (cap, whole)
++    }
++
+     private func calcScrollingVelocity (delta: Int) -> Int
+     {
+         if delta > 9 {
 diff --git a/Sources/SwiftTerm/XttyAccessors.swift b/Sources/SwiftTerm/XttyAccessors.swift
 new file mode 100644
-index 0000000..0bb2d90
+index 0000000..b347be1
 --- /dev/null
 +++ b/Sources/SwiftTerm/XttyAccessors.swift
-@@ -0,0 +1,41 @@
+@@ -0,0 +1,76 @@
 +// XttyAccessors.swift — the P4b-2 SwiftTerm engine addition (Phase 2).
 +//
 +// THIS FILE IS NOT COMPILED BY xtty. It is the committed artifact that the
@@ -81,4 +194,39 @@ index 0000000..0bb2d90
 +    /// current display row (`absoluteRow − scrollbackBase`) and — via `liveTop =
 +    /// yBase + linesTop` — to detect a clear/reset (a drop in its high-water mark).
 +    var scrollbackBase: Int { buffer.linesTop }
++}
++
++/// xtty (fix-scroll-wheel-mouse-reporting): the last mouse-wheel routing decision
++/// `TerminalView.scrollWheel` took, surfaced through xtty's DEBUG state dump so the
++/// routing is assertable on the custom-drawn, accessibility-opaque view. Pure
++/// observability — no product behavior depends on it. Not part of the upstream
++/// scrollWheel fix; it retires with the patch when the fix lands upstream.
++public struct XttyWheelRouting {
++    /// Which of the priority-ordered branches ran.
++    public enum Branch: String {
++        /// A wheel mouse-report was sent to the child (mouse reporting active).
++        case report
++        /// A cursor Up/Down key was sent to the child (alt screen, mouse off).
++        case cursorKey
++        /// The local scrollback viewport moved (primary screen / Shift-bypass).
++        case scrollback
++    }
++    public let branch: Branch
++    /// Scroll direction: true = up (wheel-up / Up arrow), false = down.
++    public let up: Bool
++    /// Number of reports/keys emitted (or scrollback lines moved) this gesture.
++    public let count: Int
++    /// The xterm wheel button for `.report` (64 up / 65 down), else nil.
++    public let button: Int?
++    /// For `.cursorKey`, whether the application-cursor (SS3) form was used
++    /// (DECCKM on); nil for other branches.
++    public let applicationCursor: Bool?
++
++    public init(branch: Branch, up: Bool, count: Int, button: Int?, applicationCursor: Bool?) {
++        self.branch = branch
++        self.up = up
++        self.count = count
++        self.button = button
++        self.applicationCursor = applicationCursor
++    }
 +}

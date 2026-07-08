@@ -781,6 +781,13 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             "runningCommand": session.runningCommand ?? "",
             // File-link opening (P4b-1): the last resolved link-open action.
             "lastLinkOpen": Self.linkOpenDump(active.lastLinkOpen),
+            // Mouse-wheel routing (fix-scroll-wheel-mouse-reporting): the branch
+            // the wheel handler last took (program wheel-report / program cursor-key
+            // / local scrollback) + the routed button-or-key form, direction, and
+            // count. Read from the SwiftTerm view's observe-only seam; lets the
+            // harness assert routing on the accessibility-opaque view. NSNull until
+            // the first wheel gesture.
+            "lastWheelRouting": Self.wheelRoutingDump(active.view.xttyLastWheelRouting),
             // Spatial blocks (P4b-2): last jump target row + last copied output
             // (NSNull = no-op / nothing yet), so the harness asserts jump/copy
             // without reading scroll chrome or the real clipboard.
@@ -948,6 +955,27 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         case let .unresolved(reason):
             return ["action": "noop", "reason": reason]
         }
+    }
+
+    /// The last mouse-wheel routing action for the DEBUG dump
+    /// (fix-scroll-wheel-mouse-reporting). Surfaces the branch the wheel handler
+    /// took plus the routed detail — for the report branch the emitted wheel button
+    /// (up/down) and count, for the cursor-key branch the DECCKM key form and count
+    /// — so a test asserts which branch a wheel gesture took without a real
+    /// mouse-tracking program parsing the bytes. `NSNull` before any wheel gesture.
+    /// Observe-only; the dump never synthesizes or replays a gesture.
+    private static func wheelRoutingDump(_ routing: XttyWheelRouting?) -> Any {
+        guard let routing else { return NSNull() }
+        var dump: [String: Any] = [
+            "branch": routing.branch.rawValue,
+            "direction": routing.up ? "up" : "down",
+            "count": routing.count,
+        ]
+        if let button = routing.button { dump["button"] = button }
+        if let appCursor = routing.applicationCursor {
+            dump["keyForm"] = appCursor ? "application" : "normal"
+        }
+        return dump
     }
     #endif
 }
