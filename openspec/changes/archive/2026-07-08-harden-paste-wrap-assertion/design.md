@@ -14,7 +14,7 @@ The wrap-tolerant matcher already exists — `GridDumpReader.waitForContains(_:t
 - Keep the change **test-only** — no product code, no SwiftTerm patch, no new launch hook, **no new guard test**.
 
 **Non-Goals:**
-- The bash `:87` execution arm (`bash32-no-bracketed-paste`) — a shell-capability difference (bash 3.2 has no bracketed paste), owned by `split-shell-dependent-testplan` via `XCTSkipUnless`. Untouched here.
+- The bash `:87` execution arm (`bash32-no-bracketed-paste`) — a shell-capability difference (bash 3.2 has no bracketed paste), owned by `split-shell-dependent-testplan`, which parameterizes the paste test to **assert** that bash execution arm (first line executed / `command not found` present). Untouched here.
 - Making the `:87` negative check wrap-tolerant (see D3).
 - A producer-side "logical line" grid dump (see D5).
 - Any new shell, GitHub-Actions zsh job, or product behavior change.
@@ -45,11 +45,11 @@ Change both positive assertions to `GridDumpReader.waitForContains(line, timeout
    paste auto-executes                       paste lands, staged
    (bash 3.2 no bracketed paste)             but token soft-wraps
         │                                         │
-   PREMISE FALSE → XCTSkipUnless             MATCHER BUG → ignoringLineWraps:true
+   PARAMETERIZE → assert bash-exec arm       MATCHER BUG → ignoringLineWraps:true
    OWNED BY split-shell-dependent-testplan   OWNED BY this change (:82/:84)
 ```
 
-After both land: on bash the test **skips** (`XCTSkipUnless(bracketedPasteMode)` — capability absent); on zsh it **runs and passes** (wrap-tolerant matcher — capability present, product correct). The edits do not collide — `XCTSkipUnless` sits at the top of the test body, the wrap-tolerance sits on the `:82`/`:84` assertions. This change **plugs a hole** in `split-shell-dependent-testplan`: that proposal's `XCTSkipUnless(bracketedPasteMode)` does **not** skip on zsh (capability present), so without this change the zsh arm would still red at `:82`. A one-line pointer is added to `split-shell-dependent-testplan`'s design (reverse duty) recording that the zsh matcher red is fixed here and that change only skips the bash execution arm — keeping the change-set coherent for the pre-archive critic.
+After both land: on bash the parameterized test **asserts the bash execution arm** (the newline-terminated first line executes → `command not found` present — the correct bash behavior, not a skip); on zsh it **runs and passes** (wrap-tolerant matcher — capability present, product correct). The edits do not collide — the per-shell `bracketedPasteMode` branch sits at the top of the test body, the wrap-tolerance sits on the `:82`/`:84` assertions. This change **plugs a hole** in `split-shell-dependent-testplan`: parameterizing the paste test does **not** by itself green the zsh `:82` red (on zsh the paste stages correctly but the first line soft-wraps behind the wide prompt), so without this change's wrap-tolerance the zsh arm would still red at `:82`. A one-line pointer is added to `split-shell-dependent-testplan`'s design (reverse duty) recording that the zsh matcher red is fixed here and that change **asserts** (not skips) the bash execution arm — keeping the change-set coherent for the pre-archive critic.
 
 ### D5: Do not change the producer (grid dump stays physical rows joined with `\n`)
 

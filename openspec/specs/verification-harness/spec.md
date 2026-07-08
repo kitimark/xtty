@@ -248,7 +248,7 @@ The harness SHALL cover the clickable per-pane block sidebar end-to-end by drivi
 
 ### Requirement: Soft-wrap-robust content assertion
 
-The deterministic content assertion SHALL confirm that typed content reached the focused pane's grid **even when the terminal soft-wraps that content across physical rows**. Because the grid dump emits the focused pane's physical rows, a content assertion that an out-of-process test makes about typed text SHALL match that text regardless of soft-wrap row boundaries, while a string that genuinely never reached the grid SHALL still fail the assertion. The focus-typing-on-activate coverage **and the find-bar focus-restore coverage** SHALL use this wrap-robust assertion so that each passes when typed input reaches the focused pane and the terminal wraps it (e.g. behind a long shell prompt), and fails only when the input does not arrive. A dedicated regression guard SHALL exercise this behavior deterministically — independent of the ambient shell prompt width — by typing a marker that is guaranteed to soft-wrap and confirming that the wrap-robust assertion matches it while a strict (wrap-intolerant) match does not.
+The deterministic content assertion SHALL confirm that typed content reached the focused pane's grid **even when the terminal soft-wraps that content across physical rows**. Because the grid dump emits the focused pane's physical rows, a content assertion that an out-of-process test makes about typed text SHALL match that text regardless of soft-wrap row boundaries, while a string that genuinely never reached the grid SHALL still fail the assertion. The focus-typing-on-activate coverage, the find-bar focus-restore coverage, **and the multi-line-paste content coverage** SHALL use this wrap-robust assertion so that each passes when typed or pasted input reaches the focused pane and the terminal wraps it (e.g. behind a long shell prompt), and fails only when the input does not arrive. A dedicated regression guard SHALL exercise this behavior deterministically — independent of the ambient shell prompt width — by typing a marker that is guaranteed to soft-wrap and confirming that the wrap-robust assertion matches it while a strict (wrap-intolerant) match does not.
 
 #### Scenario: A soft-wrapped typed marker is still asserted present
 
@@ -264,6 +264,11 @@ The deterministic content assertion SHALL confirm that typed content reached the
 
 - **WHEN** the find bar is opened and dismissed, focus returns to the terminal, and a unique marker typed afterward is soft-wrapped across two physical rows in the grid dump (e.g. behind a long shell prompt)
 - **THEN** the find-bar focus-restore assertion confirms the marker reached the focused pane's grid (focus restoration is verified independent of prompt width)
+
+#### Scenario: A soft-wrapped pasted line is still asserted present
+
+- **WHEN** a multi-line clipboard payload is pasted (bracketed paste, staged and not executed) into the focused pane and a pasted line soft-wraps across two physical rows in the grid dump (e.g. behind a long shell prompt)
+- **THEN** the multi-line-paste content assertion confirms the pasted line reached the focused pane's grid (paste insertion is verified independent of prompt width), while the separate not-executed check is unaffected
 
 #### Scenario: The deterministic soft-wrap guard proves the wrap-robust assertion is required and works
 
