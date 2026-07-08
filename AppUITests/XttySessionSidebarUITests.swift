@@ -37,7 +37,11 @@ final class XttySessionSidebarUITests: XCTestCase {
         // Warm-up command lets capture prove itself before we assert on activity.
         type("true", into: app)
         guard waitForCaptureActive(timeout: 8) else {
-            attachScreenshot("semantic-capture-inactive (host zsh config?)")
+            // Capability-absent arm (non-injecting shell): the sidebar's activity is
+            // derived from OSC 133 blocks, so with capture inactive no blocks form —
+            // assert that crisp negative rather than passing vacuously
+            // (split-shell-dependent-testplan D4).
+            assertSemanticCaptureInactive("session-activity")
             return
         }
 

@@ -41,7 +41,10 @@ final class XttySemanticCaptureUITests: XCTestCase {
         // A no-op command lets capture prove itself before we assert.
         type("true", into: app)
         guard waitForCaptureActive(timeout: 8) else {
-            attachScreenshot("semantic-capture-inactive (host zsh config?)")
+            // Capability-absent arm (non-injecting shell, e.g. bash 3.2): assert the
+            // crisp negative — no command boundaries form — instead of passing
+            // vacuously (split-shell-dependent-testplan D4).
+            assertSemanticCaptureInactive("blocks/exit-codes")
             return
         }
         type("false", into: app)
@@ -70,7 +73,10 @@ final class XttySemanticCaptureUITests: XCTestCase {
         _ = GridDumpReader.waitForNonEmpty(timeout: 5)
         type("cd /tmp", into: app)
         guard waitForCaptureActive(timeout: 8) else {
-            attachScreenshot("semantic-capture-inactive (host zsh config?)")
+            // Capability-absent arm: without OSC 7/133 injection the live cwd is
+            // never tracked — assert the crisp negative (no capture) rather than
+            // passing vacuously (split-shell-dependent-testplan D4).
+            assertSemanticCaptureInactive("live-cwd")
             return
         }
         let state = StateDumpReader.waitForState(timeout: 10) {

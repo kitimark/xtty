@@ -753,6 +753,13 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             "theme": active.profile.config.themeName,
             "scrollbackCap": active.profile.config.scrollback,
             "optionAsMeta": active.view.optionAsMetaKey,
+            // Bracketed-paste mode (split-shell-dependent-testplan): whether the
+            // shell has enabled bracketed paste (`\e[?2004h`) at its prompt. The
+            // true capability predicate a shell-dependent paste test branches on —
+            // staged (bracketed, e.g. zsh / bash ≥ 4.4) vs forwarded line-by-line
+            // (not, e.g. macOS bash 3.2) — rather than sniffing the shell binary.
+            // Observe-only; the dump path must never change the terminal's mode.
+            "bracketedPasteMode": engine.bracketedPasteMode,
             "rows": engine.rows,
             "isAlt": engine.isCurrentBufferAlternate,
             "scrollbackDepth": depth,

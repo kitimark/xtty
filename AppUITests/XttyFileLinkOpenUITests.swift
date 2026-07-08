@@ -54,7 +54,11 @@ final class XttyFileLinkOpenUITests: XCTestCase {
         guard StateDumpReader.waitForState(timeout: 8, where: {
             ($0["currentDirectory"] as? String) == cwd
         }) != nil else {
-            attachScreenshot("semantic-capture-inactive (host zsh config?)")
+            // Capability-absent arm: relative-link resolution keys off the OSC 7 live
+            // cwd, which a non-injecting shell never reports — assert the crisp
+            // negative (no capture) rather than passing vacuously
+            // (split-shell-dependent-testplan D4).
+            assertSemanticCaptureInactive("file-link-cwd")
             return
         }
 

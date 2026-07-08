@@ -61,7 +61,9 @@ final class XttySpatialBlocksUITests: XCTestCase {
         _ = GridDumpReader.waitForNonEmpty(timeout: 5)
         type("true", into: app)
         guard waitForCaptureActive(timeout: 8) else {
-            attachScreenshot("semantic-capture-inactive (host zsh config?)"); return
+            // Capability-absent arm: without OSC 133 no blocks form, so jump/copy have
+            // no anchors — assert the crisp negative rather than passing vacuously (D4).
+            assertSemanticCaptureInactive("spatial-blocks"); return
         }
         // Produce more than a screenful so the earlier prompts scroll off the top.
         type("seq 100", into: app)
@@ -88,7 +90,9 @@ final class XttySpatialBlocksUITests: XCTestCase {
         _ = GridDumpReader.waitForNonEmpty(timeout: 5)
         type("true", into: app)
         guard waitForCaptureActive(timeout: 8) else {
-            attachScreenshot("semantic-capture-inactive (host zsh config?)"); return
+            // Capability-absent arm: without OSC 133 no blocks form, so jump/copy have
+            // no anchors — assert the crisp negative rather than passing vacuously (D4).
+            assertSemanticCaptureInactive("spatial-blocks"); return
         }
         let marker = "XTTYCOPYMARKER42"
         type("echo \(marker)", into: app)
@@ -119,7 +123,9 @@ final class XttySpatialBlocksUITests: XCTestCase {
         _ = GridDumpReader.waitForNonEmpty(timeout: 5)
         type("true", into: app)
         guard waitForCaptureActive(timeout: 8) else {
-            attachScreenshot("semantic-capture-inactive (host zsh config?)"); return
+            // Capability-absent arm: without OSC 133 no blocks form, so jump/copy have
+            // no anchors — assert the crisp negative rather than passing vacuously (D4).
+            assertSemanticCaptureInactive("spatial-blocks"); return
         }
         let marker = "XTTYSCROLLINV99"
         type("echo \(marker)", into: app)

@@ -105,6 +105,51 @@ extension XCTestCase {
                 + "(see fix-main-menu-clobber)", file: file, line: line)
     }
 
+    /// Computed-marker shell-readiness gate (harden-churn-shell-readiness), reused
+    /// by shell-parameterized tests (split-shell-dependent-testplan D5). Proves the
+    /// login shell has *executed* a command — rc files sourced, back at its prompt,
+    /// and (for shells that do) bracketed paste enabled — before a test samples an
+    /// observed capability or drives input that could race shell startup. Types
+    /// `echo $((a+b))`; the summed token appears only in the command's *output* (the
+    /// echoed input line shows the unevaluated `$((a+b))`), so a grid match proves
+    /// execution, not mere keypress echo — and the randomized operands keep a stale
+    /// dump from a prior launch from false-positiving. Wrap-tolerant because a long
+    /// prompt soft-wraps the token across dump rows. Returns true once it lands.
+    @discardableResult
+    func waitForShellReady(_ app: XCUIApplication, timeout: TimeInterval = 15) -> Bool {
+        let a = Int.random(in: 500_000...999_999)
+        let b = Int.random(in: 1...9)
+        app.typeText("echo $((\(a)+\(b)))")
+        app.typeKey(.enter, modifierFlags: [])
+        return GridDumpReader.waitForContains("\(a + b)", timeout: timeout, ignoringLineWraps: true)
+    }
+
+    /// Shell-parameterized capability assertion — the capability-**absent** arm for
+    /// a semantic-capture-dependent test (split-shell-dependent-testplan D4). When
+    /// the login shell does not emit xtty's OSC 133/7 shell integration (e.g. macOS
+    /// bash 3.2, which xtty does not inject), assert the crisp negative — capture
+    /// never went live, so no command boundaries formed and no semantic action was
+    /// recorded — rather than passing vacuously. This catches a regression where
+    /// zsh-only injection leaked into a non-injecting shell, or the alt-screen /
+    /// injection gating broke. Reads the latest dump (sampled after the same
+    /// readiness the active arm waited on). Observe-only; asserts, never skips.
+    func assertSemanticCaptureInactive(_ label: String = "",
+                                       file: StaticString = #filePath, line: UInt = #line) {
+        let suffix = label.isEmpty ? "" : " (\(label))"
+        let state = StateDumpReader.read()
+        let action = (state?["lastSemanticAction"] as? String) ?? ""
+        let blocks = (state?["blocks"] as? [[String: Any]]) ?? []
+        XCTAssertTrue(action.isEmpty,
+                      "capability-absent arm\(suffix): expected no semantic action on a "
+                      + "non-injecting shell, got \"\(action)\" — did OSC 133 injection leak?",
+                      file: file, line: line)
+        XCTAssertTrue(blocks.isEmpty,
+                      "capability-absent arm\(suffix): expected no command boundaries on a "
+                      + "non-injecting shell, got \(blocks.count) block(s)",
+                      file: file, line: line)
+        StateDumpReader.attach(self, name: "semantic-capture-absent-arm-asserted")
+    }
+
     /// Attach a full-screen screenshot for human/vision review.
     func attachScreenshot(_ name: String) {
         let shot = XCUIScreen.main.screenshot()

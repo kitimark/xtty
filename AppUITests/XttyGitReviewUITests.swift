@@ -57,7 +57,10 @@ final class XttyGitReviewUITests: XCTestCase {
         _ = GridDumpReader.waitForNonEmpty(timeout: 5)
         type("true", into: app)
         guard waitForCaptureActive(timeout: 8) else {
-            attachScreenshot("git-review: capture inactive (host zsh config?)"); return
+            // Capability-absent arm: the git panel keys off the OSC 7 live cwd, which
+            // a non-injecting shell never reports — assert the crisp negative (no
+            // capture) rather than passing vacuously (split-shell-dependent-testplan D4).
+            assertSemanticCaptureInactive("git-review"); return
         }
 
         // Build a known repo: commit a tracked file, then modify it + add an
@@ -129,7 +132,9 @@ final class XttyGitReviewUITests: XCTestCase {
         _ = GridDumpReader.waitForNonEmpty(timeout: 5)
         type("true", into: app)
         guard waitForCaptureActive(timeout: 8) else {
-            attachScreenshot("emphasis: capture inactive (host zsh config?)"); return
+            // Capability-absent arm: no OSC 7 cwd → the panel never surfaces the repo —
+            // assert the crisp negative rather than passing vacuously (D4).
+            assertSemanticCaptureInactive("git-review-emphasis"); return
         }
 
         // Commit a line, then change *part* of it (a single-line substring edit).
@@ -186,7 +191,10 @@ final class XttyGitReviewUITests: XCTestCase {
         _ = GridDumpReader.waitForNonEmpty(timeout: 5)
         type("true", into: app)
         guard waitForCaptureActive(timeout: 8) else {
-            attachScreenshot("git-review: capture inactive (host zsh config?)"); return
+            // Capability-absent arm: the git panel keys off the OSC 7 live cwd, which
+            // a non-injecting shell never reports — assert the crisp negative (no
+            // capture) rather than passing vacuously (split-shell-dependent-testplan D4).
+            assertSemanticCaptureInactive("git-review"); return
         }
 
         // A guaranteed-fresh, non-repo directory.

@@ -58,7 +58,11 @@ final class XttyBlockSidebarUITests: XCTestCase {
         _ = GridDumpReader.waitForNonEmpty(timeout: 5)
         type("true", into: app)
         guard waitForCaptureActive(timeout: 8) else {
-            attachScreenshot("semantic-capture-inactive (host zsh config?)"); return nil
+            // Capability-absent arm (non-injecting shell): no blocks form, so the
+            // random-access block ops have nothing to resolve — assert the crisp
+            // negative and return nil so callers skip the active-arm assertions
+            // (split-shell-dependent-testplan D4).
+            assertSemanticCaptureInactive("block-sidebar"); return nil
         }
         for i in 0..<count { type("echo block\(i)", into: app) }
         return StateDumpReader.waitForState(timeout: 10) { self.blocks($0).count >= count }
@@ -91,7 +95,9 @@ final class XttyBlockSidebarUITests: XCTestCase {
         _ = GridDumpReader.waitForNonEmpty(timeout: 5)
         type("true", into: app)
         guard waitForCaptureActive(timeout: 8) else {
-            attachScreenshot("semantic-capture-inactive (host zsh config?)"); return
+            // Capability-absent arm: no blocks form on a non-injecting shell — assert
+            // the crisp negative rather than passing vacuously (D4).
+            assertSemanticCaptureInactive("block-sidebar"); return
         }
         let marker = "XTTYBLOCKMARKER7"
         type("echo \(marker)", into: app)
@@ -124,7 +130,9 @@ final class XttyBlockSidebarUITests: XCTestCase {
         _ = GridDumpReader.waitForNonEmpty(timeout: 5)
         type("true", into: app)
         guard waitForCaptureActive(timeout: 8) else {
-            attachScreenshot("semantic-capture-inactive (host zsh config?)"); return
+            // Capability-absent arm: no blocks form on a non-injecting shell — assert
+            // the crisp negative rather than passing vacuously (D4).
+            assertSemanticCaptureInactive("block-sidebar"); return
         }
         let marker = "XTTYRUNMARK5"
         type("echo \(marker); sleep 6", into: app)  // running long enough to act on
@@ -181,7 +189,9 @@ final class XttyBlockSidebarUITests: XCTestCase {
         _ = GridDumpReader.waitForNonEmpty(timeout: 5)
         type("true", into: app)
         guard waitForCaptureActive(timeout: 8) else {
-            attachScreenshot("semantic-capture-inactive (host zsh config?)"); return
+            // Capability-absent arm: no blocks form on a non-injecting shell — assert
+            // the crisp negative rather than passing vacuously (D4).
+            assertSemanticCaptureInactive("block-sidebar"); return
         }
         type("echo earlyblock", into: app)   // becomes blocks[0]
         type("seq 400", into: app)           // flood: pushes earlyblock's row out of a 50-line buffer

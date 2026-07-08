@@ -58,17 +58,37 @@ final class XttyUITests: XCTestCase {
         app.typeKey("u", modifierFlags: .control) // clear staged input
     }
 
-    // 2. Multi-line paste is INSERTED, not auto-executed.
-    func testMultiLinePasteIsNotAutoExecuted() throws {
+    // 2. Multi-line paste matches the shell's bracketing capability
+    //    (split-shell-dependent-testplan). The SAME paste, forwarded faithfully by
+    //    xtty, produces a shell-determined outcome — and both outcomes are correct
+    //    xtty behavior (layer-2 forwarding fidelity, design D2):
+    //      • bracketed-paste ON  (zsh, bash ≥ 4.4): both lines STAGED, nothing runs.
+    //      • bracketed-paste OFF (macOS bash 3.2):   readline treats each ⏎ as
+    //        accept-line, so the newline-terminated first line EXECUTES while the
+    //        unterminated tail line stays staged.
+    //    The branch predicate is the *observed* bracketed-paste mode from the DEBUG
+    //    state dump (design D5), sampled after the computed-marker readiness gate —
+    //    never the shell binary/version.
+    func testMultiLinePasteMatchesShellBracketing() throws {
+        app.activate()
+        // Readiness (D5): the shell has executed a command and is back at its
+        // prompt, so bracketed paste (if the shell supports it) is enabled and the
+        // observed capability predicate is stable — never sampled before the prompt.
+        if GridDumpReader.isAvailable {
+            XCTAssertTrue(waitForShellReady(app),
+                          "shell never reached readiness before sampling bracketed-paste mode")
+        }
+
         let tag = Int.random(in: 1000...9999)
         let lineA = "alpha\(tag)"
         let lineB = "beta\(tag)"
 
         let pb = NSPasteboard.general
         pb.clearContents()
+        // NB: no trailing newline — so on a non-bracketed shell only the first
+        // (newline-terminated) line accepts; the tail stays staged.
         pb.setString("\(lineA)\n\(lineB)", forType: .string)
 
-        app.activate()
         // Cmd+V dispatches via the Edit▸Paste menu item — refuse to drive it
         // against a clobbered menu (fatal canary; Release builds skip with the
         // rest of the dump-gated assertions).
@@ -79,22 +99,45 @@ final class XttyUITests: XCTestCase {
         attachGridDump("paste-grid")
 
         if GridDumpReader.isAvailable {
-            // Wrap-tolerant: behind a long shell prompt (e.g. the wide-prompt zsh
-            // VM rig, where the 70-col prompt pushes a 9-char pasted line past the
-            // 78-col wrap) a pasted line can soft-wrap across physical rows, which
-            // the dump joins with "\n". Paste insertion is still exactly what's
-            // asserted — the line reached the focused pane's grid — so match across
-            // the wrap; a line that genuinely never landed still fails. The
-            // not-executed check below stays strict: paste-vs-execute is the
-            // bash-3.2 execution arm (:87), a shell-capability concern owned by
-            // split-shell-dependent-testplan, not a soft-wrap concern.
+            // The observed capability predicate (D5): whether the shell enabled
+            // bracketed paste at its prompt — read from the state dump AFTER
+            // readiness, never inferred from the shell binary/version.
+            let bracketed = (StateDumpReader.read()?["bracketedPasteMode"] as? Bool) ?? false
+            StateDumpReader.attach(self, name: "paste-bracketed-mode-\(bracketed)")
+
+            // Both arms: the first pasted line lands in the grid. Wrap-tolerant per
+            // harden-paste-wrap-assertion — behind a wide prompt (the zsh VM rig's
+            // 70-col prompt pushes the 9-char line past the 78-col wrap) a pasted
+            // line soft-wraps across physical rows, which the dump joins with "\n".
+            // The line still reached the focused pane's grid; a genuinely absent
+            // line still fails.
             XCTAssertTrue(GridDumpReader.waitForContains(lineA, timeout: 5, ignoringLineWraps: true),
                           "first pasted line missing from grid")
-            XCTAssertTrue(GridDumpReader.waitForContains(lineB, timeout: 5, ignoringLineWraps: true),
-                          "second pasted line missing (multi-line paste not inserted)")
-            let grid = GridDumpReader.read() ?? ""
-            XCTAssertFalse(grid.lowercased().contains("command not found"),
-                           "pasted text appears to have been executed")
+
+            if bracketed {
+                // zsh / bracketed-ON arm: BOTH lines staged, nothing executed — the
+                // staged-not-executed guarantee (kept wrap-tolerant per harden-paste).
+                XCTAssertTrue(GridDumpReader.waitForContains(lineB, timeout: 5, ignoringLineWraps: true),
+                              "second pasted line missing (bracketed paste should stage both lines)")
+                let grid = GridDumpReader.read() ?? ""
+                XCTAssertFalse(grid.lowercased().contains("command not found"),
+                               "bracketed paste should stage both lines, not execute them")
+            } else {
+                // bash 3.2 / bracketed-OFF arm: the newline-terminated first line
+                // EXECUTES (`alpha<tag>: command not found`) — xtty's faithful
+                // forwarding, correct for that shell (design D2). The unterminated
+                // tail line stays staged at the next prompt.
+                XCTAssertTrue(GridDumpReader.waitForContains("command not found", timeout: 5),
+                              "the newline-terminated first line should have executed on a non-bracketed shell")
+                XCTAssertTrue(GridDumpReader.waitForContains(lineB, timeout: 5, ignoringLineWraps: true),
+                              "the unterminated tail line should remain staged at the prompt")
+                // Exactly one execution: the tail has no trailing ⏎, so it must NOT
+                // have produced its own `command not found`.
+                let grid = (GridDumpReader.read() ?? "").lowercased()
+                let executions = grid.components(separatedBy: "command not found").count - 1
+                XCTAssertEqual(executions, 1,
+                               "only the newline-terminated first line should execute; the tail stays staged")
+            }
         } else {
             XCTAssertTrue(app.mainWindow.exists)
         }
@@ -231,6 +274,12 @@ final class XttyUITests: XCTestCase {
         }
 
         // Emoji + wide CJK as literal UTF-8 via the pasteboard (avoids typeText).
+        // Unlike the multi-line paste test, this payload is a SINGLE line with an
+        // explicit Return, so it executes identically on both shells — bracketed or
+        // not (no accept-line divergence to branch on, so no bracketedPasteMode
+        // arm). The one concern it shares with the paste test is soft-wrap: behind
+        // a wide prompt the pasted+echoed line wraps across dump rows, so the
+        // emoji/CJK assertions are wrap-tolerant per harden-paste-wrap-assertion.
         let i18n = "echo ROCKET\(tag) 🚀 日本語 ✅"
         let pb = NSPasteboard.general
         pb.clearContents()
@@ -244,11 +293,11 @@ final class XttyUITests: XCTestCase {
         attachGridDump("i18n-grid")
 
         if GridDumpReader.isAvailable {
-            XCTAssertTrue(GridDumpReader.waitForContains("🚀", timeout: 5),
+            XCTAssertTrue(GridDumpReader.waitForContains("🚀", timeout: 5, ignoringLineWraps: true),
                           "non-BMP emoji (🚀) missing from grid — characterProvider not applied?")
-            XCTAssertTrue(GridDumpReader.waitForContains("日本語", timeout: 5),
+            XCTAssertTrue(GridDumpReader.waitForContains("日本語", timeout: 5, ignoringLineWraps: true),
                           "wide CJK garbled/missing — skipNullCellsFollowingWide not applied?")
-            XCTAssertTrue(GridDumpReader.waitForContains("✅", timeout: 5),
+            XCTAssertTrue(GridDumpReader.waitForContains("✅", timeout: 5, ignoringLineWraps: true),
                           "BMP emoji (✅) missing from grid")
         } else {
             XCTAssertTrue(app.mainWindow.exists)
