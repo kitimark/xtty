@@ -378,14 +378,36 @@ graphics pre-check was `40/1/1`, `…/2026-07-08-graphics-both-goldens/`).
 **The CI `findbar-marker-wrap` gap is CLOSED — reproduced, then fixed, in-guest.** That flake is a pure **prompt-width** artifact — a long `\h` soft-wraps the typed marker, defeating a strict grid match. `add-vm-prompt-width-parity` gave the image a 59-char single-label `\h` (all three `scutil` keys, mirroring `runner-images`' runtime name), so the marker wraps in-guest and the find-bar red **reproduced here**; `harden-findbar-wrap-assertion` then made the find-bar focus-restore assertion (`:198`) **wrap-tolerant** and it flipped **green** — D2-confirmed against a genuine in-guest soft-wrap (`AFTERFIND####` splitting behind the 58-char `\h` prompt), not trivially. The image now mirrors CI on **race class**, **shell capability**, *and* **prompt width**. **Measured correction:** a long `\h` does **NOT** flip the paste test's failing line `:87`→`:84` as `ci-runner-prompt-width-forensics.md` §6 (option C) predicted — measurement shows it **stays at `:87`** (the `command not found` check). Bash 3.2 executes the pasted newline, so line B (`beta####`) echoes contiguously and fits before col 80, leaving the `:84` `waitForContains(lineB)` still passing; the failure remains the downstream `:87`. Verified mechanism + the gethostname spike (**T6, now closed**) + the options menu: `research/03-analysis/ci-runner-prompt-width-forensics.md`.
 
 Acceptance = **this measured envelope**. With `split-shell-dependent-testplan` the
-former bash paste residual is retired (asserted green on both goldens), so the
-expected envelope is **`41/0/1` of 42 on _both_ goldens** (the sole skip is the
-opt-in benchmark e2e). A regression is now **any test going red** — menu-dispatch,
+former bash paste residual is retired (asserted green on both goldens); then
+`fix-scroll-wheel-mouse-reporting` added **6 mouse-wheel routing XCUITests**
+(`XttyMouseWheelUITests`, suite 42 → **48**), so the expected envelope is
+**`47/0/1` of 48 on _both_ goldens** (the sole skip is the opt-in benchmark e2e).
+A regression is now **any test going red** — menu-dispatch,
 prompt-width (find-bar included), the paste test on either arm, or a
 semantic-capture test that either reds *or* reverts to a **vacuous pass** (a
 `…capture inactive…` attachment without an assertion is itself a defect now).
 Graphics and headless match exactly (the `windowCount` state-dump assertion
 removed the old graphics-mode focus-steal red).
+
+> **`fix-scroll-wheel-mouse-reporting` added the 6 `XttyMouseWheelUITests`
+> (2026-07-09).** They assert the wheel-routing branch via the DEBUG
+> `lastWheelRouting` state-dump field: report (alt+mouse), cursor-key ×2 (DECCKM
+> normal/application arms), local-scrollback, Shift-bypass, and a synthetic-event
+> fidelity precheck. All arm terminal state with `printf` escape sequences the
+> **engine parses regardless of login shell** (no OSC 133 dependency), and the
+> DECCKM form is held deterministically with a foreground `sleep` (so zsh's ZLE
+> can't re-toggle application-cursor mode) — so the 6 are **shell-independent and
+> expected green on _both_ goldens** (`47/0/1` of 48). The wheel gesture uses
+> XCUITest's element-targeted `scroll(byDeltaX:deltaY:)` (Shift via
+> `perform(withKeyModifiers:)`) — the automation channel, not a raw CGEvent HID
+> post (the runner lacks Post-Event/Accessibility privileges;
+> `CGPreflightPostEventAccess=false`). **MEASURED `47/0/1` of 48 on both goldens**
+> (task 4.3 full matrix, 2026-07-09): Tier-0 `237/0/0`, Tier-1 local `47/0/1`,
+> headless ×2 (bash + zsh) both `47/0/1`, graphics ×2 (bash + zsh) both `47/0/1`
+> — all six environments identical, all 6 mouse-wheel tests green on every rig,
+> 0 vacuous passes on the zsh rigs, graphics matched headless (no LN modal).
+> Evidence: `~/Downloads/xtty-vm-poc/artifacts/2026-07-09-fix-scroll-wheel-fullmatrix/`
+> (4 `.xcresult` + logs + `REVIEW.md`).
 
 **Confirm-close class (update 2026-07-06):** `harden-churn-shell-readiness`
 landed its computed-marker shell-readiness gate; a full sweep (Tier 0 `232/0/0`,
@@ -416,6 +438,7 @@ above; this table never duplicates a number, only causes.**
 | **Bracketed-paste — bash execution arm (ASSERTED, was a red)** | The bash VM rig `xtty-test:26.5` + hosted CI (both `/bin/bash` 3.2.57); **not** the zsh rig, not local zsh, not Homebrew bash 5.1+ | macOS's stock **bash 3.2.57** readline lacks `enable-bracketed-paste` — a pasted multi-line string forwards line-by-line, so the newline-terminated first line **executes** while the unterminated tail stages. Since `split-shell-dependent-testplan`, `testMultiLinePasteMatchesShellBracketing` (renamed from `testMultiLinePasteIsNotAutoExecuted`) branches on the observed `bracketedPasteMode` and **asserts exactly that** on the bash arm (`command not found` present exactly once; tail staged) — so it is **green**, not the old `:87` red. A recurrence of the *old* red (an unconditional not-executed assertion failing on bash) would be a regression. See `github-actions-ci-cd.md` §19b. |
 | **Bracketed-paste — zsh soft-wrap arm (FIXED)** | The zsh VM rig `xtty-test-zsh:26.5` | zsh **has** bracketed paste, so the paste correctly does **not** auto-execute (product behavior is right). The former `:82` red ("first pasted line missing from grid") was **not** a grid-scrape/staged-region miss but the **prompt-width soft-wrap** class (find-bar wrap class): behind the 59-char parity `\h` the 70-col zsh prompt wraps the 9-char pasted first line past the 78-col boundary. **Fixed** by `harden-paste-wrap-assertion` (wrap-tolerant matcher at `:82`/`:84`, mirroring `:53`/`:198`) — zsh rig `40/1/1` → **`41/0/1`**; a recurrence is now a **REGRESSION**. This retires the residual `split-shell-dependent-testplan` was slated to skip — **fixed, not skipped**; that change then **asserts** the bash `:87` execution arm (rather than skipping it) while preserving this zsh wrap-tolerance, so neither paste arm is skipped. |
 | **Prompt-width wrap** | Both VM rigs (since `add-vm-prompt-width-parity`) + hosted CI; not local zsh (short bare-metal `\h`) | The guest's 59-char `\h` reproduces the hosted runner's prompt width, so a marker typed at the `\h:\W \u\$ ` prompt **soft-wraps** across physical grid rows; a strict (wrap-intolerant) grid match then reds while a wrap-tolerant one passes. This surfaced `testFindBarOpensLocatesAndDismisses` in-guest — the **intended** fidelity of `add-vm-prompt-width-parity` (`ci-runner-prompt-width-forensics.md`; grid-verified by effect). **The find-bar instance is now fixed** — `harden-findbar-wrap-assertion` shipped the wrap-tolerant matcher on that assertion (`:198`) + a deterministic `testSoftWrapGuardIsWrapTolerant` guard (the red→green pair, proven in-guest); **no current test reds on width**, and a recurrence is a regression. But **the width parity itself is durable**, guarding *future* type-at-prompt assertions. Distinct from the CI-only artifact it reproduces: on the runner the long `\h` is runtime-injected; here it is `scutil`-set in the image. |
+| **Mouse-wheel routing (shell-independent)** | All environments identically (local + both VM rigs + CI); NOT a divergence source | `fix-scroll-wheel-mouse-reporting`'s 6 `XttyMouseWheelUITests` arm terminal state (mouse mode / alt screen / DECCKM) with `printf` escape sequences the **engine parses regardless of login shell**, and hold DECCKM deterministically with a foreground `sleep` — so they take the **same** arm on bash and zsh (unlike the semantic-capture family). Listed here to record that they are **expected identical (green) everywhere**, not to flag a difference: a red is a real regression on any rig. The wheel gesture rides XCUITest's automation channel (`scroll(byDeltaX:deltaY:)` / `perform(withKeyModifiers:)`), not a raw CGEvent HID post — the runner has no Post-Event/Accessibility grant (`CGPreflightPostEventAccess=false`), so a raw `.cghidEventTap` scroll would be silently dropped. |
 | **Confirm-close / interference flake sources** | Local bare metal only (not observed on either VM rig) | (a) **live mouse/keyboard interference** during `make test` driving the real GUI (the hands-off requirement the agent surfaces before that tier) — still a live local-only hazard. (b) a **confirm-close race** when a churn test closed a freshly-split pane before its shell settled (a heavier interactive `~/.zshrc` widened the race window locally vs the VM/CI's leaner bash startup) — **fixed** by `harden-churn-shell-readiness` (a computed-marker shell-readiness gate: the churn test proves the fresh shell executed a command before closing it). The churn test now passes green across local **and** both VM rigs (full-sweep-validated 2026-07-06). Root-caused in `github-actions-ci-cd.md` §13; retained here because a regression would reproduce the pre-fix churn-flake pattern. |
 
 The Acceptance envelope above **and** this matrix are the **runtime source**
@@ -430,9 +453,10 @@ greened that zsh paste arm `:82` `40/1/1` → `41/0/1`, and
 `split-shell-dependent-testplan`, which parameterized the shell-dependent tests
 per shell — flipping the **bash** paste `:87` red to an **asserted green** arm
 (bash golden → expected `41/0/1`) and turning the bash semantic-capture vacuous
-passes into **asserted crisp negatives**) MUST update this section — and
-Acceptance — in the same session, or the "runtime read" promise just relocates
-the staleness.
+passes into **asserted crisp negatives** — and `fix-scroll-wheel-mouse-reporting`,
+which added the 6 shell-independent `XttyMouseWheelUITests` (suite 42 → 48, both
+goldens → expected `47/0/1`)) MUST update this section — and Acceptance — in the
+same session, or the "runtime read" promise just relocates the staleness.
 
 ## Maintenance
 

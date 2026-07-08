@@ -43,6 +43,14 @@ xtty embeds SwiftTerm (`external/SwiftTerm @ v1.13.0` + `patches/swiftterm/xtty-
 3. File the fix upstream to SwiftTerm; when it merges into the pinned ref, drop the hunk (same retire-on-upstream pattern as the P4b-2 accessors).
 - **Rollback:** revert the patch hunk + the dump field; `bootstrap` restores the pristine `scrollWheel`.
 
+### Upstream note (task 5.1)
+
+The `scrollWheel(with:)` 3-way-branch rewrite is a genuine upstream SwiftTerm bug fix and is **upstream-ready**, but the PR to `migueldeicaza/SwiftTerm` is **deferred to a maintainer action** (outward-facing; needs a fork + PR under the repo owner's GitHub account — not filed unilaterally by the agent). What the upstream PR carries vs what stays xtty-local, so it can be cleanly separated:
+
+- **Upstream-bound** (the pure fix, in `Sources/SwiftTerm/Mac/MacTerminalView.swift`): the rewritten `scrollWheel(with:)` branch logic (Branch 1 report / Branch 2 cursor-keys / Branch 3 scrollback + the `deltaY==0` and momentum guards) and the private `xttyWheelRowCount(for:)` helper (rename on upstreaming).
+- **xtty-local observability, strip for the PR** (clearly demarcated with `// xtty (fix-scroll-wheel-mouse-reporting)` comments): the `public var xttyLastWheelRouting` + `private var xttyWheelRowRemainder` stored properties, the three `xttyLastWheelRouting = XttyWheelRouting(...)` assignments, and `public struct XttyWheelRouting` in `XttyAccessors.swift`. On upstream merge, re-home the observability (e.g. an `XttyTerminalView` override that classifies from public state) so the patch hunk can be dropped per the retire-on-merge plan.
+- **Retire-on-merge:** once the branch logic lands in an upstream release the pin bumps to, delete the `scrollWheel` hunk from `patches/swiftterm/xtty-accessors.diff` (same discipline as the P4b-2 accessors), keeping only the re-homed observability.
+
 ## Open Questions
 
 - **Anti-flood policy exact shape** — ~1 report per wheel event vs a cross-event whole-row accumulator with a cap N; decided during apply by matching iTerm2's ≈1-report-per-notch baseline (report-count probe).

@@ -1,0 +1,32 @@
+## 1. Product fix — rewrite `scrollWheel` (SwiftTerm patch hunk)
+
+- [x] 1.1 In `patches/swiftterm/xtty-accessors.diff`, rewrite `MacTerminalView.scrollWheel(with:)` as the priority-ordered 3-way branch (design D2). **Branch 1** (mouse reporting): gate on `allowMouseReporting && terminal.mouseMode.sendButtonPress()`; emit a wheel report via `terminal.encodeButton(button: up ? 4 : 5, release: false, shift/meta/control from modifierFlags)` → `terminal.sendEvent(buttonFlags:x:y:)`, **press-only**, at `calculateMouseHit(with:)` coords reused from `sharedMouseEvent` — `x = hit.grid.col` (0-based), `y = max(0, min(rows-1, hit.grid.row - displayBuffer.yDisp))` (design D3/D4).
+- [x] 1.2 **Branch 2** (alt screen, mouse off): send cursor Up/Down keys per accumulated row, DECCKM-aware via public `terminal.applicationCursor` selecting `EscapeSequences.moveUp/DownApp` (SS3) vs `moveUp/DownNormal` (CSI) (design D6).
+- [x] 1.3 **Branch 3** (primary, mouse off): keep the existing `scrollUp`/`scrollDown` local scrollback. Add the **Shift-bypass** — a Shift-modified wheel routes to Branch 3 even under mouse reporting (design D7). Keep the `deltaY == 0` early-return so a purely horizontal gesture emits nothing (design D8).
+- [x] 1.4 **Bounded emission** (design D5): emit ~one report/key per accumulated row (default ≈1 per wheel event), collapse trackpad momentum (skip/coalesce `momentumPhase`), cap the per-gesture burst — do **not** use `calcScrollingVelocity` as the report count.
+- [x] 1.5 Reapply the patch (`scripts/bootstrap-swiftterm.sh`) and confirm the app builds (`make build`).
+
+## 2. Observability — DEBUG wheel-routing state-dump field
+
+- [x] 2.1 Record the last wheel-routing action (branch taken + emitted button/key form + direction + count) in the pane/terminal-view seam and surface it in `XttyCore`'s DEBUG state dump (design D9), gated by `#if DEBUG` + `-UITestGridDump`, observe-only — satisfies the `verification-harness` "Mouse-wheel routing is observable" requirement.
+
+## 3. Tests — end-to-end coverage
+
+- [x] 3.1 **Harness-fidelity precheck first** (research probe #1): with `mouseMode == .off` on the primary screen, N synthetic wheel ticks move scrollback a deterministic, monotonic amount and the gesture injects no stray click/keypress — establishes the synthetic-event generator is faithful before trusting routing assertions. (`testSyntheticWheelFidelityPrecheck` — 3 up-ticks strictly decrease `scrollbackDepth`, each recorded as the `scrollback` branch.)
+- [x] 3.2 Add XCUITest coverage for the four `verification-harness` scenarios, asserting via the wheel-routing dump field: alt-screen mouse-tracking → wheel-report branch; alt-screen no-mouse → cursor-key branch; primary no-mouse → local scrollback; Shift+wheel under mouse reporting → local scrollback. (`AppUITests/XttyMouseWheelUITests.swift`, 6 tests: report / cursor-key ×2 DECCKM arms / scrollback / Shift-bypass / precheck. Gesture via XCUITest's element-targeted `scroll(byDeltaX:deltaY:)`; Shift via `perform(withKeyModifiers:)`; DECCKM held deterministically with `sleep`. All 6 green locally.)
+- [x] 3.3 Update `packer/README.md` Acceptance/expected-difference matrix for the added tests (the reverse-duty: any change to test counts/expected residuals updates the living envelope in the same session). (Suite 42 → 48; expected `47/0/1` of 48 on both goldens — the 6 are shell-independent; added a `Mouse-wheel routing (shell-independent)` matrix row + reverse-duty entry. Measured VM numbers finalized by task 4.3.)
+
+## 4. Verify & accept
+
+- [x] 4.1 Iterate (inline): `make test-core`, and one-off `-UITestGridDump` wheel launches over htop/less to eyeball each branch and the emitted routing field. (`make test-core` **237/0**; manual peekaboo drive of the real Debug app — htop scrolled a full page, less advanced, routing field recorded per branch.)
+- [x] 4.2 Verify-by-effect (inline): the report-count-vs-iTerm baseline probe (≈1 report/notch, momentum bounded), the Branch-2 pager probe (DECCKM flips `ESC [ B` → `ESC O B`), the horizontal-guard probe, and the Shift-bypass probe — plus the `cat -v` byte capture confirming the report is now emitted under htop's modes (`\e[?1002h\e[?1006h`). (Manual `cat -v` under `?1002h?1006h`: scroll-down emitted `^[[<65;28;10M`, scroll-up `^[[<64;28;10M` at the pointer cell — **zero bytes before the fix**; count bounded (~1/notch, no flood). htop scrolled a full page; `less` (alt-screen pager, no mouse) advanced via arrow keys. DECCKM `ESC [ B`↔`ESC O B` flip + Shift-bypass covered deterministically by the XCUITests; horizontal guard = the unchanged `deltaY == 0` early-return.)
+- [x] 4.3 Full acceptance: run the Tier-1 XCUITest suite locally and on both VM goldens against the acceptance envelope ⟶ xtty-test-validator (Tier-1 local + headless + graphics VM, both bash & zsh goldens). (Validator `Definition: v5`, verdict **IN-ENVELOPE**: Tier-0 `237/0/0`, Tier-1 local `47/0/1`, headless ×2 both `47/0/1`, graphics ×2 both `47/0/1` — all six environments identical, 0 reds, 0 vacuous passes. Evidence: `~/Downloads/xtty-vm-poc/artifacts/2026-07-09-fix-scroll-wheel-fullmatrix/`.)
+
+## 5. Upstream
+
+- [x] 5.1 File the `scrollWheel` fix upstream to SwiftTerm (it is a genuine upstream bug); record the issue/PR link in the change and note the retire-on-merge plan for the patch hunk (design D1). (Upstream-ready + retire-on-merge plan + the upstream-bound-vs-xtty-local demarcation recorded in `design.md` → *Upstream note*. **Actual PR filing deferred to a maintainer action** — outward-facing, needs a fork/PR under the repo owner's GitHub account; not filed unilaterally. No PR link yet.)
+
+## 6. Coherence & completion (standard change tail)
+
+- [x] 6.1 Pre-archive coherence review ⟶ xtty-openspec-critic (fix-scroll-wheel-mouse-reporting) (`Definition: v1`, verdict **COHERENT** — no blockers; 3 [REVIEW] items all owed to the 6.2 reconcile: add the Current-status row/move-to-archived + refresh snapshot 42→48; deferred upstream PR noted.)
+- [x] 6.2 Archive + reconcile trackers ⟶ archive-ritual (`openspec archive` merged the deltas — `terminal-session` +1, `verification-harness` +2; specs 22/0 validate. Reconciled: research/README index line (candidate→shipped), AGENTS snapshot count 42→48 + envelope `47/0/1` of 48 + Shipped-table entry + 2 Learned refutations, HISTORY.md narrative, packer/README (done in 3.3); no milestone slot. Verified against disk: only `add-ci-pipeline` active, archived as `2026-07-08-fix-scroll-wheel-mouse-reporting`, 21 specs.)
