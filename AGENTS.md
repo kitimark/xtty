@@ -16,6 +16,7 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 | --- | --- | --- | --- |
 | `add-ci-pipeline` | implemented — owner steps left | CI is live; remaining: repo public, pr-lint PR, branch protection, archive | `research/03-analysis/github-actions-ci-cd.md` |
 | `add-install-workflow` | proposed — 0/14 tasks, apply-ready | `make install`: optimized Release build → git version-stamp → `ditto` copy to `/Applications` ($0, no notarization) | `research/03-analysis/local-install-workflow-research.md` |
+| `add-research-launcher` | proposed — 0/8 tasks, apply-ready | committed `/xtty:research` launcher for source-research fan-outs (Workflow worker; readers `sonnet`, synthesis/critic `opus`) + AGENTS delegation rule; new `research-orchestration` spec | `research/03-analysis/dev-workflow-agent-orchestration.md` §11 |
 
 **Shipped and archived** (full narratives: [HISTORY.md](HISTORY.md); what is true: `openspec/specs/`; mechanisms: `research/`):
 
