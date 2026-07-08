@@ -33,7 +33,25 @@ ifdef XTTY_SIGN_IDENTITY
 SIGN_FLAGS := CODE_SIGN_IDENTITY="$(XTTY_SIGN_IDENTITY)" CODE_SIGN_STYLE=Manual CODE_SIGNING_ALLOWED=YES
 endif
 
-.PHONY: help doctor setup build run test test-core build-core bench audit-leaks image image-zsh bootstrap generate clean reset
+# --- make install: stable, versioned, optimized Release build (D1-D5) ---------
+# `make install` builds the optimized Release config and copies a self-contained
+# bundle into INSTALL_DIR (a copy, so it survives `make clean`; override without
+# editing tracked files, e.g. `make install INSTALL_DIR=~/Applications`).
+INSTALL_DIR    ?= /Applications
+RELEASE_CONFIG := Release
+RELEASE_APP    := $(DERIVED)/Build/Products/$(RELEASE_CONFIG)/xtty.app
+
+# Version stamp for the install build (D5). VERSION (the human-facing short
+# version) is the latest reachable tag with the leading `v` stripped, falling
+# back to project.yml's committed MARKETING_VERSION when no tag is reachable or
+# git is unavailable. BUILD (the monotonic build number) is the commit count,
+# falling back to 1. Both degrade cleanly in a tagless/no-git tree.
+PROJECT_VERSION := $(shell sed -n 's/.*MARKETING_VERSION: *"\([^"]*\)".*/\1/p' project.yml | head -1)
+VERSION         := $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
+VERSION         := $(or $(VERSION),$(PROJECT_VERSION),0.0.1)
+BUILD           := $(shell git rev-list --count HEAD 2>/dev/null || echo 1)
+
+.PHONY: help doctor setup build run install restart test test-core build-core bench audit-leaks image image-zsh bootstrap generate clean reset
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -68,6 +86,21 @@ build: $(SWIFTTERM_SENTINEL) $(XCODEPROJ) ## Build the app (auto-bootstraps + ge
 
 run: build ## Build then launch the app
 	@open $(APP)
+
+install: | $(SWIFTTERM_SENTINEL) $(XCODEPROJ) ## Install an optimized, version-stamped Release build into INSTALL_DIR (default /Applications)
+	@echo "Building Release (version $(VERSION), build $(BUILD))…"
+	@xcodebuild -project xtty.xcodeproj -scheme $(SCHEME) -configuration $(RELEASE_CONFIG) -derivedDataPath $(DERIVED) build $(SIGN_FLAGS) MARKETING_VERSION="$(VERSION)" CURRENT_PROJECT_VERSION="$(BUILD)"
+	@if [ -d "$(INSTALL_DIR)/xtty.app" ]; then \
+		echo "Backing up existing install -> $(INSTALL_DIR)/xtty.app.bak"; \
+		rm -rf "$(INSTALL_DIR)/xtty.app.bak"; \
+		mv "$(INSTALL_DIR)/xtty.app" "$(INSTALL_DIR)/xtty.app.bak"; \
+	fi
+	@ditto "$(RELEASE_APP)" "$(INSTALL_DIR)/xtty.app"
+	@echo "Installed xtty $(VERSION) ($(BUILD)) -> $(INSTALL_DIR)/xtty.app"
+
+restart: ## Quit any running xtty and relaunch the installed app
+	@pkill -x xtty 2>/dev/null || true
+	@open "$(INSTALL_DIR)/xtty.app"
 
 test: $(SWIFTTERM_SENTINEL) $(XCODEPROJ) ## Run the app UI tests (XCUITests)
 	@xcodebuild test -project xtty.xcodeproj -scheme $(SCHEME) -destination 'platform=macOS' -derivedDataPath $(DERIVED) $(SIGN_FLAGS)
