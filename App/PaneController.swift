@@ -505,6 +505,25 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
         default: break
         }
     }
+
+    /// XCUITest hook (smooth-scroll-wheel-momentum D8): construct a faithful
+    /// synthetic wheel `NSEvent` from a test spec and drive it through the REAL
+    /// `scrollWheel(with:)` — never a reimplemented branch — so the momentum
+    /// routing/accumulator logic gets automated coverage the automation channel
+    /// can't reach (synthesized gestures carry no momentum; posting a raw CGEvent
+    /// is dropped in the runner). Spec = "gesturePhase:momentumPhase:precise:deltaY:shift",
+    /// each phase ∈ none|began|changed|ended, deltaY a signed pixel magnitude
+    /// (positive = up, matching the automation-channel scroll convention), shift ∈
+    /// true|false. Malformed specs are ignored (no-op).
+    func routeTestWheelInjection(_ spec: String) {
+        let parts = spec.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 5, let deltaY = Int32(parts[3]) else { return }
+        guard let event = XttySyntheticWheelEvent.make(
+            gesturePhase: parts[0], momentumPhase: parts[1],
+            precise: parts[2] == "true", deltaY: deltaY, shift: parts[4] == "true"
+        ) else { return }
+        view.scrollWheel(with: event)
+    }
     #endif
 
     // MARK: XttyTerminalViewCommands (forward the focused view's intent to the owner)
@@ -515,3 +534,54 @@ final class PaneController: NSObject, LocalProcessTerminalViewDelegate, XttyTerm
     func newTab() { delegate?.paneRequestsNewTab(self) }
     func newWindow() { delegate?.paneRequestsNewWindow(self) }
 }
+
+#if DEBUG
+/// Builds a faithful synthetic wheel `NSEvent` for XCUITest injection
+/// (smooth-scroll-wheel-momentum D8) — the momentum-routing regression coverage
+/// the automation channel can't reach (`scroll(byDeltaX:deltaY:)` carries no
+/// momentum) and a raw-CGEvent post can't reach either (dropped in the runner,
+/// `CGPreflightPostEventAccess == false`). Sets the three undocumented-but-stable
+/// `CGEventField` raw values AppKit itself populates for trackpad/Magic Mouse
+/// scrolling — `kCGScrollWheelEventIsContinuous` (88), `kCGScrollWheelEventScrollPhase`
+/// (99), `kCGScrollWheelEventMomentumPhase` (123); none has a public `CGEventField`
+/// case. Verified by spike to bridge through `NSEvent(cgEvent:)` into
+/// `.hasPreciseScrollingDeltas` / `.phase` / `.momentumPhase` exactly as
+/// `scrollWheel(with:)` reads them: momentum raw 0/1/2/3 → NSEvent momentumPhase
+/// none/.began/.changed/.ended; scroll-phase raw 0/1/2/4 → NSEvent phase
+/// none/.began/.changed/.ended (raw 3 does not bridge to a phase and is unused).
+private enum XttySyntheticWheelEvent {
+    private static let isContinuousField = CGEventField(rawValue: 88)!
+    private static let scrollPhaseField = CGEventField(rawValue: 99)!
+    private static let momentumPhaseField = CGEventField(rawValue: 123)!
+
+    private static func momentumRaw(_ name: String) -> Int64 {
+        switch name {
+        case "began": return 1
+        case "changed": return 2
+        case "ended": return 3
+        default: return 0
+        }
+    }
+
+    private static func scrollPhaseRaw(_ name: String) -> Int64 {
+        switch name {
+        case "began": return 1
+        case "changed": return 2
+        case "ended": return 4
+        default: return 0
+        }
+    }
+
+    static func make(gesturePhase: String, momentumPhase: String, precise: Bool, deltaY: Int32, shift: Bool) -> NSEvent? {
+        guard let cgEvent = CGEvent(
+            scrollWheelEvent2Source: nil, units: precise ? .pixel : .line,
+            wheelCount: 1, wheel1: deltaY, wheel2: 0, wheel3: 0
+        ) else { return nil }
+        cgEvent.setIntegerValueField(isContinuousField, value: precise ? 1 : 0)
+        cgEvent.setIntegerValueField(scrollPhaseField, value: scrollPhaseRaw(gesturePhase))
+        cgEvent.setIntegerValueField(momentumPhaseField, value: momentumRaw(momentumPhase))
+        if shift { cgEvent.flags.insert(.maskShift) }
+        return NSEvent(cgEvent: cgEvent)
+    }
+}
+#endif

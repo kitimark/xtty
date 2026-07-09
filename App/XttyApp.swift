@@ -185,6 +185,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
             .routeTestBlockOnActivePane(spec)
     }
 
+    /// XCUITest hook (smooth-scroll-wheel-momentum D8): if the test wrote a
+    /// synthetic wheel-event spec ("gesturePhase:momentumPhase:precise:deltaY:shift"),
+    /// construct a faithful wheel `NSEvent` and drive it through the REAL
+    /// `scrollWheel(with:)` on the key window's focused pane — the only way to
+    /// automate momentum-routing coverage, since XCUITest's automation channel
+    /// carries no momentum and posting a raw CGEvent is dropped in the runner.
+    /// Same file-poll rationale as the other test hooks.
+    private func routePendingTestWheelInjection() {
+        guard let path = ProcessInfo.processInfo.environment["XTTY_TEST_WHEEL_PATH"], !path.isEmpty,
+              let spec = try? String(contentsOfFile: path, encoding: .utf8)
+                  .trimmingCharacters(in: .whitespacesAndNewlines), !spec.isEmpty else { return }
+        try? FileManager.default.removeItem(atPath: path)
+        let key = NSApp.keyWindow
+        (windowControllers.first { $0.window === key } ?? windowControllers.last)?
+            .routeTestWheelInjectionOnActivePane(spec)
+    }
+
     private func startUITestDump() {
         // Register in `.common` modes (not just the default mode) so the periodic
         // dump keeps ticking while a modal panel — e.g. the confirm-close NSAlert —
@@ -201,6 +218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
                 self.routePendingTestGitSelect()
                 self.routePendingTestGitOpen()
                 self.routePendingTestBlockSelect()
+                self.routePendingTestWheelInjection()
                 let key = NSApp.keyWindow
                 // When the quake panel is key, its pane is the content under test,
                 // but the inventory must still come from a main window so the quake

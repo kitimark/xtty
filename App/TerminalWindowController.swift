@@ -897,6 +897,14 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         panes[activePaneID]?.routeTestLink(absolute)
     }
 
+    /// XCUITest hook (smooth-scroll-wheel-momentum D8): construct + drive a
+    /// synthetic wheel event through the real `scrollWheel(with:)` on the focused
+    /// pane's terminal view, so the momentum-routing/accumulator logic gets
+    /// automated coverage the automation channel can't reach.
+    func routeTestWheelInjectionOnActivePane(_ spec: String) {
+        panes[activePaneID]?.routeTestWheelInjection(spec)
+    }
+
     /// Serialize the cached git-review snapshot for the harness state dump. Reads
     /// the store only — it MUST NOT trigger a git exec (the dump runs on a timer).
     private static func gitReviewDump(_ store: GitReviewStore) -> [String: Any] {
@@ -964,12 +972,19 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
     /// — so a test asserts which branch a wheel gesture took without a real
     /// mouse-tracking program parsing the bytes. `NSNull` before any wheel gesture.
     /// Observe-only; the dump never synthesizes or replays a gesture.
+    ///
+    /// smooth-scroll-wheel-momentum: also surfaces whether the routed event was an
+    /// inertial-coast (momentum) frame and whether it carried precise (trackpad)
+    /// deltas, so the momentum-honoring behavior is assertable by the
+    /// synthetic-injection coverage and observable on a physical-trackpad verify.
     private static func wheelRoutingDump(_ routing: XttyWheelRouting?) -> Any {
         guard let routing else { return NSNull() }
         var dump: [String: Any] = [
             "branch": routing.branch.rawValue,
             "direction": routing.up ? "up" : "down",
             "count": routing.count,
+            "momentum": routing.momentum,
+            "precise": routing.precise,
         ]
         if let button = routing.button { dump["button"] = button }
         if let appCursor = routing.applicationCursor {

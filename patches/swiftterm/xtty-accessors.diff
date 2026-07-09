@@ -36,10 +36,10 @@ index 3a738ff..f5ae967 100644
          bundles.append(Bundle.main)
          return bundles
 diff --git a/Sources/SwiftTerm/Mac/MacTerminalView.swift b/Sources/SwiftTerm/Mac/MacTerminalView.swift
-index 2ce2504..14325d0 100644
+index 2ce2504..7efda99 100644
 --- a/Sources/SwiftTerm/Mac/MacTerminalView.swift
 +++ b/Sources/SwiftTerm/Mac/MacTerminalView.swift
-@@ -2169,18 +2169,106 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations,
+@@ -2169,18 +2169,119 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations,
          }
      }
      
@@ -55,22 +55,29 @@ index 2ce2504..14325d0 100644
 +    private var xttyWheelRowRemainder: CGFloat = 0
 +
      public override func scrollWheel(with event: NSEvent) {
++        // xtty (smooth-scroll-wheel-momentum) D3 — reset the carried sub-cell
++        // remainder at the start of each new user-driven gesture, so a stale
++        // fraction from a previous flick can't leak into this one as a phantom
++        // first-line jump. Checked unconditionally, ahead of the deltaY==0
++        // early-out below, so a .began event always clears the window it opens.
++        if event.phase.contains(.began) {
++            xttyWheelRowRemainder = 0
++        }
 +        // D8 — a purely horizontal gesture emits no vertical report/scroll (a
 +        // spurious wheel-down would otherwise be computed). Horizontal reporting
 +        // (buttons 66/67) is deferred.
          if event.deltaY == 0 {
              return
          }
-+        // D5 — collapse trackpad momentum so a flick can't flood the child: only
-+        // the user-driven phase drives emission, momentum frames are dropped. A
-+        // classic mouse wheel always reports an empty momentumPhase, so it is
-+        // unaffected.
-+        if event.momentumPhase != [] {
-+            return
-+        }
 +
 +        let up = event.deltaY > 0
 +        let shift = event.modifierFlags.contains(.shift)
++        // xtty (smooth-scroll-wheel-momentum) D1 — inertial-coast (momentum)
++        // frames are routed on the same branch as finger-driven frames, not
++        // dropped, so the platform's native coast survives finger-lift; D6 makes
++        // both this and the precise-delta nature of the event observable.
++        let momentum = event.momentumPhase != []
++        let precise = event.hasPreciseScrollingDeltas
 +
 +        // BRANCH 1 (highest priority) — mouse reporting active: deliver a wheel
 +        // mouse-report to the child (D2/D3). The gate reuses mouseDown's exact
@@ -93,7 +100,8 @@ index 2ce2504..14325d0 100644
 +                terminal.sendEvent(buttonFlags: buttonFlags, x: x, y: y)
 +            }
 +            xttyLastWheelRouting = XttyWheelRouting(
-+                branch: .report, up: up, count: rows, button: up ? 64 : 65, applicationCursor: nil)
++                branch: .report, up: up, count: rows, button: up ? 64 : 65, applicationCursor: nil,
++                momentum: momentum, precise: precise)
 +            return
 +        }
 +
@@ -110,7 +118,8 @@ index 2ce2504..14325d0 100644
 +                send (key)
 +            }
 +            xttyLastWheelRouting = XttyWheelRouting(
-+                branch: .cursorKey, up: up, count: rows, button: nil, applicationCursor: appCursor)
++                branch: .cursorKey, up: up, count: rows, button: nil, applicationCursor: appCursor,
++                momentum: momentum, precise: precise)
 +            return
 +        }
 +
@@ -124,25 +133,29 @@ index 2ce2504..14325d0 100644
              scrollDown(lines: velocity)
          }
 +        xttyLastWheelRouting = XttyWheelRouting(
-+            branch: .scrollback, up: up, count: velocity, button: nil, applicationCursor: nil)
++            branch: .scrollback, up: up, count: velocity, button: nil, applicationCursor: nil,
++            momentum: momentum, precise: precise)
      }
 -    
 +
-+    // xtty (fix-scroll-wheel-mouse-reporting): bounded per-event row count for the
-+    // program-directed branches (D5). ~1 report/key per accumulated whole row — a
-+    // classic wheel notch yields 1; a precise (trackpad) stream accumulates points
-+    // into whole rows, carrying the remainder forward; capped per event so a flick
-+    // cannot flood the child. Deliberately NOT calcScrollingVelocity, whose >9
-+    // bucket returns max(rows,20) → 20–32 reports for one fast notch (over-scroll).
++    // xtty (smooth-scroll-wheel-momentum) D2/D4 — per-event row count for the
++    // program-directed branches, bounded by whole-cell quantization rather than a
++    // fixed per-event cap: a classic wheel notch yields its rounded delta; a
++    // precise (trackpad) stream accumulates a lossless sub-cell remainder and
++    // emits every accumulated whole row, carrying the leftover fraction forward
++    // (never discarding it) — so a fast flick's flood is bounded structurally
++    // (~1 report/key per whole cell traversed) without losing distance. Reset per
++    // gesture via the `.began`-phase remainder clear in scrollWheel (D3).
++    // Deliberately NOT calcScrollingVelocity, whose >9 bucket returns
++    // max(rows,20) → 20–32 reports for one fast notch (over-scroll).
 +    private func xttyWheelRowCount (for event: NSEvent) -> Int {
-+        let cap = 5
 +        if !event.hasPreciseScrollingDeltas {
-+            return min (cap, max (1, Int (abs (event.deltaY).rounded())))
++            return max (1, Int (abs (event.deltaY).rounded()))
 +        }
 +        xttyWheelRowRemainder += abs (event.scrollingDeltaY) / max (1, cellDimension.height)
 +        let whole = Int (xttyWheelRowRemainder)
 +        xttyWheelRowRemainder -= CGFloat (whole)
-+        return min (cap, whole)
++        return whole
 +    }
 +
      private func calcScrollingVelocity (delta: Int) -> Int
@@ -150,10 +163,10 @@ index 2ce2504..14325d0 100644
          if delta > 9 {
 diff --git a/Sources/SwiftTerm/XttyAccessors.swift b/Sources/SwiftTerm/XttyAccessors.swift
 new file mode 100644
-index 0000000..b347be1
+index 0000000..d294c09
 --- /dev/null
 +++ b/Sources/SwiftTerm/XttyAccessors.swift
-@@ -0,0 +1,76 @@
+@@ -0,0 +1,84 @@
 +// XttyAccessors.swift — the P4b-2 SwiftTerm engine addition (Phase 2).
 +//
 +// THIS FILE IS NOT COMPILED BY xtty. It is the committed artifact that the
@@ -221,12 +234,20 @@ index 0000000..b347be1
 +    /// For `.cursorKey`, whether the application-cursor (SS3) form was used
 +    /// (DECCKM on); nil for other branches.
 +    public let applicationCursor: Bool?
++    /// xtty (smooth-scroll-wheel-momentum): whether the routed event was an
++    /// inertial-coast (momentum) frame rather than a finger-driven one.
++    public let momentum: Bool
++    /// xtty (smooth-scroll-wheel-momentum): whether the routed event carried
++    /// precise (trackpad) deltas rather than discrete wheel notches.
++    public let precise: Bool
 +
-+    public init(branch: Branch, up: Bool, count: Int, button: Int?, applicationCursor: Bool?) {
++    public init(branch: Branch, up: Bool, count: Int, button: Int?, applicationCursor: Bool?, momentum: Bool, precise: Bool) {
 +        self.branch = branch
 +        self.up = up
 +        self.count = count
 +        self.button = button
 +        self.applicationCursor = applicationCursor
++        self.momentum = momentum
++        self.precise = precise
 +    }
 +}
