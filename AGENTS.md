@@ -15,7 +15,7 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 | Change | State | What it is | Detail |
 | --- | --- | --- | --- |
 | `add-ci-pipeline` | implemented — owner steps left | CI is live; remaining: repo public, pr-lint PR, branch protection, archive | `research/03-analysis/github-actions-ci-cd.md` |
-| `smooth-scroll-wheel-momentum` | proposed | refine the shipped wheel fix: honor trackpad momentum on every branch + lossless whole-cell quantization (drop the momentum-guard + cap-discard the routing patch added) — Targeted, knob-free; its manual verify (task 4.4) surfaced an unrelated, out-of-scope scroll-redraw bug, tracked separately | `research/03-analysis/scroll-momentum-smoothness-research.md`, `research/03-analysis/scroll-reversal-redraw-corruption-forensics.md` |
+| `smooth-scroll-wheel-momentum` | proposed | refine the shipped wheel fix: honor trackpad momentum on every branch + lossless whole-cell quantization (drop the momentum-guard + cap-discard the routing patch added) — Targeted, knob-free; its manual verify (task 4.4) surfaced an unrelated, out-of-scope scroll-redraw bug — now **root-caused** (upstream SwiftTerm `cmdScrollDown` missing the `marginMode` guard its sibling `cmdScrollUp` has; htop's alt buffer never gets `marginRight` raised off its `0` default, so every scroll-down shifts only column 0), not yet fixed | `research/03-analysis/scroll-momentum-smoothness-research.md`, `research/03-analysis/scroll-reversal-redraw-corruption-forensics.md` |
 
 **Shipped and archived** (full narratives: [HISTORY.md](HISTORY.md); what is true: `openspec/specs/`; mechanisms: `research/`):
 
