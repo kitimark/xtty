@@ -479,4 +479,79 @@ final class XttyMouseWheelUITests: XCTestCase {
                        "a new .began gesture must not inherit the previous gesture's leftover "
                        + "sub-cell remainder as a phantom extra row (got \(secondCount))")
     }
+
+    // MARK: 3.6 — a real, unmodified mouse-tracking pager (less --mouse) scrolls
+
+    // Scenario: `less --mouse` — a real, unmodified, native (no brew
+    // dependency) program that requests its OWN mouse tracking, unlike every
+    // other test in this suite which arms mouse mode via a `printf`-simulated
+    // escape sequence — genuinely scrolls its own visible content in response
+    // to a real wheel gesture. This closes the last gap in the "is the
+    // round-trip real" ladder: testWheelOverMouseTrackingAltScreenReportsToProgram
+    // proves ROUTING with synthetic arming; testInjectedMomentumFrameProduces-
+    // RealSGRMouseReportBytes proves the BYTES with a byte-echo proxy (cat -v)
+    // and injected momentum; this proves an actual off-the-shelf program
+    // (spike-confirmed: `less --mouse` requests button-event/SGR tracking, not
+    // the excluded X10-only mode) receives, interprets, and acts on the
+    // reports — the same code path htop/vim/tmux/fzf rely on.
+    /// Poll for up to `timeout` for the grid dump to differ from `before`,
+    /// pumping the RunLoop so the app's 150ms async dump-write timer has real
+    /// time to land rather than racing it with a single synchronous read —
+    /// the same read-freshness race class that hit a sibling test on the
+    /// graphics VM tier this session (see packer/README.md's "Graphics-tier
+    /// read-freshness race found and fixed").
+    private func waitForGridChange(from before: String, timeout: TimeInterval) -> String? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let current = GridDumpReader.read(), current != before { return current }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        return nil
+    }
+
+    func testWheelScrollsRealMouseTrackingPager() {
+        let app = launchConfigured(config: "")
+        guard prepared(app) else { return }
+
+        type("seq 1 500 | less --mouse", into: app)
+        // A bare "1" is ambiguous — the typed command line itself ("seq 1
+        // 500 | less --mouse") contains the literal character before Enter
+        // is even processed. Wait for several bare digits each on their own
+        // grid row instead: only less's actual line-by-line rendering
+        // produces that shape, never a single echoed command line.
+        guard GridDumpReader.waitForContains("1\n2\n3", timeout: 5) else {
+            attachScreenshot("less-mouse-not-rendered")
+            XCTFail("seq 1 500 | less --mouse never rendered its first screenful")
+            return
+        }
+        guard let before = GridDumpReader.read() else {
+            XCTFail("no grid dump available before scrolling")
+            return
+        }
+
+        // A single real wheel tick reliably moved less's viewport by exactly
+        // one line in a local spike run, but per-launch timing can vary —
+        // loop a bounded number of ticks, giving each one a real settle
+        // window (not a single synchronous read) before concluding it
+        // produced no change, and stop at the first observed change.
+        var after: String?
+        for _ in 1...15 {
+            scrollWheel(over: app, delta: wheelDown)
+            if let current = waitForGridChange(from: before, timeout: 0.3) {
+                after = current
+                break
+            }
+        }
+
+        let r = routing({ ($0["branch"] as? String) == "report" })
+        StateDumpReader.attach(self, name: "wheel-real-pager-scroll")
+        XCTAssertNotNil(after, "seq 1 500 | less --mouse never visibly scrolled after up to 15 "
+                        + "real wheel ticks — the round-trip through a real mouse-tracking "
+                        + "program is broken, not just the internal routing bookkeeping")
+        XCTAssertEqual(r?["branch"] as? String, "report",
+                       "less --mouse's own mouse-tracking mode must receive wheel reports, "
+                       + "not fall through to local scrollback")
+
+        type("q", into: app)  // quit less cleanly before the app tears down
+    }
 }
