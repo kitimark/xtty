@@ -381,16 +381,17 @@ Acceptance = **this measured envelope**. With `split-shell-dependent-testplan` t
 former bash paste residual is retired (asserted green on both goldens); then
 `fix-scroll-wheel-mouse-reporting` added **6 mouse-wheel routing XCUITests**
 (`XttyMouseWheelUITests`, suite 42 → **48**); then `smooth-scroll-wheel-momentum`
-added **5 more** to the same suite (48 → **53**) — a crisp-negative (a real
+added **6 more** to the same suite (48 → **54**) — a crisp-negative (a real
 automation-channel gesture is recorded `momentum == false`) plus 3
 synthetic-injection tests (momentum-not-dropped, lossless-carry,
 `.began`-remainder-reset) that drive constructed momentum `NSEvent`s through the
 real `scrollWheel(with:)`, plus a byte-level regression
 (`testInjectedMomentumFrameProducesRealSGRMouseReportBytes`) that asserts the
-real SGR mouse-report bytes reach the child process — so the envelope is
-**`52/0/1` of 53 on _both_ goldens** (the sole skip is the opt-in benchmark
-e2e). **MEASURED** (task 4.3 full matrix, 2026-07-09, re-run after the
-graphics-tier read-freshness fix below): Tier-0 `237/0/0`, Tier-1 local
+real SGR mouse-report bytes reach the child process, plus a real-program
+integration test (`testWheelScrollsRealMouseTrackingPager`, task 3.6) — so the
+envelope is **`53/0/1` of 54 on _both_ goldens** (the sole skip is the opt-in
+benchmark e2e). **MEASURED** (task 4.3 full matrix, 2026-07-09, re-run after
+the graphics-tier read-freshness fix below): Tier-0 `237/0/0`, Tier-1 local
 `51/0/1`, headless ×2 (bash + zsh) both `51/0/1`, graphics ×2 (bash + zsh) both
 `51/0/1` — all five environments identical, all 10 mouse-wheel tests green on
 every rig including the previously-failing graphics-bash tier, 0 vacuous
@@ -401,9 +402,20 @@ passes. Evidence:
 manual physical-trackpad verify's step 1 succeeded) is **local Tier-1
 confirmed only** (`11/0/0` of the wheel suite alone, red→green-proven against
 a reintroduced D1 regression — see the blockquote below); the full VM matrix
-above predates it and has **not** been re-run with it included — a VM
-full-matrix re-run is a pending follow-up validator run, expected to move the
-envelope to `52/0/1` of 53 on both goldens.
+above predates it and has **not** been re-run with it included. The 6th test
+(`testWheelScrollsRealMouseTrackingPager`, task 3.6) is likewise **local
+Tier-1 confirmed only** (`12/0/0` of the wheel suite alone, including both the
+5th and 6th tests). The VM full-matrix re-run (task 4.6) measured the 6th test
+itself **green on all 5 environments, including both graphics-zsh samples**
+(the D9 Risk discriminator — `branch == "report"` vs `after == nil` — never
+fired, so the post-review hardening held). The sweep as a whole came back
+**OUT-OF-ENVELOPE**, but not from wheel-routing logic: graphics-zsh hit an
+unrelated XCUITest runner-level event-delivery stall that cost a *different*
+wheel test a short-fixed-timeout casualty in each of two independent samples.
+See the "XCUITest runner-level event-delivery stall (graphics-zsh)" row in
+the expected-difference matrix below for the full trace. Recorded as a
+tracked, open, not-yet-root-caused anomaly — not folded into a clean measured
+envelope figure, and not treated as a routing regression.
 A regression is now **any test going red** — menu-dispatch,
 prompt-width (find-bar included), the paste test on either arm, or a
 semantic-capture test that either reds *or* reverts to a **vacuous pass** (a
@@ -431,8 +443,8 @@ removed the old graphics-mode focus-steal red).
 > Evidence: `~/Downloads/xtty-vm-poc/artifacts/2026-07-09-fix-scroll-wheel-fullmatrix/`
 > (4 `.xcresult` + logs + `REVIEW.md`).
 
-> **`smooth-scroll-wheel-momentum` added 5 more `XttyMouseWheelUITests`
-> (suite 48 → 53).** `testRealGestureIsRecordedAsNonMomentum` is the crisp
+> **`smooth-scroll-wheel-momentum` added 6 more `XttyMouseWheelUITests`
+> (suite 48 → 54).** `testRealGestureIsRecordedAsNonMomentum` is the crisp
 > negative (a real `scroll(byDeltaX:deltaY:)` gesture always carries
 > `momentumPhase == none`, so `lastWheelRouting.momentum` must read `false`,
 > proving the field is wired on the real-gesture path). The other 3 drive the
@@ -490,6 +502,54 @@ removed the old graphics-mode focus-steal red).
 > Local Tier-1 with the 5th test included: **`11/0/0`** of the wheel suite
 > alone.
 
+> **The 6th test, `testWheelScrollsRealMouseTrackingPager` (task 3.6), is the
+> most end-to-end test in the suite.** Every other wheel test arms mouse mode
+> with a `printf`-simulated escape sequence; this one runs `seq 1 500 | less
+> --mouse` — a real, unmodified, native macOS command (bundled `/usr/bin/less`
+> 668, no Homebrew dependency) that requests its **own** button-event mouse
+> tracking. It drives real XCUITest wheel gestures (looping up to 15 times,
+> since a single XCUITest-synthesized gesture is "precise" and often doesn't
+> cross one whole accumulator cell on its own — spike-measured) and asserts
+> **two** things: the DEBUG dump's `lastWheelRouting.branch == "report"` (the
+> routing decision) **and** that the terminal's own visible grid content
+> actually changes (a real content diff, proving `less`'s own viewport
+> genuinely advanced — not just that xtty's internal bookkeeping says it
+> routed something). **VM-environment verified**: `less --mouse` requests an
+> included mouse mode, not the excluded X10-only mode (spike-measured — a real
+> scroll produced `lastWheelRouting.branch == "report"`), and `less 668` with
+> `--mouse` support is confirmed present and **identical** on both VM goldens
+> (`xtty-test:26.5` bash and `xtty-test-zsh:26.5` zsh) via a direct SSH check
+> into stopped-then-resumed clones — not assumed from the local machine's
+> version. **Red→green verified**: disabling BRANCH 1's gate in
+> `MacTerminalView.scrollWheel(with:)` made the test fail exactly on the
+> `branch == "report"` assertion — but the grid content still changed, since
+> `less` also responds to BRANCH 2's DECCKM cursor-key fallback (pagers
+> conventionally support both mouse wheel and arrow keys) — proving the
+> routing check, and not the grid-diff alone, is the assertion that actually
+> discriminates this regression. Restored and reconfirmed green. **Hardened
+> post-adversarial-review**: two independent reviewers converged on the same
+> finding — the readiness wait (`waitForContains("1", …)`) was ambiguous (the
+> typed command line itself contains a literal "1" before `less` even
+> renders) and the per-tick grid read was a single unguarded synchronous
+> `GridDumpReader.read()` racing the app's 150ms async dump-write timer, the
+> **same read-freshness race class** that hit `testAccumulatedRemainderResets-
+> BetweenGestures` on the graphics VM tier (see below). Fixed: the readiness
+> anchor is now `"1\n2\n3"` (a shape only `less`'s line-by-line rendering
+> produces, never a single echoed command line), and each tick polls for up to
+> 300ms via a `waitForGridChange` helper instead of one synchronous read.
+> Re-verified red→green and `12/0/0` locally after hardening. **Confirmed on
+> local Tier-1 only so far** — a VM full-matrix re-run (task 4.6) is pending,
+> and per design.md's D9 Risk, a red specifically on the `after == nil`
+> assertion on a graphics leg would mean this same race class resurfaced
+> despite the hardening and needs a longer/re-tuned settle window, not a retry.
+> **VM full-matrix measured (task 4.6, 2026-07-09)**: this test passed cleanly
+> on all 5 environments including both graphics-zsh samples — the `after ==
+> nil` discriminator never fired, so the hardening held under real VM
+> conditions. The sweep's OUT-OF-ENVELOPE verdict traces instead to an
+> unrelated graphics-zsh XCUITest runner stall costing a *different* wheel
+> test a timeout casualty each run — see the new expected-difference-matrix
+> row below.
+
 > **Graphics-tier read-freshness race found and fixed (2026-07-09, before the
 > full matrix was accepted).** The first `xtty-test-validator` full-matrix run
 > came back OUT-OF-ENVELOPE: `testAccumulatedRemainderResetsBetweenGestures`
@@ -542,8 +602,9 @@ above; this table never duplicates a number, only causes.**
 | **Bracketed-paste — bash execution arm (ASSERTED, was a red)** | The bash VM rig `xtty-test:26.5` + hosted CI (both `/bin/bash` 3.2.57); **not** the zsh rig, not local zsh, not Homebrew bash 5.1+ | macOS's stock **bash 3.2.57** readline lacks `enable-bracketed-paste` — a pasted multi-line string forwards line-by-line, so the newline-terminated first line **executes** while the unterminated tail stages. Since `split-shell-dependent-testplan`, `testMultiLinePasteMatchesShellBracketing` (renamed from `testMultiLinePasteIsNotAutoExecuted`) branches on the observed `bracketedPasteMode` and **asserts exactly that** on the bash arm (`command not found` present exactly once; tail staged) — so it is **green**, not the old `:87` red. A recurrence of the *old* red (an unconditional not-executed assertion failing on bash) would be a regression. See `github-actions-ci-cd.md` §19b. |
 | **Bracketed-paste — zsh soft-wrap arm (FIXED)** | The zsh VM rig `xtty-test-zsh:26.5` | zsh **has** bracketed paste, so the paste correctly does **not** auto-execute (product behavior is right). The former `:82` red ("first pasted line missing from grid") was **not** a grid-scrape/staged-region miss but the **prompt-width soft-wrap** class (find-bar wrap class): behind the 59-char parity `\h` the 70-col zsh prompt wraps the 9-char pasted first line past the 78-col boundary. **Fixed** by `harden-paste-wrap-assertion` (wrap-tolerant matcher at `:82`/`:84`, mirroring `:53`/`:198`) — zsh rig `40/1/1` → **`41/0/1`**; a recurrence is now a **REGRESSION**. This retires the residual `split-shell-dependent-testplan` was slated to skip — **fixed, not skipped**; that change then **asserts** the bash `:87` execution arm (rather than skipping it) while preserving this zsh wrap-tolerance, so neither paste arm is skipped. |
 | **Prompt-width wrap** | Both VM rigs (since `add-vm-prompt-width-parity`) + hosted CI; not local zsh (short bare-metal `\h`) | The guest's 59-char `\h` reproduces the hosted runner's prompt width, so a marker typed at the `\h:\W \u\$ ` prompt **soft-wraps** across physical grid rows; a strict (wrap-intolerant) grid match then reds while a wrap-tolerant one passes. This surfaced `testFindBarOpensLocatesAndDismisses` in-guest — the **intended** fidelity of `add-vm-prompt-width-parity` (`ci-runner-prompt-width-forensics.md`; grid-verified by effect). **The find-bar instance is now fixed** — `harden-findbar-wrap-assertion` shipped the wrap-tolerant matcher on that assertion (`:198`) + a deterministic `testSoftWrapGuardIsWrapTolerant` guard (the red→green pair, proven in-guest); **no current test reds on width**, and a recurrence is a regression. But **the width parity itself is durable**, guarding *future* type-at-prompt assertions. Distinct from the CI-only artifact it reproduces: on the runner the long `\h` is runtime-injected; here it is `scutil`-set in the image. |
-| **Mouse-wheel routing (shell-independent)** | All environments identically (local + both VM rigs + CI); NOT a divergence source | `fix-scroll-wheel-mouse-reporting`'s 6 `XttyMouseWheelUITests` arm terminal state (mouse mode / alt screen / DECCKM) with `printf` escape sequences the **engine parses regardless of login shell**, and hold DECCKM deterministically with a foreground `sleep` — so they take the **same** arm on bash and zsh (unlike the semantic-capture family). `smooth-scroll-wheel-momentum`'s 5 additional tests (suite 48 → 53) are equally shell-independent: the crisp negative uses the same real-gesture path, the 3 injection tests drive a DEBUG-constructed `NSEvent` through the real handler with no shell dependency at all, and the 5th (`testInjectedMomentumFrameProducesRealSGRMouseReportBytes`, local Tier-1 confirmed — see the blockquote above; VM full-matrix re-run pending) arms `printf`-based SGR mouse tracking + `cat -v` and asserts the real report bytes reach the child, equally shell-independent (engine-parsed). Listed here to record that all 11 are **expected identical (green) everywhere**, not to flag a difference: a red is a real regression on any rig. The wheel gesture rides XCUITest's automation channel (`scroll(byDeltaX:deltaY:)` / `perform(withKeyModifiers:)`) or the DEBUG injection hook, not a raw CGEvent HID post — the runner has no Post-Event/Accessibility grant (`CGPreflightPostEventAccess=false`), so a raw `.cghidEventTap` scroll (or an injection hook that posted instead of constructing) would be silently dropped. |
+| **Mouse-wheel routing (shell-independent)** | All environments identically (local + both VM rigs + CI); NOT a divergence source | `fix-scroll-wheel-mouse-reporting`'s 6 `XttyMouseWheelUITests` arm terminal state (mouse mode / alt screen / DECCKM) with `printf` escape sequences the **engine parses regardless of login shell**, and hold DECCKM deterministically with a foreground `sleep` — so they take the **same** arm on bash and zsh (unlike the semantic-capture family). `smooth-scroll-wheel-momentum`'s 6 additional tests (suite 48 → 54) are equally shell-independent: the crisp negative uses the same real-gesture path, the 3 injection tests drive a DEBUG-constructed `NSEvent` through the real handler with no shell dependency at all, the 5th (`testInjectedMomentumFrameProducesRealSGRMouseReportBytes`, local Tier-1 confirmed — see the blockquote above; VM full-matrix re-run pending) arms `printf`-based SGR mouse tracking + `cat -v` and asserts the real report bytes reach the child, equally shell-independent (engine-parsed), and the 6th (`testWheelScrollsRealMouseTrackingPager`, a real, unmodified `less --mouse` pager rather than a `printf`-armed simulation — confirmed present with identical `less 668`/`--mouse` support on both VM goldens via direct SSH, local-Tier-1-confirmed only, VM full-matrix re-run pending) is likewise shell-independent (the pager's own mouse-tracking request is engine-parsed regardless of login shell). Listed here to record that all 12 are **expected identical (green) everywhere**, not to flag a difference: a red is a real regression on any rig. The wheel gesture rides XCUITest's automation channel (`scroll(byDeltaX:deltaY:)` / `perform(withKeyModifiers:)`) or the DEBUG injection hook, not a raw CGEvent HID post — the runner has no Post-Event/Accessibility grant (`CGPreflightPostEventAccess=false`), so a raw `.cghidEventTap` scroll (or an injection hook that posted instead of constructing) would be silently dropped. |
 | **Confirm-close / interference flake sources** | Local bare metal (mouse/keyboard interference); the churn instance was VM-observed pre-fix, now green everywhere; a **second, still-open instance** newly observed on the zsh headless VM (see below) | (a) **live mouse/keyboard interference** during `make test` driving the real GUI (the hands-off requirement the agent surfaces before that tier) — still a live local-only hazard. (b) a **confirm-close race** when a churn test closed a freshly-split pane before its shell settled (a heavier interactive `~/.zshrc` widened the race window locally vs the VM/CI's leaner bash startup) — **fixed** by `harden-churn-shell-readiness` (a computed-marker shell-readiness gate: the churn test proves the fresh shell executed a command before closing it). The churn test now passes green across local **and** both VM rigs (full-sweep-validated 2026-07-06). Root-caused in `github-actions-ci-cd.md` §13; retained here because a regression would reproduce the pre-fix churn-flake pattern. (c) **NEW, still-open (2026-07-09):** `XttyMultiplexingUITests.testNewTabOpensAndLastPaneCloseEscalates` failed **once**, on the zsh headless VM only, during `smooth-scroll-wheel-momentum`'s task-4.5 full-matrix re-run (clean on Tier-1 local, bash headless, both graphics legs) — `XCTAssertEqual failed: ("nil") is not equal to ("Optional(1)") - closing a tab's last pane closes the tab`, i.e. the 5 s poll for `tabCount == 1` after Cmd+W timed out. **Confirmed NOT the retired menu-clobber class**: `requireXttyMainMenu` passed and Cmd+T succeeded moments earlier on the identical menu, so the menu was installed and dispatching. Root-cause-traced instead (read the one failing `.xcresult`, not re-run) to the **same latent class `harden-churn-shell-readiness` fixed for the churn test, but never applied here**: this test opens a tab (Cmd+T) and immediately closes its only pane (Cmd+W) with zero settling wait, and `TerminalWindowController.paneRequestsClose` gates the confirm-close `NSAlert` on `hasForegroundJob()` (`TerminalWindowController.swift:465-472`, a `tcgetpgrp` check) — the exact **refuted** readiness signal (`AGENTS.md` Learned refutations: `fg==shellPid` from ~3 ms; a 15–57 ms zsh-startup child burst can transiently hold the foreground pgrp) that `harden-churn-shell-readiness` replaced with a computed-marker gate **for the churn test only**. A zsh startup burst landing in that window pops a real, undismissed `NSAlert`, so the tab never closes within the poll. **Not caused by, and does not block, `smooth-scroll-wheel-momentum`** (whose own subject — the 11-method wheel suite — is `11/11` green on all 5 environments this run; the diff touches only additive `#if DEBUG` test-injection code, confirmed by inspection). Single-sample (per-launch races are non-deterministic — no retry performed, per the no-retry-flags guardrail); a fix (applying the same shell-readiness gate to this test, or fixing `hasForegroundJob` itself at the product level) is a candidate follow-up change, not yet proposed. |
+| **XCUITest runner-level event-delivery stall (graphics-zsh, NEW still-open 2026-07-09)** | The **graphics-zsh** VM tier only, reproduced on **2 of 2** independent samples during `smooth-scroll-wheel-momentum`'s task-4.6 full-matrix re-run (clean on Tier-1 local, both headless legs, and graphics-**bash** — 4 of 5 environments unaffected) | An **unrelated** test (not a wheel test — a different one in each sample) stalled ~930 s inside XCUITest's own `typeText()` keystroke-synthesis internals (the runner's event-delivery path, not xtty's app code), ballooning the whole suite to roughly **3×** its baseline duration (~1300 s vs ~430 s) and starving whichever wheel test happened to be waiting on a short fixed timeout nearby when the stall hit: `testAccumulatedRemainderResetsBetweenGestures`'s `injectWheel` 5 s file-consumption handshake in sample 1, `testInjectedMomentumFrameProducesRealSGRMouseReportBytes`'s SGR-echo wait in sample 2 — a *different* casualty each time, consistent with "whichever short wait happened to be pending," not a deterministic per-test bug. **Not wheel-routing product code**: `testWheelScrollsRealMouseTrackingPager` (task 3.6, the test this run existed to validate) passed cleanly in **both** graphics-zsh samples — the design.md D9 discriminator (`branch == "report"` vs `after == nil`) never fired. **Not caused by `smooth-scroll-wheel-momentum`**: graphics-**bash** ran the identical `#if DEBUG` injection-hook code clean in the same sweep, and the stall site is inside the XCUITest runner's own `typeText()` synthesis — a code path this change's diff never touches. Two independent samples is corroboration, not a retry-until-green (per the no-retry-flags guardrail this is recorded as an open anomaly, not dismissed or laundered into a pass). Root cause not yet identified; a **candidate fix would target the `typeText()` stall itself** (e.g. a re-sample on a quiet host, or graphics-zsh-specific runner diagnostics) — padding the collateral timeouts to survive a 930 s stall was considered and **rejected**: no fixed wait survives an unbounded stall, it would only relocate which test appears to fail, and would ~3× routine graphics-zsh run duration for zero signal. VM clones held stopped-not-deleted; `xtty-r54-gfx-zsh-run2-0709` specifically retained pending further review. Not yet proposed as a follow-up change. |
 
 The Acceptance envelope above **and** this matrix are the **runtime source**
 `xtty-test-validator` reads at validation time (see `AGENTS.md` → test
@@ -559,10 +620,13 @@ per shell — flipping the **bash** paste `:87` red to an **asserted green** arm
 (bash golden → expected `41/0/1`) and turning the bash semantic-capture vacuous
 passes into **asserted crisp negatives** — `fix-scroll-wheel-mouse-reporting`,
 which added the 6 shell-independent `XttyMouseWheelUITests` (suite 42 → 48, both
-goldens → expected `47/0/1`) — and `smooth-scroll-wheel-momentum`, which added 5
-more shell-independent `XttyMouseWheelUITests` (suite 48 → 53, both goldens →
-expected `52/0/1`, local Tier-1 confirmed for the 5th test; VM full-matrix
-re-run pending a follow-up validator run)) MUST update this section — and
+goldens → expected `47/0/1`) — and `smooth-scroll-wheel-momentum`, which added 6
+more shell-independent `XttyMouseWheelUITests` (suite 48 → 54, both goldens;
+the wheel suite itself is measured green on all 5 environments including the
+6th test, but the task-4.6 sweep as a whole is OUT-OF-ENVELOPE on an
+unrelated graphics-zsh XCUITest runner stall — see the expected-difference
+matrix row above, not yet folded into a clean `53/0/1` figure)) MUST update
+this section — and
 Acceptance — in the same session, or the "runtime read" promise just relocates
 the staleness.
 
