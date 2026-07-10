@@ -587,13 +587,29 @@ final class XttyMouseWheelUITests: XCTestCase {
         // region, write three rows of distinct full-width content, then
         // scroll up once (SU, correct) and back down once (SD, the buggy
         // path). Hand-traced expected result: a correct full-width
-        // shift-down restores row 1 (0-indexed) to exactly "BBBBBBBBBB"; the
-        // confirmed defect (cmdScrollDown shifting only column 0 when
-        // marginMode is off) instead leaves it "BCCCCCCCCC" — column 0
-        // correctly shifted back, columns 1-9 frozen with the stale content
-        // SU had put there.
+        // shift-down restores all three written rows — row 0 (0-indexed)
+        // back to blank, row 1 to exactly "BBBBBBBBBB", row 2 to exactly
+        // "CCCCCCCCCC". The confirmed defect (cmdScrollDown shifting only
+        // column 0 when marginMode is off) instead leaves row 0 as
+        // " BBBBBBBBB", row 1 as "BCCCCCCCCC", and row 2 as "C" (trimmed) —
+        // column 0 of each row correctly shifted, columns 1-9 frozen with
+        // whatever content the scroll-up had put there. Checking all three
+        // (not just row 1) matches the merged verification-harness scenario,
+        // which promises "the affected rows" (plural) restored "in every
+        // column" — asserting only one row under-proved that claim.
+        //
+        // The trailing `\033[10;1H` parks the cursor below the scroll region
+        // (SU/SD never move the cursor themselves, so it would otherwise sit
+        // at row 2 col 10 — right after "CCCCCCCCCC" — for the rest of this
+        // shell command's lifetime). Without it, once `printf`'s own output
+        // ends without a trailing newline, the shell's next-prompt draw
+        // (zsh's reverse-video `%` no-newline marker) lands at that exact
+        // spot inside the still-active alternate screen, corrupting row 2 in
+        // a way that looks like — but is not — the product defect under
+        // test (found via the real automated test failing there when this
+        // assertion was first widened to check row 2).
         let sequence = "\\033[?1049h\\033[1;8r\\033[1;1HAAAAAAAAAA\\033[2;1HBBBBBBBBBB"
-            + "\\033[3;1HCCCCCCCCCC\\033[1S\\033[1T"
+            + "\\033[3;1HCCCCCCCCCC\\033[1S\\033[1T\\033[10;1H"
         type("printf '\(sequence)'", into: app)
 
         guard StateDumpReader.waitForState(timeout: 5, where: { ($0["isAlt"] as? Bool) == true }) != nil else {
@@ -610,14 +626,27 @@ final class XttyMouseWheelUITests: XCTestCase {
             return
         }
         let lines = dump.split(separator: "\n", omittingEmptySubsequences: false)
-        let row1 = (lines.count > 1 ? String(lines[1]) : "").trimmingCharacters(in: .whitespaces)
+        func row(_ index: Int) -> String {
+            (lines.count > index ? String(lines[index]) : "").trimmingCharacters(in: .whitespaces)
+        }
+        let row0 = row(0)
+        let row1 = row(1)
+        let row2 = row(2)
 
         attachGridDump("scroll-region-repro-grid")
+        XCTAssertEqual(row0, "",
+                       "row 0 corrupted after SU-then-SD over a known 3-row block — expected it "
+                       + "fully cleared to blank, got stale column 1-9 content left over from the "
+                       + "scroll-up (research/03-analysis/scroll-reversal-redraw-corruption-forensics.md §7)")
         XCTAssertEqual(row1, "BBBBBBBBBB",
                        "row 1 corrupted after SU-then-SD over a known 3-row block — expected the "
                        + "scroll-up to be fully undone by the scroll-down (both full-width "
                        + "shifts), got a row mixing content shifted back in column 0 with stale "
                        + "content left over from the scroll-up in columns 1-9 "
                        + "(research/03-analysis/scroll-reversal-redraw-corruption-forensics.md §7)")
+        XCTAssertEqual(row2, "CCCCCCCCCC",
+                       "row 2 corrupted after SU-then-SD over a known 3-row block — expected it "
+                       + "fully restored, got only column 0 shifted back with columns 1-9 still "
+                       + "blank (research/03-analysis/scroll-reversal-redraw-corruption-forensics.md §7)")
     }
 }
