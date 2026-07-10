@@ -1,6 +1,6 @@
 # AGENTS.md — xtty
 
-Guidance for AI agents (and humans) working in this repository. This is the canonical project guide; `CLAUDE.md` imports it.
+Guidance for AI agents (and humans) working in this repository. This is the canonical project guide; `CLAUDE.md` symlinks to it.
 
 ## What this project is
 
@@ -58,7 +58,7 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 ```
 xtty/
 ├── AGENTS.md        # this file — canonical project guide
-├── CLAUDE.md        # imports AGENTS.md (Claude Code entry point)
+├── CLAUDE.md        # symlink to AGENTS.md (Claude Code entry point)
 ├── research/        # exploratory background (read before proposing direction)
 │   ├── 00-overview/ #   landscape synthesis + comparison matrix
 │   ├── 01-terminals/#   per-terminal deep-dives (iTerm2, Ghostty, Warp, …)
