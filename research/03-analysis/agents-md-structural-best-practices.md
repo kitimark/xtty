@@ -265,3 +265,93 @@ this doc.
 Note: this is a snapshot as of 2026-07-10 — the external docs/repos are living sources and could drift;
 re-verify version-sensitive claims (the Claude Code size target, the Codex byte cap) before citing them far
 in the future.
+
+## Addendum (2026-07-10, later same day): Tooling-row rotation & enforcement
+
+**Provenance:** two further `/xtty:research` fan-outs, prompted by an explore-mode session that dug into
+*why* the file is dense: (1) a 7-reader `sonnet` pass over docs/spec sources (towncrier, Keep a Changelog,
+product changelogs, doc linters, `gh`-search for CI precedent, `actions/stale`/Dependabot) → synthesis
+`opus·high` → critic `opus·xhigh` → verify (`wf_4c74a2c1-e41`); (2) a 6-reader pass **cloning large-scale
+OSS source directly** (`cpython`, `pytest`, `kubernetes`, `vscode`, `django`, `rust-lang/rust`) → same
+pipeline (`wf_9388669b-d9f`, resumed once after a transient critic-stage API error). Both converged
+independently; findings below are reconciled across both, not from either alone.
+
+**The concrete target, precisely characterized this round:** AGENTS.md's "Shipped and archived" table has
+6 rows. Five (P0–P7 phase milestones) total ~1.2KB and never grow — each phase is *closed*. The sixth,
+"Tooling," is 16,645 bytes (93% of the table, 24% of the whole file): ~24 change narratives bracketed
+into one cell, with no closing event. **The mechanism, named:** the phase rows stay bounded because they
+are edited only when a new *phase* closes (rare, and each closes forever); the Tooling row is instead
+*change-keyed* — every archived tooling change appends to the same cell. The fix is not "make it shorter,"
+it is **make it category-keyed like its siblings**: replace the cell with a bounded index (e.g. "Tooling —
+CI, dev-workflow agents, install, signing, test-image, launchers; full narratives → HISTORY.md"), edited
+only when a genuinely new *category* appears, never per-change. Verified safe: all ~24 items' narratives
+already exist in HISTORY.md (the 5 oldest individually confirmed present) — the sweep is a pure deletion
+from AGENTS.md, zero information loss. The same anti-pattern (and the same fix) applies to the 5.8KB
+Snapshot paragraph named in §5 above — bundling both is a completeness point the first pass under-scoped.
+
+**Cross-project rotation patterns (5 distinct, all real-world, all release-cadence-anchored):**
+
+| Pattern | Project(s) | Mechanism | Fit for xtty |
+| --- | --- | --- | --- |
+| A — fragment files, merged & deleted at a cut | pytest (towncrier), cpython (own tool, `blurb` — **not** towncrier) | one file per change in a directory; a release event merges + deletes them | needs a release cut xtty lacks; solves a concurrent-PR conflict problem xtty (solo, push-to-main) doesn't have |
+| B — PR-metadata extracted at release | kubernetes | a fenced block in the PR body; an external generator queries merged PRs by label since the last tag | needs a PR-centric workflow + bot; heaviest of the five, justified only at thousands-of-PRs scale |
+| C — one file per release, from day one | vscode (in the separate `vscode-docs` repo) | a placeholder file created weeks ahead, edited incrementally by many contributors on a shared branch, frozen after ship (not literally immutable — patch-release addenda land for weeks) | no shared growing bucket, but needs an index and a multi-editor cadence xtty (solo) doesn't have |
+| D — one shared file, skeleton-scaffolded, edited in place, frozen at cut | django | a skeletoned file per version; every PR edits its own section directly; frozen at release | highest merge-conflict risk of the five (irrelevant for a solo repo), zero tooling |
+| E — label-tracked, human-assembled | rust-lang/rust | a self-service `relnotes` label; a human periodically queries it and hand-writes the next frozen section | **closest philosophical fit** — no fragment files, no generator — but xtty needs even less: the OpenSpec change directory already *is* the per-change queue, no label required |
+
+**Load-bearing insight, common to all five:** every pattern is anchored to a periodic *release cut* that
+sweeps the accumulation zone. xtty has git tags (`v0.0.1`) but no release cadence, so importing any of
+A–D would recreate an unbounded bucket, just with more machinery. xtty's actual cut point is the per-change
+OpenSpec *archive* event (already fires reliably), and its permanent archive (HISTORY.md) already plays the
+role of RELEASES.md/changelog.rst. Nothing needs to be imported — the fix is applying xtty's own
+already-honored invariant (the "Open changes" table is already category-/row-per-change and clears) to the
+one row that doesn't.
+
+**Enforcement — a real, unresolved tension, not a settled answer.** The two fan-outs' critics disagreed,
+and the disagreement is informative rather than contradictory once stated precisely:
+- The first critic rejected a **mandatory CI ratchet** as disproportionate — xtty pushes straight to `main`
+  (no PR to hang a path-scoped gate on), so a hard byte ceiling would either rarely fire or red the repo on
+  legitimate growth.
+- The second critic rejected **overselling a REVIEW-severity critic heuristic** as a fix — xtty already has
+  a *written* rule ("never a narrative paragraph") that the Tooling cell violates *right now*, and the
+  in-flight `harden-test-precision-vs-claim` change's own Risks section states a REVIEW-level heuristic "can
+  be, and by design sometimes should be, ignored by a human reviewer." Its sufficiency is untested, not
+  proven.
+
+Both are right, and they narrow the option space rather than cancel out: a **critic heuristic is the
+proportionate primary mechanism** (matches xtty's existing `xtty-openspec-critic` machinery and the
+in-flight precedent; a real CI/bot gate at pytest/cpython/kubernetes's scale is confirmed — via live `gh
+api` branch-protection checks — to be genuinely required/merge-blocking machinery, justified only by
+contributor counts xtty doesn't have), but its sufficiency should be **measured, not assumed** — track the
+Tooling row's (and Snapshot paragraph's) byte size after each of the next several archives once a heuristic
+lands. The now-crisp, checkable version of that heuristic: *does a reconcile append a per-change narrative
+to a row that should only change per-category?* — a structural check, not a fuzzy length judgment. Whether
+to also add a cheap non-blocking byte/char warning as a backstop (real, working precedent exists —
+`konflux-ci`, `tektoncd/catalog`, `cloudposse/atmos`, `homeassistant-ai/ha-mcp` all gate `AGENTS.md`
+specifically with a plain `wc` shell step) is left as an open option for whoever proposes the actual fix —
+this research doc states the tradeoffs, it does not pre-decide them.
+
+**Fates table (corrected during critique + verify):**
+
+| Claim | Fate | Corrected by |
+| --- | --- | --- |
+| "cpython's 431-fragment pile proves a bucket goes unbounded without a sweep" | ❌ | verify (full unshallow clone): 205 deletion commits, one cluster per release, roughly monthly — cpython *does* sweep; the pile is large because of PR volume relative to project scale, not absence of sweeping |
+| "a cpython fragment sat unswept for 7 years (2019→2026)" | ❌ | verify: the 2019 date is in the *filename*, not the fragment's actual residency — `git log --diff-filter=A` on that exact file shows it was added and swept within the same 2026 release cycle (4 days) |
+| "pytest sweeps its fragment dir every few weeks" | ❌ unsupported | the project's own version dates show a ~4-month gap (9.0.2→9.0.3); the observed 4-fragment snapshot was just shortly after a release, not evidence of a weeks-scale cadence |
+| "pytest/cpython/k8s's changelog enforcement is advisory, not confirmed-blocking" | ↑ upgraded, not refuted | verify via live `gh api` branch-protection/ruleset checks on all three: all are genuinely required, merge-blocking status checks — stronger evidence than the synthesis first claimed, in the opposite direction of most corrections here |
+| "a non-blocking critic heuristic will keep the row bounded ('makes the sweep durable')" | ❌ unproven | the claim is prospective with no present probe; the existing *written* rule already fails right now, and the only in-flight heuristic precedent (`harden-test-precision-vs-claim`) explicitly disclaims guaranteed compliance in its own Risks section |
+| "the sweep is safe (no unique content lost)" | ✅ confirmed | grepped HISTORY.md for all 5 oldest Tooling-row items — all present verbatim; by extension the newer ~19 (already known to post-date the doc-conventions capture rule) are equally safe to drop from the cell |
+
+Two measurement bases for the diet numbers both appear across this research and are both correct, not in
+tension: the single diet *commit* (`d2a11fd`) cut 80,609→28,493 bytes; the *end-of-day* snapshot (matching
+§1b above) reads 74,268→33,716, because other same-day commits landed before/after the cut itself. Cite
+whichever basis matches what's being measured.
+
+**Re-verify by effect:** after a Tooling-row/Snapshot fix lands, re-run `grep -n '| Tooling |' AGENTS.md |
+wc -c` (today: 16,648) after each of the next several archived changes — it should stay near-constant
+(category-keyed), not climb per-change. If a critic heuristic or byte-warning is added, the same measurement
+is the test of whether it actually held the line, not whether it merely exists.
+
+**This research has saturated.** Two independent fan-outs, source-verified across a spec-page pass and a
+large-OSS-clone pass, converged on the same structural diagnosis and the same open enforcement question.
+The honest next step is an OpenSpec proposal for the actual fix, not a further research pass.
