@@ -554,4 +554,70 @@ final class XttyMouseWheelUITests: XCTestCase {
 
         type("q", into: app)  // quit less cleanly before the app tears down
     }
+
+    // MARK: fix-scroll-reversal-redraw-corruption — scroll-region redraw
+    // correctness (research/03-analysis/scroll-reversal-redraw-corruption-
+    // forensics.md §7). A byte-exact real capture of htop replayed through a
+    // headless SwiftTerm Terminal this session confirmed the mechanism: SD
+    // (`CSI Ps T`, scroll down — invoked scrolling back toward the top of a
+    // list) silently shifts only column 0 when column-margin-mode is off
+    // (the near-universal case), leaving every other column in the scroll
+    // region frozen with stale content — while its sibling SU (`CSI Ps S`)
+    // correctly does a full-width shift. This is deliberately NOT driven
+    // through a real full-screen program: htop (which does hit this bug) is
+    // brew-only and absent from the test VM image, while the programs that
+    // ARE built into macOS and bundled in the VM — `vim` (uses `IL`/`DL`,
+    // both already correctly guarded) and `less --mouse` (uses a bare `RI`,
+    // no scroll region at all) — don't exercise the buggy function at all,
+    // regardless of how they're driven; only ncurses' own hashmap scroll-
+    // optimizer (which htop links, vim/less don't) happens to emit SU/SD.
+    // So this drives the exact escape sequences directly via `printf` — the
+    // established technique this suite already uses to arm terminal state
+    // (see `armMouseReportingOnAltScreen`) — which is deterministic, needs no
+    // VM setup, and targets the defect precisely rather than hoping some
+    // program's redraw strategy happens to hit it.
+
+    func testScrollRegionReversalDoesNotCorruptOtherColumns() {
+        let app = launchConfigured(config: "")
+        guard prepared(app) else { return }
+
+        // Enter the alternate screen (matching htop's real environment — the
+        // confirmed-buggy configuration, since marginLeft/marginRight are
+        // never raised off their 0 default there), set an 8-row scroll
+        // region, write three rows of distinct full-width content, then
+        // scroll up once (SU, correct) and back down once (SD, the buggy
+        // path). Hand-traced expected result: a correct full-width
+        // shift-down restores row 1 (0-indexed) to exactly "BBBBBBBBBB"; the
+        // confirmed defect (cmdScrollDown shifting only column 0 when
+        // marginMode is off) instead leaves it "BCCCCCCCCC" — column 0
+        // correctly shifted back, columns 1-9 frozen with the stale content
+        // SU had put there.
+        let sequence = "\\033[?1049h\\033[1;8r\\033[1;1HAAAAAAAAAA\\033[2;1HBBBBBBBBBB"
+            + "\\033[3;1HCCCCCCCCCC\\033[1S\\033[1T"
+        type("printf '\(sequence)'", into: app)
+
+        guard StateDumpReader.waitForState(timeout: 5, where: { ($0["isAlt"] as? Bool) == true }) != nil else {
+            attachScreenshot("scroll-region-repro-not-alt-screen")
+            XCTFail("the synthetic repro sequence never entered the alternate screen")
+            return
+        }
+        // Let the whole sequence (writes + SU + SD) finish parsing and the
+        // async dump-write timer catch up.
+        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+
+        guard let dump = GridDumpReader.read() else {
+            XCTFail("no grid dump available after the synthetic repro sequence")
+            return
+        }
+        let lines = dump.split(separator: "\n", omittingEmptySubsequences: false)
+        let row1 = (lines.count > 1 ? String(lines[1]) : "").trimmingCharacters(in: .whitespaces)
+
+        attachGridDump("scroll-region-repro-grid")
+        XCTAssertEqual(row1, "BBBBBBBBBB",
+                       "row 1 corrupted after SU-then-SD over a known 3-row block — expected the "
+                       + "scroll-up to be fully undone by the scroll-down (both full-width "
+                       + "shifts), got a row mixing content shifted back in column 0 with stale "
+                       + "content left over from the scroll-up in columns 1-9 "
+                       + "(research/03-analysis/scroll-reversal-redraw-corruption-forensics.md §7)")
+    }
 }
