@@ -310,16 +310,21 @@ A shell-dependent XCUITest — one whose result depends on a capability the logi
 
 ### Requirement: Mouse-wheel routing is observable
 
-The DEBUG state dump SHALL expose, for the focused pane, the **last mouse-wheel routing action** — the **branch** taken (a wheel mouse-report to the program, a cursor-key send to the program, or a local-scrollback move) together with the routed detail: for the report branch, the emitted **wheel button** (up/down) and the number of reports, and for the cursor-key branch, the emitted **key form** (application-cursor vs normal) and direction and count; a local-scrollback move is recorded as such. This lets a test assert which branch a wheel gesture took and what was sent to the program, on xtty's custom-drawn view that exposes no per-cell content or input stream to accessibility. Like every other dump field, it MUST be gated by `#if DEBUG` and the `-UITestGridDump` launch argument, and the dump path SHALL only **observe** the last routing action, never synthesize or replay a gesture.
+The DEBUG state dump SHALL expose, for the focused pane, the **last mouse-wheel routing action** — the **branch** taken (a wheel mouse-report to the program, a cursor-key send to the program, or a local-scrollback move) together with the routed detail: for the report branch, the emitted **wheel button** (up/down) and the number of reports, and for the cursor-key branch, the emitted **key form** (application-cursor vs normal) and direction and count; a local-scrollback move is recorded as such. The dump SHALL additionally record, for the routed event, whether it was an **inertial-coast (momentum) frame** (versus a finger-driven frame) and whether it carried **precise (trackpad) deltas** (versus discrete wheel notches), so the momentum-honoring behavior is observable to both the synthetic-injection coverage and a physical-trackpad verify. This lets a test assert which branch a wheel gesture took and what was sent to the program, on xtty's custom-drawn view that exposes no per-cell content or input stream to accessibility. Like every other dump field, it MUST be gated by `#if DEBUG` and the `-UITestGridDump` launch argument, and the dump path SHALL only **observe** the last routing action, never synthesize or replay a gesture.
 
 #### Scenario: The focused pane's last wheel-routing action is reported
 
 - **WHEN** a wheel gesture has been routed in a focused pane in a `-UITestGridDump` DEBUG build
 - **THEN** the state dump reports the branch taken (program wheel-report / program cursor-key / local scrollback) and, for a program-directed branch, the emitted button-or-key form, direction, and count — so a test can assert the routing without a real mouse-tracking program parsing the bytes
 
+#### Scenario: The routed event's momentum and precise nature is reported
+
+- **WHEN** a wheel gesture has been routed in a focused pane in a `-UITestGridDump` DEBUG build
+- **THEN** the state dump additionally reports whether the routed event was an inertial-coast (momentum) frame and whether it carried precise (trackpad) deltas — so the momentum-honoring behavior is assertable by the synthetic-injection coverage and observable on a physical-trackpad verify
+
 ### Requirement: Mouse-wheel routing end-to-end coverage
 
-The harness SHALL cover mouse-wheel routing end-to-end by driving a real wheel gesture over a focused pane in each routing state and asserting, via the DEBUG state dump's last-wheel-routing action, that the correct branch was taken. Coverage SHALL include: an **alternate-screen program with button-event mouse reporting active** (a wheel notch is reported to the program as a wheel button, not swallowed); an **alternate-screen program without mouse reporting** (a wheel notch is delivered as a cursor Up/Down key); a **primary-screen pane with no mouse reporting** (the wheel moves local scrollback); and the **Shift-bypass** (Shift+wheel over a mouse-reporting program moves local scrollback instead of reporting). A real mouse-tracking program's own scroll state SHALL NOT be required for the assertions — the routed action is asserted from the state dump.
+The harness SHALL cover mouse-wheel routing end-to-end by driving a real wheel gesture over a focused pane in each routing state and asserting, via the DEBUG state dump's last-wheel-routing action, that the correct branch was taken. Coverage SHALL include: an **alternate-screen program with button-event mouse reporting active** (a wheel notch is reported to the program as a wheel button, not swallowed); an **alternate-screen program without mouse reporting** (a wheel notch is delivered as a cursor Up/Down key); a **primary-screen pane with no mouse reporting** (the wheel moves local scrollback); and the **Shift-bypass** (Shift+wheel over a mouse-reporting program moves local scrollback instead of reporting). A real mouse-tracking program's own scroll state SHALL NOT be **required** for these core routing assertions — the routed action is asserted from the state dump, so a program with its own mouse-tracking escape sequences never needs to be installed or its rendering parsed. Coverage additionally SHALL include one integration-level scenario, driven by a **real, unmodified, off-the-shelf mouse-tracking program** (rather than terminal state armed via `printf`), asserting that the program's own visible content genuinely advances in response to the routed reports — this is optional extra assurance beyond the core per-branch routing assertions, not a replacement for them. Because the **real wheel gestures** the harness drives through the automation channel carry **no inertial-coast (momentum) frames**, the harness SHALL assert that such a gesture is recorded as a **non-momentum** routed event (a crisp negative proving the momentum field is wired on the real-gesture path); the **momentum routing logic** is covered separately by the synthetic-injection requirement, and only the real-OS coast **delivery, rate, and consume-side responsiveness** remain a manual physical-trackpad verify (out of automated harness scope).
 
 #### Scenario: Wheel over a mouse-tracking alt-screen pane reports to the program
 
@@ -336,6 +341,16 @@ The harness SHALL cover mouse-wheel routing end-to-end by driving a real wheel g
 - **WHEN** the tests scroll the wheel while holding Shift over a focused pane whose program has mouse reporting active
 - **THEN** the state dump's last-wheel-routing action is a local-scrollback move, not a program wheel-report
 
+#### Scenario: A real synthetic gesture is recorded as a non-momentum event
+
+- **WHEN** the tests drive a real wheel gesture through the automation channel over a focused pane in a `-UITestGridDump` DEBUG build
+- **THEN** the state dump's last-wheel-routing action records the event as a non-momentum (finger-driven) frame, since automation-channel gestures carry no inertial coast — proving the momentum field is wired on the real-gesture path (the momentum-true path is covered by synthetic injection)
+
+#### Scenario: A real mouse-tracking program's own content advances
+
+- **WHEN** the tests focus a pane running a real, unmodified program that requests its own button-event mouse tracking (not terminal state armed via `printf`) and scroll the wheel over it
+- **THEN** the state dump's last-wheel-routing action is a program wheel-report, and the program's own visible content genuinely changes in response — proving a real off-the-shelf program correctly negotiates mouse tracking and acts on the routed reports, not only that xtty's routing decision was recorded
+
 ### Requirement: Scroll-region shift redraw-correctness coverage
 
 The harness SHALL cover, end-to-end against the real running app, that a scroll-region shift within the alternate screen buffer correctly moves every column of the affected rows, not only the first — the defect class this requirement guards against. The test SHALL drive the terminal engine directly with a known escape-sequence sequence (entering the alternate screen, setting a scroll region, writing distinct content into known rows, then scrolling up and back down by the same amount) rather than depending on a specific real full-screen program, because which escape-sequence idiom a given program uses for its own scrolling is a program-internal implementation choice outside this project's control — programs bundled with the test VM image (e.g. `vim`, `less`) do not exercise this scroll-region-shift code path at all regardless of how they are driven, while the program that does (`htop`) is not present in the minimal test VM image. Driving the exact sequence directly is deterministic, needs no additional VM dependency, and targets the defect precisely.
@@ -344,4 +359,28 @@ The harness SHALL cover, end-to-end against the real running app, that a scroll-
 
 - **WHEN** the tests, in a `-UITestGridDump` DEBUG build, drive the terminal into the alternate screen with a scroll region set, write distinct known content into multiple rows within that region, scroll up by N, then scroll down by the same N
 - **THEN** the grid dump shows the affected rows fully restored to their original content in every column — not the buggy state where only the first column of each row is restored and the remaining columns retain stale content left over from the scroll-up
+
+### Requirement: Mouse-wheel momentum routing coverage via synthetic injection
+
+Because a real inertial-coast (momentum) wheel event cannot be produced through the XCUITest automation channel (synthesized gestures carry no momentum) and a raw event cannot be posted in the test runner, the harness SHALL cover the **momentum routing logic** through a DEBUG-only **synthetic-wheel-event injection** trigger: the test supplies a wheel-event spec (momentum phase, precise-vs-discrete, vertical delta, modifiers) and the app constructs a faithful wheel event carrying that momentum phase and precise-delta state, then drives it through the **real** wheel-routing path on the focused pane (never a reimplementation of the branch logic) — after which the routed action is asserted from the DEBUG state dump or, for the byte-level scenario below, from the terminal's own visible grid content. This exercises the exact fields the router reads (momentum phase, precise-scrolling state, vertical scrolling delta) without depending on the OS delivering a physical coast. The trigger MUST be gated by `#if DEBUG` and the `-UITestGridDump` launch argument. The real-OS coast **delivery, rate, and consume-side responsiveness** are explicitly **out of scope** for this automated coverage — they remain a manual physical-trackpad verify. Coverage SHALL include: an injected momentum frame **is not dropped** (it routes on the same branch as a finger-driven frame, recorded as a momentum event); a fast precise sequence **does not lose distance** (the emitted whole-cell count tracks the accumulated travel rather than being clamped to a fixed per-event cap); the accumulated sub-cell remainder **resets between gestures** (a fresh gesture does not inherit a stale fraction); and an injected momentum frame's routed mouse-report decision **produces a real byte sequence the child process actually receives** (not only a DEBUG-dump bookkeeping update) — a distinct assertion channel (the terminal's visible grid content, via a real unmodified child program) from the other three scenarios' DEBUG-dump-only assertions.
+
+#### Scenario: An injected momentum frame is routed, not dropped
+
+- **WHEN** the tests inject a synthetic wheel event carrying an inertial-coast (momentum) phase over a focused pane in a `-UITestGridDump` DEBUG build
+- **THEN** the state dump's last-wheel-routing action records the event on its branch (program wheel-report / program cursor-key / local scrollback per the pane's state) with the momentum flag set — it is not silently dropped
+
+#### Scenario: An injected fast precise gesture does not lose scroll distance
+
+- **WHEN** the tests inject precise (trackpad) wheel input whose accumulated travel exceeds several whole cells
+- **THEN** the routed emission count tracks the whole cells traversed (carrying the sub-cell remainder forward), rather than being clamped to a fixed per-event cap that discards the overflow
+
+#### Scenario: The accumulated remainder resets between gestures
+
+- **WHEN** the tests inject one precise gesture that leaves a sub-cell remainder, then begin a new user-driven gesture
+- **THEN** the new gesture does not emit a phantom extra cell carried over from the previous gesture's leftover remainder
+
+#### Scenario: An injected momentum frame's mouse report reaches the child as real bytes
+
+- **WHEN** the tests arm SGR-encoded button-event mouse tracking with a child process that echoes its raw stdin as visible text (so an incoming escape sequence is observable instead of being silently consumed by xtty's own terminal engine), then inject a synthetic wheel event carrying an inertial-coast (momentum) phase over the focused pane
+- **THEN** the terminal's visible content shows the real wheel-report escape sequence the child actually received — proving the routed decision produced correct bytes on the wire, not only a DEBUG-dump bookkeeping update
 
