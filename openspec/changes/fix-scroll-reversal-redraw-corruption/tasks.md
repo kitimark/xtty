@@ -6,12 +6,11 @@
 
 ## 2. Tests
 
-- [ ] 2.1 Add a fast, headless `XttyCoreTests` regression (the `NoopTerminalDelegate` + `Terminal(delegate:)` pattern from `TerminalSessionTests.swift`): enter the alternate screen (`DECSET 1049` — the confirmed-buggy configuration), set a scroll region via `DECSTBM`, write distinct full-width content into two or more rows inside the region, issue `SU` then `SD`, and assert every column of the shifted row reflects the correct content — not just column 0 (D3.1). This is the test that would have caught the original defect deterministically and fast.
-- [ ] 2.2 Add an `AppUITests` end-to-end scenario (in `XttyMouseWheelUITests.swift`, mirroring `testWheelScrollsRealMouseTrackingPager`'s real-program pattern): drive a real full-screen mouse-tracking program through a wheel scroll some distance then a reversal, and assert via the DEBUG grid dump that the visible rows show correct, non-duplicated content afterward — not merely that the wheel gesture was routed (the existing routing coverage already asserts that) (D3.2).
+- [x] 2.1 Add an `AppUITests` end-to-end scenario (`testScrollRegionReversalDoesNotCorruptOtherColumns` in `XttyMouseWheelUITests.swift`) driving the exact escape sequences directly via `printf` (D3): enter the alternate screen, set an 8-row scroll region, write three rows of distinct 10-character content, issue `SU` once then `SD` once, and assert row 1 is fully restored — not just column 0. Investigated and rejected driving a real full-screen program first (`vim`/`less`, bundled in the test VM, don't exercise the buggy `cmdScrollDown` path at all; `htop`, which does, is brew-only and absent from the VM image) — see D3's full rationale. Confirmed red against the current unfixed patch: row 1 reads `"BCCCCCCCCC"` instead of the expected `"BBBBBBBBBB"`, matching the hand-traced defect exactly. Ticket for re-verification once 1.1–1.3 land: this test must flip green.
 
 ## 3. Verify
 
-- [ ] 3.1 `make test-core` — `XttyCore` regression including the new headless test (inline, cheap).
+- [ ] 3.1 `make test-core` — `XttyCore` regression (inline, cheap; no new headless test in this change — see D3).
 - [ ] 3.2 Run the Tier-1 XCUITest suite + full acceptance matrix (both goldens) and confirm the new end-to-end scenario is green with no regressions elsewhere. ⟶ xtty-test-validator (Tier-1 + full matrix, both goldens)
 
 ## 4. Upstream (deferred)
