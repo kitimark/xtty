@@ -45,7 +45,7 @@ The reconcile-and-archive step at a change's **completion** SHALL be driven by a
 
 The documented research-doc conventions SHALL include a **capture-depth bar, scaled to the finding**: any capture that records **measured claims or retired theories** SHALL settle the *mechanism* (not just the conclusion), make its measured claims **reproducible** (the probes/commands used, including what each can and cannot prove and instruments that did not work), record each **retired theory alongside the evidence that refuted it**, and state how to **re-verify the headline claim by its effect** (never by a syntax or read-back check). When a finding generalizes to a class of future problems, the capture SHALL distill the method as a reusable guideline. Lightweight captures (e.g. a tooling landscape or comparison with no measurements) are NOT required to carry these elements.
 
-The tracker-reconcile step SHALL keep the always-loaded canonical guide **lean**: the guide's status surface is a bounded orientation layer — a current-state snapshot, a tabular per-change entry (state, one-line summary, pointer to detail), and inline one-line statements of **learned refutations** (decisions expensively settled in the negative, stated with their conclusion so they cannot be silently re-proposed) — while the **full per-change narrative** is recorded in a dedicated history log that is **not loaded at session start**. Reconciling a completed change SHALL NOT grow the guide's status surface beyond a bounded entry; narrative content moves to the history log with nothing lost.
+The tracker-reconcile step SHALL keep the always-loaded canonical guide **lean**: the guide's status surface is a bounded orientation layer — a current-state snapshot, a tabular per-change entry (state, one-line summary, pointer to detail), and inline one-line statements of **learned refutations** (decisions expensively settled in the negative, stated with their conclusion so they cannot be silently re-proposed) — while the **full per-change narrative** is recorded in a dedicated history log that is **not loaded at session start**. Reconciling a completed change SHALL NOT grow the guide's status surface beyond a bounded entry; narrative content moves to the history log with nothing lost. For a status-surface row or paragraph that has no closing event of its own (an ongoing category of work with no terminal milestone, unlike a closed phase or an archived single change), "bounded entry" SHALL mean **category-keyed**: the entry is edited only when a genuinely new category is introduced, never appended to on every individual change within an already-represented category. A perpetual row that grows on each qualifying change — even while remaining nominally "one row" — violates this bound.
 
 #### Scenario: The workflow checklist is documented
 
@@ -84,4 +84,9 @@ The tracker-reconcile step SHALL keep the always-loaded canonical guide **lean**
 
 - **WHEN** the canonical guide's status surface is read after history has been moved to the history log
 - **THEN** the expensively-learned refutations remain stated inline with their conclusions (not as bare pointers), so a session that never opens the history log still cannot re-propose them
+
+#### Scenario: A perpetual row stays bounded by category, not by change
+
+- **WHEN** a change within an already-represented category of an ongoing (non-closing) status-surface row completes and its tracker reconcile runs
+- **THEN** the reconcile step leaves that row's existing category summary unchanged (or updates it only if the category itself changed), routes the change's own narrative to the history log, and does not append a new per-change clause to the row
 
