@@ -161,6 +161,57 @@ index 2ce2504..7efda99 100644
      private func calcScrollingVelocity (delta: Int) -> Int
      {
          if delta > 9 {
+diff --git a/Sources/SwiftTerm/Terminal.swift b/Sources/SwiftTerm/Terminal.swift
+index e9ab45b..cdba414 100644
+--- a/Sources/SwiftTerm/Terminal.swift
++++ b/Sources/SwiftTerm/Terminal.swift
+@@ -4648,19 +4648,35 @@ open class Terminal {
+         let p = min (max (pars.count == 0 ? 1 : pars [0], 1), rows)
+         let da = CharData.defaultAttr
+ 
+-        let row = buffer.scrollTop + buffer.yBase
++        // xtty (fix-scroll-reversal-redraw-corruption): mirror cmdScrollUp's marginMode
++        // branch, direction-mirrored. Without this guard, cmdScrollDown always took the
++        // narrow columnCount = marginRight-marginLeft+1 path below, which is correct only
++        // when DECLRMM column-margin-mode is active; marginLeft/marginRight default to 0/0
++        // and are never raised for the alt-screen buffer full-screen programs use, so every
++        // SD shifted just column 0 and left columns 1+ holding stale pre-scroll content.
++        if marginMode {
++            let row = buffer.scrollTop + buffer.yBase
+ 
+-        let columnCount = buffer.marginRight-buffer.marginLeft+1
+-        let rowCount = buffer.scrollBottom-buffer.scrollTop
+-        for _ in 0..<p {
+-            for i in (0..<rowCount).reversed() {
+-                let src = buffer.lines [row+i]
+-                let dst = buffer.lines [row+i+1]
+-                
+-                dst.copyFrom(src, srcCol: buffer.marginLeft, dstCol: buffer.marginLeft, len: columnCount)
++            let columnCount = buffer.marginRight-buffer.marginLeft+1
++            let rowCount = buffer.scrollBottom-buffer.scrollTop
++            for _ in 0..<p {
++                for i in (0..<rowCount).reversed() {
++                    let src = buffer.lines [row+i]
++                    let dst = buffer.lines [row+i+1]
++
++                    dst.copyFrom(src, srcCol: buffer.marginLeft, dstCol: buffer.marginLeft, len: columnCount)
++                }
++                let last = buffer.lines [row]
++                last.fill (with: CharData (attribute: da), atCol: buffer.marginLeft, len: columnCount)
++            }
++        } else {
++            for _ in 0..<p {
++                buffer.lines.splice (start: buffer.yBase + buffer.scrollBottom, deleteCount: 1,
++                                     items: [], change: { line in updateRange (line)})
++                buffer.lines.splice (start: buffer.yBase + buffer.scrollTop, deleteCount: 0,
++                                     items: [buffer.getBlankLine (attribute: da)],
++                                     change: { line in updateRange (line) })
+             }
+-            let last = buffer.lines [row]
+-            last.fill (with: CharData (attribute: da), atCol: buffer.marginLeft, len: columnCount)
+         }
+         // this.maxRange();
+         updateRange (startLine: buffer.scrollTop, endLine: buffer.scrollBottom)
 diff --git a/Sources/SwiftTerm/XttyAccessors.swift b/Sources/SwiftTerm/XttyAccessors.swift
 new file mode 100644
 index 0000000..d294c09
