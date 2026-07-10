@@ -1,0 +1,17 @@
+## 1. Replace CLAUDE.md with a symlink
+
+- [x] 1.1 Remove `CLAUDE.md` as a regular file and create a symlink in its place: `git rm CLAUDE.md && ln -s AGENTS.md CLAUDE.md`.
+- [x] 1.2 Update `AGENTS.md:3` — `"CLAUDE.md imports it"` → `"CLAUDE.md symlinks to it"`.
+- [x] 1.3 Update `AGENTS.md:61` (repo-tree comment) — `# imports AGENTS.md (Claude Code entry point)` → `# symlink to AGENTS.md (Claude Code entry point)`.
+
+## 2. Verify by effect
+
+- [x] 2.1 `readlink CLAUDE.md` resolves to `AGENTS.md`; `diff CLAUDE.md AGENTS.md` is empty (symlink resolves transparently).
+- [x] 2.2 `git add CLAUDE.md && git ls-files -s CLAUDE.md` shows symlink mode `120000`, not `100644` — satisfies the `agent-guide-parity` spec's tracked-as-symlink scenario.
+- [x] 2.3 `openspec validate "symlink-claude-md-to-agents-md"` passes (cheap mechanical gate — inline, not delegated).
+- [x] 2.4 Spot-check Claude Code's own load is unaffected — measured directly rather than via `/context` (not scriptable from a tool call): the repo's own reproducible startup-cost instrument (`agents-md-context-budget.md` §3.1, `claude -p "Reply with exactly: OK" --output-format json --max-turns 1`, summing `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`) run same-environment before/after via an isolated `git worktree` at the pre-change commit vs. the working tree post-change (the stale 2026-07-06 baseline number is not comparable on its own — many more skills/agents/MCP servers are installed today, which would confound an absolute-number check). **Before** (regular-file `@AGENTS.md` import): 65,190 tokens. **After** (symlink): 65,462 tokens — a 272-token (0.4%) difference, consistent with the two one-line AGENTS.md wording edits and normal cache noise, not a doubling. Confirms design.md's "no token-budget difference expected." Cheap, inline check — no VM tier or Tier-1 XCUITest suite involved, so no `⟶ xtty-test-validator` delegation applies.
+
+## 3. Reconcile and archive
+
+- [x] 3.1 Pre-archive coherence review ⟶ xtty-openspec-critic (symlink-claude-md-to-agents-md) — confirm the `agent-guide-parity` spec delta is coherent with the proposal/design and no other tracker drifted. **Verdict: COHERENT** (`Definition: v1 2026-07-07`). Two non-blocking REVIEW notes: (1) the requirement names the concrete "symlink" mechanism rather than staying purely behavioral — defensible for a structural-parity capability, body already softens it as "or an equivalent construct"; (2) the open-changes table won't show a row to flip on archive since this change never got a propose-time row — resolved by 3.2 adding the shipped/HISTORY entry directly, not a separate table edit.
+- [x] 3.2 Archive + reconcile ⟶ archive-ritual — merge the `agent-guide-parity` spec delta into `openspec/specs/`, fill in its `## Purpose` (archive stubs it as TBD), and finish the merge by hand per AGENTS.md → "After archiving, finish the merge by hand." Done: `openspec archive -y` merged the spec; fixed the collapsed-blank-line artifact + wrote the real Purpose (was TBD stub); `openspec validate --all --type spec` → 25/25 passed; reconciled AGENTS.md (2 self-references, Established-specs list, Shipped-and-archived Tooling row) + HISTORY.md (dated entry); verified against disk (`openspec list` matches the 3-row open-changes table, archive dir has `2026-07-10-symlink-claude-md-to-agents-md`, `ls openspec/specs/` matches the Established-specs line exactly).
