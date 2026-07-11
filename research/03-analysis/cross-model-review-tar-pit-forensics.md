@@ -71,3 +71,42 @@ Do **not** re-read the spec to "confirm it's thin." Re-run the convergence Workf
 - The +45% bloat: `git show <round-N>:…/specs/cross-model-review/spec.md | wc -l` across `fe6be52`→`8451f22`.
 - The four retired mechanisms: the `converge Round N` commit diffs.
 - The correction on disk: design D10 + the Open-Questions tar-pit note in `add-cross-model-design-review`, and this file.
+
+## 9. Confirming run (2026-07-12) — the *corrected* loop terminates; measure bloat by content, not lines
+
+**Provenance:** 2026-07-12, a follow-up dogfood (Workflow `wf_15f6ecb9-aad`) that re-ran the loop **with the D10 correction and a hard anti-bloat floor already in place** — both to re-verify the headline by effect and to test whether a **proactive co-draft** variant (two models jointly negotiate an edit rather than attack-then-patch) escapes the tar pit. It does — and it terminated in **one round**.
+
+**Setup.** Bounded proactive co-draft: Fable-5 proposes the single most valuable floor-respecting improvement *or none* → `gpt-5.6-sol` (codex `adversarial-review`, `xhigh`) verifies **∥** an inline Opus soundness pass → an Opus adjudicator enforces the floor, commits only a both-model-agreed edit, else reverts. Floor: the two spec files may shrink but not grow past their committed ceilings, and no round may re-introduce airtightness-vs-a-repo-controlling-model language. Convergence operationalized per **G-TARPIT-3** (no open actionable beyond accepted residuals); bound 5.
+
+**Result — converged round 1, 0 net bytes.** `converged:true`, `rounds:1`, `appliedRounds:[]`; the spec stayed at 100/40, `openspec validate --strict` green, working tree clean. Against the original run (§2: 4 rounds non-converging / +45% bloat / round-4 regression) this is **1 round / 0 net change / floor intact**, ~263k tokens vs ~1.29M.
+
+**What happened — the two models disagreed on the merits, and the correct answer won.** Fable-5 found a *real* coherence gap (archive-gate check-(4) under-encoded the exempt-by-act rule relative to its own scenario and the other three artifacts) and fixed it **within the line-count floor** — the file stayed exactly 100 lines. `gpt-5.6-sol` independently recomputed and objected: the line-neutral edit still grew the file **+34 words / +253 bytes** (2415→2449 words, 16459→16712 bytes) and duplicated wording already in design D7/D8, proposal, and tasks 3.3 → `agreesImprove:false`. The adjudicator sided with gpt and reverted. No change landed — in one round.
+
+**Refinement — a line-count floor is a leaky proxy.** The floor gated on `wc -l` (100 unchanged ⇒ "passes"); the tar pit measures bloat as **content** (§2's +45% is by content). A single line simply got longer: +253 bytes at a fixed line count. gpt's content recompute (`wc -lwc`) caught what the line floor let through.
+
+**Fates (this run).**
+
+| Theory | Refuted / confirmed by | Fate |
+| --- | --- | --- |
+| A line-count floor bounds bloat | a line-neutral edit grew +253 bytes; only the `wc -lwc` content check caught it | ❌ → refined to content-count |
+| Proactive co-draft re-enters the tar pit as the reactive loop did | converged round 1, 0 net change — no defect ⇒ nothing to converge on | ❌ (safe *because* the claim is already thin + a content floor holds) |
+| The corrected (thin-claim + content-floor) loop terminates | `converged:true`, `hit_bound_without_convergence:false` | ✅ |
+
+**Reproducible probe — the line-neutral-bloat detector the floor must use:**
+```
+F=openspec/changes/add-cross-model-design-review/specs/cross-model-review/spec.md
+git show HEAD:"$F" | wc -lwc   # baseline: lines words bytes
+wc -lwc < "$F"                 # working tree
+```
+A `1 1` numstat with a positive **word/byte** delta = a line got longer — invisible to `wc -l` alone. It **cannot** prove *semantic* duplication (that the added words are redundant); that stayed the cross-model judgment (gpt flagged duplication against design/proposal/tasks).
+
+**Re-verify by effect.** Re-run the bounded floor-guarded co-draft loop on the thin proposal and watch: (a) convergence within 1–2 rounds; (b) 0 net word/byte growth in the spec files; (c) any edit that grows content — even at a fixed line count — caught and reverted. Never a static read.
+
+**Reusable guideline.**
+
+- **G-TARPIT-5 — Measure bloat by content (words/bytes), not lines; have an independent verifier recompute it.** A line-count ceiling is leaky — one line can grow without bound. Gate the anti-bloat floor on `wc -lwc` / a diff word-byte delta, and pair it with a verifier that recomputes the numbers rather than trusting the drafter's "line count unchanged." Constructive corollary to **G-TARPIT-4**: with the claim thinned and a content floor in place, a proactive two-model co-draft loop **converges immediately when there is no defect** — the remaining source of new information is building and using the tool, not more drafting rounds.
+
+## 10. Evidence artifacts (§9 run)
+
+- The convergence itself: Workflow `wf_15f6ecb9-aad` `result` + `journal.jsonl` (`converged:true`, `rounds:1`, `appliedRounds:[]`, `finalCrossSpecLines:100`).
+- The reverted (never-committed) Fable edit + gpt's independent `wc -lwc` recompute: the activity render `wf_446e62d2-854` (verbatim codex `needs-attention` review).
