@@ -110,3 +110,26 @@ A `1 1` numstat with a positive **word/byte** delta = a line got longer — invi
 
 - The convergence itself: Workflow `wf_15f6ecb9-aad` `result` + `journal.jsonl` (`converged:true`, `rounds:1`, `appliedRounds:[]`, `finalCrossSpecLines:100`).
 - The reverted (never-committed) Fable edit + gpt's independent `wc -lwc` recompute: the activity render `wf_446e62d2-854` (verbatim codex `needs-attention` review).
+
+## 11. Constructive confirmation (2026-07-12) — the content floor *admits* net-smaller fixes, it isn't only restrictive
+
+**Provenance:** 2026-07-12, a second scoped dogfood (Workflow `wf_a0e713ea-101`) run *after* §9, to test whether the content floor (**G-TARPIT-5**) blocks *all* edits or only additive bloat. Target: the one concrete defect §9's run surfaced but reverted — archive-gate **check (4)** under-encoded the exempt-by-act rule (a later commit rewriting the digest-*excluded* attestation line "touched only bookkeeping surfaces" and passed all four checks, contradicting the requirement's own post-review-alteration scenario + design D7/D8 + proposal + tasks 3.3).
+
+**Result — the fix landed, net-*smaller*.** Same loop shape (Fable-5 drafts → `gpt-5.6-sol` + inline Opus verify → Opus adjudicates), floor now content-based. Converged round 1, `action:applied`: check (4) rewritten to the full exempt-by-act rule (the attestation line appears exactly once, stays byte-identical from its introducing commit through archive, any later add/delete/modify invalidates it), **paid net-neutral by compressing duplicative prose in the same paragraph** — **2415→2404 words, 16459→16450 bytes** (strictly smaller), 100 lines, D10 intact, no airtightness vocabulary, `openspec validate --strict` green. Committed `3319785`.
+
+**Mechanism — why the floor is constructive, not a straitjacket.** It gates on the *absolute* word/byte total vs the committed baseline, so it is blind to *where* content moves: a fix that compresses at least as much as it adds passes; only a net *addition* fails. §9's fix was pure addition (+253 bytes) → rejected; §11's fix added the guarantee **and** removed equal-or-more duplicative prose → net −9 bytes → accepted. The floor filters *bloat*, not *change*.
+
+**Fates (this run).**
+
+| Theory | Refuted / confirmed by | Fate |
+| --- | --- | --- |
+| A content floor is purely restrictive — it would block legitimate coherence fixes too | a genuine gap-closing fix landed net −11 words / −9 bytes, both models agreeing | ❌ (the floor admits net-smaller fixes) |
+| The check-(4) gap was a false positive (the scenario already suffices, no fix needed) | both models independently judged the enumerated precondition — what an implementer builds from — genuinely incomplete; fix accepted | ❌ (real defect, now closed) |
+
+**Reproducible probe.** Same detector as §9, now used as the *accept* gate: `baseline=$(git show HEAD:$F | wc -lwc)`, `working=$(wc -lwc < $F)`; **accept** iff working words ≤ baseline words **and** working bytes ≤ baseline bytes. It **cannot** judge whether *meaning* survived the compression — that stayed the cross-model + soundness judgment (Opus soundness flagged only two low-severity legibility notes, no meaning loss).
+
+**Re-verify by effect.** Re-run the scoped loop (`cross-model-codraft-check4`) and observe a net-smaller edit *land* (a commit) while any +byte variant is reverted — the accept and reject arms exercised one per run (§11 accept, §9 reject).
+
+**Reusable guideline (corollary to G-TARPIT-5).** A content floor gates *bloat, not change*: comparing absolute word/byte totals to the baseline admits any fix that compresses ≥ what it adds and rejects only net growth — so "fix the defect **and** stay ≤ baseline" is a satisfiable instruction, not a contradiction. Give the drafter the explicit permission-and-obligation to compress duplicative prose to pay for a genuine addition.
+
+**Evidence artifacts.** Workflow `wf_a0e713ea-101` (`result`: `action:applied`, `finalWords:2404`, `finalBytes:16450`); commit `3319785` (`docs(openspec): codraft — close the check-(4) exempt-by-act gap net-neutral`) — the single-line normative diff reviewed on disk.
