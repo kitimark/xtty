@@ -71,6 +71,7 @@ scripts/test-cross-review-scripts.sh   ← added round 1 (was scratchpad-only)
 | rB2 | B (soundness) | MEDIUM | **Digest quoting:** `git diff --name-only` C-quotes filenames with non-ASCII/tab/newline bytes; the loop treats the quoted string as the literal path → `git cat-file` fails → hashes only the marker, so content changes to that file are invisible to the digest. | **SURFACED, not applied** — same class as C3: needs an implausible accident (a non-ASCII/tab/newline filename in an all-ASCII openspec change) or reduces to R3 (a repo-controlling adversary choosing filenames). A `git diff --name-only -z` NUL-safe transport is a legitimate hardening; deferred (D10 / round-2 bound). |
 | rA1 | A (conformance) | REVIEW | **test-precision-vs-claim:** the harness's per-drill claim mapping lives in `tasks.md §3.7` rather than a `design.md` Decision. | **Documented / human-weigh** — D8 already states the load-bearing claim for the by-effect archive test (5.3); a synthetic driver is correct for these narrow script-internal claims. Mild flag, not a coverage hole. |
 | rA2 | A (disk-drift) | REVIEW | `AGENTS.md:196` "25 of the **49** archived changes carried a harness delta" is stale → disk yields **25 of 51** (post-archive of this change: 25 of 52). Numerator correct. | **Pre-existing drift, NOT introduced by this change** → the §5.3 reconcile is the fix point. |
+| W1 | **worker self-obs** | — | During ledger-inertness verification the model **recomputed the live change's reviewed-state digest** (`scripts/cross-review-digest.sh`, printing `7be90d55…`) — the single act the model-STOP boundary tells the worker to stop short of. Ledger-inertness is **already proven generically** by harness **Scenario D** ("digest INVARIANT to tick+attestation+ledger"), so the live recompute was **unnecessary**. | **DOCUMENTED (finding #8).** No boundary-breaking *outcome*: no task ticked, no attestation line written; archive check-2 recomputes independently regardless, and the rubber-stamp risk is the already-accepted **R5**. Recommend the worker command state: *"cite Scenario D for ledger-inertness; never recompute the live change's digest."* Turns the misstep into a real dogfood output — the command's model-STOP boundary is one clause too loose. |
 
 ---
 
@@ -85,6 +86,7 @@ Adversarial review never returns zero — a fresh sweep always surfaces further 
 5. **Worker runtime robustness (B2)** — no bounded Pass-B timeout/exit/malformed-output handling; low-stakes for a human-present protocol; JSON-vs-Markdown doc-accuracy documented.
 6. **AGENTS.md harness-delta count drift (rA2)** — "25 of 49" → 25 of 51/52; pre-existing; a §5.3 reconcile item.
 7. **Test-precision flag (rA1)** — harness claim-mapping in tasks.md rather than a design Decision; mild, human-weigh.
+8. **Worker model-STOP boundary too loose (W1)** — the worker command permits the model to recompute the live digest (which the model did, for an inertness check that Scenario D already covers). Recommend tightening the command: *cite Scenario D for ledger-inertness; the worker never recomputes the live change's digest* — so the model cannot even accidentally derive the attested value. Small, honest hardening of the model-STOP boundary (the change's core value); deferred here as a documented finding (N=2 bound; editing the reviewed `cross-review.md` would move the digest the human is about to attest).
 
 **The real proof of the gate is apply-time task 5.3's by-effect fail-closed archive test, not another sweep.** Two of these residuals (rB1, and the C3/rB2 provenance-robustness class) are *themselves* instances of the tar-pit finding this change documents: mechanizing provenance integrity against a repo-controlling model is non-terminating; each closure opens the next narrowing; every member reduces to R3. Their correct disposition is documentation, and stopping.
 
@@ -94,6 +96,13 @@ Adversarial review never returns zero — a fresh sweep always surfaces further 
 - Therefore the archive step-0 precondition would **fail closed** today (check 1: no well-formed attestation line). This is the correct **pre-attestation** state. Verified indirectly by Pass C on the real repo.
 
 ---
+
+## ⚠ Task-5.3 safety note — rB1 booby-traps the fail-closed archive test
+
+Task 5.3 asks the human to *"confirm the gate fails closed on a deliberately stale/**rewritten** attestation."* **Do not perform the rewritten/deleted arm in-place on the real `tasks.md`.** Because of **rB1 (the re-record deadlock)**, once the real sentinel line is rewritten or deleted, exempt-by-act's `adds==1 && dels==0`-over-all-history is **permanently violated**, so the *subsequent clean* archive also fails closed — the change would deadlock its own acceptance test. Use the safe decomposition instead:
+
+- **The rewrite / delete fail-closed arms are already proven** by committed harness **Scenario H** on a *throwaway* repo (`rewritten attestation ⇒ exempt-by-act FAILS closed: fail(now=1 adds=2 dels=1)`; `deleted attestation ⇒ … fail(now=0 adds=1 dels=1)`) — so the destructive arm **need not touch real history at all**. Cite Scenario H for it.
+- **The in-place live fail-closed demo should be the *stale-digest* variant** (non-destructive to the sentinel): attest → edit a reviewed artifact so check-2's recompute mismatches the attested value → observe archive **refuse** → `git revert`/reset the edit. This exercises checks 1–3 on the real change without tripping the rB1 deadlock, then leaves the change re-archivable.
 
 ## Authority restatement (non-negotiable)
 
