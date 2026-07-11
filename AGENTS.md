@@ -12,7 +12,7 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 
 - **Milestone:** P0–P7 implemented and archived — xtty is a daily-drivable native terminal: tabs/splits/windows, quake terminal, profiles, OSC 7+133 semantic capture on auto-injected zsh, session + block sidebars, file-link open, spatial block navigation, git review panel (flat/tree), and the perf harness that settled the renderer question (**keep CoreGraphics**, skip Phase 8).
 - **Test envelope (authoritative — see `packer/README.md` → Acceptance):** `XttyCore` **237/0/0** unit tests; XCUITest **54/0/1 of 55** across all 5 environments (local, headless-bash, headless-zsh, graphics-bash, graphics-zsh) — no residual rig fragility remains.
-- **Latest change:** `revamp-agents-md` (archived 2026-07-11) — restructured this file's own status surface: the Tooling row → bounded category-keyed one-liner (23.1KB → 1.4KB), the run-on Snapshot paragraph → this bulleted block, and the four delegation essays → one table; whole file 80.1KB → 43.7KB (−45.5%). See [HISTORY.md](HISTORY.md) for the full narrative.
+- **Latest change:** `track-openspec-workflow-tooling` (archived 2026-07-11) — un-ignored the openspec-generated `/opsx:*` commands (8) + `openspec-*` skills (8) so they're git-tracked and CLI-version-pinned (the `generatedBy` stamp), making the spec-driven workflow self-contained on a fresh clone and reviewable in PRs; reconciled the four AGENTS.md passages the reversal touched (the archive-ritual anchor is now the hand-authored committed procedure, since the CLI-generated skill is regenerable). See [HISTORY.md](HISTORY.md) for the full narrative.
 
 **Open changes** (must match `openspec list`):
 
