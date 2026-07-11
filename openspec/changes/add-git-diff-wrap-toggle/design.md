@@ -1,0 +1,64 @@
+## Context
+
+The git-review panel is a fixed ~280 pt trailing column (`TerminalWindowController.gitPanelWidth = 280`). Its selected-file diff is rendered by `DiffPane` → `DiffLineRow` in `App/GitReviewView.swift` inside a two-axis `ScrollView([.vertical, .horizontal])` holding a `LazyVStack(alignment: .leading)` of rows, each carrying `.frame(maxWidth: .infinity, alignment: .leading)`. In practice the diff wraps at ~40% of the panel width, leaving most of the column empty — the P6 design's intended *horizontal scroll for long lines* (`research/03-analysis/p6-file-diff-decisions.md:303`) never materialized. The likely cause: a `LazyVStack` cannot eagerly measure its widest row, so under the horizontal axis's unspecified width proposal the flexible-width rows collapse to a fraction of the panel.
+
+The fix must fill the panel width, and — because the panel is narrow and mostly reviews prose/markdown — offer both a wrap and a no-wrap behavior. The change mirrors the already-shipped flat↔tree layout control end to end (`GitReviewLayout` enum + `setLayout` on the store, a `git-review-layout` base-profile config key, a header toggle button, and a `layout` field in the DEBUG state dump).
+
+## Goals / Non-Goals
+
+**Goals:**
+- The read-only diff fills the full 280 pt panel width in both modes.
+- **Wrap** (new default): long lines fold onto continuation rows that hang-indent under the content column.
+- **No-wrap**: long lines stay whole and the diff scrolls horizontally, tints spanning full content width (restores the P6 intent).
+- An in-panel toggle switches modes; a base-profile config key sets the default; the mode is observable in the state dump for XCUITest.
+- Presentation-only: parser, hunk/line model, intra-line emphasis, and read-only scope are untouched.
+
+**Non-Goals:**
+- No keybinding and no menu item for the toggle (the flat↔tree control is button-only; match it).
+- No persistence of the toggle across sessions (session-local, like the layout toggle; the config key sets the launch default).
+- No change to the diff parser, git query/refresh path, or `diff-context`.
+- No pixel snapshot or raw-geometry assertion in the automated suite; the layout is guarded by robust derived-boolean geometry signals instead (see D5).
+
+## Decisions
+
+### D1 — Mirror the flat↔tree control end to end
+Add a `GitDiffWrap` enum (`.wrap` / `.noWrap`, `String`-backed, `CaseIterable`, `Sendable`) alongside `GitReviewLayout` in `GitReviewStore`, with `private(set) var diffWrap` (default `.wrap`) and a `setDiffWrap(_:)` mutator that bumps the observable `revision` exactly as `setLayout` does. Parse `git-review-diff-wrap` in `XttyConfigLoader` next to `git-review-layout` — **base-only**: the loader SHALL warn and ignore the key inside a profile block (mirroring its existing `git-review-layout` handling) and resolve it once onto **`XttyConfigSet.gitDiffWrap`** — a global field beside `confirmClose`/`gitReviewLayout`, **not** a per-profile `XttyProfile` field (`gitReviewLayout` lives on the *set*, not the profile; `XttyApp` reads `configSet.gitReviewLayout` at every window-creation site). Pass `configSet.gitDiffWrap` to every `TerminalWindowController.init` → `store.setDiffWrap(...)`. **Why:** the layout control is a proven, symmetric seam; reusing its shape (and its *base-only* storage) keeps the change lean, review-obvious, consistent, and free of the two-sources-of-truth hazard a per-profile copy would create (named-profile windows silently reverting to `.wrap`). *Alternative rejected:* a bare `Bool wrap` — an enum matches `GitReviewLayout`, reads clearly in config (`wrap`/`nowrap`), and leaves room for a future third mode. *Alternative rejected:* storing it per-`XttyProfile` — the key is base-only, so a per-profile field is both wrong (profiles cannot set it) and a drift hazard.
+
+### D2 — Wrap is the default
+A 280 pt side panel mostly reviews markdown and commit prose, where reading with zero horizontal scroll beats strict column alignment; no-wrap is the opt-in for code-heavy review. This also means the default visibly *fixes* today's narrow-wrap bug (fills the width) without requiring any config. *Alternative rejected:* no-wrap default (matches P6's long-line note) — but horizontal-scrolling every prose line in a narrow panel is the worse everyday experience, and the user explicitly chose wrap-default.
+
+### D3 — Two-mode layout mechanism in `DiffLineRow` / `DiffPane`
+`DiffPane` and `DiffLineRow` take the active `GitDiffWrap` (threaded from the store snapshot) and branch:
+- **Wrap:** the content `ScrollView` is **vertical-only**; the existing `HStack(spacing: 0) { Text(marker); Text(content) }` keeps the marker in a fixed leading gutter while the content `Text` wraps (`white-space` equivalent: default wrapping) — continuation lines align under the content column, giving a **hanging indent for free**. Rows use `.frame(maxWidth: .infinity, alignment: .leading)` (now bounded by the vertical-only scroll's definite width) and `.fixedSize(horizontal: false, vertical: true)` so wrapped rows take their full height.
+- **No-wrap:** keep the two-axis `ScrollView`; each row sizes to its **single-line content width** (marker + non-wrapping content), and the row's background/tint must span the full content width so short lines still fill and long lines extend under horizontal scroll. This is the fiddly path (see Risk R1) — the point is to give the row a content-derived width while the enclosing stack supplies the full-width tint, *not* to leave `.frame(maxWidth: .infinity)` fighting a non-wrapping `Text`.
+
+**Why in the view only:** wrap mode is pure layout; the classified-line model and emphasis offsets are identical in both modes.
+
+### D4 — The toggle lives in the `DiffPane` header, not the branch header
+The flat↔tree button is in the panel's branch header (`headerBar`); the wrap toggle instead sits in the **diff header** (the row with the file path + open-in-editor button), because wrap mode is only meaningful when a diff is shown. It reuses the plain-button + SF-Symbol + `accessibilityIdentifier` idiom (`"gitReview.wrapToggle"`), toggling between a wrap glyph (e.g. `arrow.turn.down.left`) and a no-wrap glyph (e.g. `arrow.right`). `DiffPane` stays store-free: it receives the current `wrapMode` value and an `onToggleWrap` closure (mirroring its existing `onOpen` closure), so the store dependency stays in `GitReviewView`.
+
+### D5 — Test precision vs. the claim (two claims: routing *and* geometry)
+This change carries **two** distinct claims, and the test depth must match each:
+
+1. **Routing/state claim** — *"the active wrap mode reflects the configured default and flips when the in-panel control is used."* This lives in the **store's `diffWrap` state and the config→controller seam**. It is guarded by (a) a `GitReviewStore` unit test that `setDiffWrap` flips the value **and bumps `revision`**, and (b) an XCUITest that **drives the real `gitReview.wrapToggle` button** (not a DEBUG hook — the button is a normal SwiftUI control with an accessibility id, so tapping it proves the button→`setDiffWrap` wiring end-to-end) and asserts the dump's `diffWrap` field flips and reflects the configured default.
+
+2. **Layout/geometry claim** — *"the diff fills the panel width; wrap folds long lines with no horizontal scroll; no-wrap keeps lines whole and overflows horizontally."* This is the **headline reason the change exists**, and it lives in the *rendered geometry* — there is **no model-level difference** between the modes to lean on (unlike flat↔tree, whose visible correctness is guarded by the `GitFileTree.build` model unit test). A `diffWrap`-field-only assertion is therefore **too shallow for this claim**: it stays green if both view branches render identically, the view never re-renders, or the no-wrap branch reproduces the width-collapse bug. So the git-review state dump gains **DEBUG layout-geometry signals** for the selected diff — derived booleans **`diffFillsWidth`** (content width ≈ the panel content width) and **`diffContentOverflows`** (content extends beyond the viewport, i.e. horizontal scroll) — fed from a DEBUG-only `GeometryReader` around the diff content. The XCUITest asserts, for a diff containing a line longer than the panel: **wrap → fills-width && !overflows**; **no-wrap → overflows**. These robust booleans (not raw pixels) catch the collapse bug's return and the "branches identical" failure.
+
+**Why not pixel snapshots:** a snapshot or raw wrapped-line-count assertion would be **over-deep** — brittle against font/metrics/DPI and effectively testing SwiftUI's layout engine. The derived-boolean geometry signal is the idiomatic "assert via the state dump, not pixels" form for a layout claim (the git-review panel is SwiftUI, so its geometry *is* observable — unlike the custom-drawn terminal view). A one-time manual by-effect check still runs at apply, but as a sanity pass, not the regression guard. `XttyCore` unit tests separately assert the config parse (`nowrap` → `.noWrap`, invalid/absent → `.wrap`, logged).
+
+## Risks / Trade-offs
+
+- **R1 — No-wrap path re-skins the current bug.** If the no-wrap rows are left with `.frame(maxWidth: .infinity)` under the two-axis scroll, they collapse exactly as today. → **Mitigation:** size no-wrap rows to their single-line content width (non-wrapping `Text`, e.g. `fixedSize(horizontal: true)`), and provide the full-width tint at a level that spans the content width under horizontal scroll. If a clean SwiftUI expression proves elusive, an eager `VStack` (bounded by the existing 5000-line per-file cap) is an acceptable fallback for no-wrap only. The `diffFillsWidth` / `diffContentOverflows` geometry signals (D5) make this an **automated** regression guard, not a by-effect-only check: a collapsed no-wrap diff shows as `!overflows` for a long line, failing the test.
+- **R2 — Hanging indent depends on the marker/content split.** → **Mitigation:** the split already exists (`Text(marker)` + `Text(attributedContent)` for content lines); wrap mode reuses it unchanged, so continuation lines align under the content `Text` with no marker arithmetic. Header / no-newline lines (rendered whole) simply wrap without a hanging indent, which is acceptable.
+- **R3 — Changing the default alters visible behavior.** → **Mitigation:** today's behavior is a *bug* (narrow wrap), so wrap-default is a strict improvement, not a regression; the config key lets anyone pin `nowrap`. Forward-compatible: older configs without the key resolve to `wrap`.
+- **R4 — Emphasis background over wrapped runs.** Intra-line emphasis is a per-run `.backgroundColor` on the content `AttributedString`; when that run wraps, SwiftUI splits the background across lines correctly. → **Mitigation:** no code change; confirm by effect that an emphasized span that straddles a wrap point still highlights.
+- **R5 — Geometry feedback could cause a SwiftUI update loop.** Writing the `GeometryReader`'s measured size back into the `@Observable` store during layout can retrigger layout. → **Mitigation:** the feedback is **DEBUG-only** (never in shipping builds), routed via `onGeometryChange`/a preference key, and **equality-gated** so identical fills/overflow values do not re-publish; it feeds a DEBUG observation channel and must **not** drive the render (so it can't loop with `revision`).
+
+## Migration Plan
+
+No migration. The `git-review-diff-wrap` key is additive and forward-compatible (absent → `wrap`). No data model, no persisted state, no keybinding or menu change. Rollback is reverting the change; configs mentioning the key remain loadable (unknown key ignored under the existing forward-compat rule).
+
+## Open Questions
+
+- Should the toggle later gain a keybinding or a View-menu item? Deferred — start button-only to match flat↔tree; add only if the control proves high-traffic.
+- Should the *live* toggle state persist across launches (beyond the config default)? Deferred — session-local for now, consistent with the layout toggle.
