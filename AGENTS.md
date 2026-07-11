@@ -19,6 +19,8 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 | Change | State | What it is | Detail |
 | --- | --- | --- | --- |
 | `add-ci-pipeline` | implemented — owner steps left | CI is live; remaining: repo public, pr-lint PR, branch protection, archive | `research/03-analysis/github-actions-ci-cd.md` |
+| `add-cross-model-design-review` | proposed — 1/24 tasks | authority-free cross-model review worker + human-attested fail-closed archive gate; thin/valid/settled — **build-&-use is the untried step**, not more spec-review | `research/03-analysis/cross-model-review-tar-pit-forensics.md` |
+| `add-git-diff-wrap-toggle` | proposed — 0/20 tasks | git-review diff fills the panel width in a **wrap** (new default) / **no-wrap** mode + in-panel toggle + `git-review-diff-wrap` config key | `research/03-analysis/p6-file-diff-decisions.md` |
 
 **Shipped and archived** (full narratives: [HISTORY.md](HISTORY.md); what is true: `openspec/specs/`; mechanisms: `research/`):
 
