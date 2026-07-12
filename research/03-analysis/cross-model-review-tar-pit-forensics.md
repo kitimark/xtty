@@ -133,3 +133,26 @@ A `1 1` numstat with a positive **word/byte** delta = a line got longer — invi
 **Reusable guideline (corollary to G-TARPIT-5).** A content floor gates *bloat, not change*: comparing absolute word/byte totals to the baseline admits any fix that compresses ≥ what it adds and rejects only net growth — so "fix the defect **and** stay ≤ baseline" is a satisfiable instruction, not a contradiction. Give the drafter the explicit permission-and-obligation to compress duplicative prose to pay for a genuine addition.
 
 **Evidence artifacts.** Workflow `wf_a0e713ea-101` (`result`: `action:applied`, `finalWords:2404`, `finalBytes:16450`); commit `3319785` (`docs(openspec): codraft — close the check-(4) exempt-by-act gap net-neutral`) — the single-line normative diff reviewed on disk.
+
+## 12. Addendum (2026-07-12) — §11's hardening was itself a tar-pit relapse
+
+**Provenance:** added after the shipped gate was **used** on the next real change. Details, probes, and fates: **[`cross-review-gate-defect-forensics.md`](cross-review-gate-defect-forensics.md)** — this is a pointer, not a restatement.
+
+§11 recorded a *constructive* win: a net-**smaller** co-drafted fix (commit `3319785`) that "closed the check-(4) exempt-by-act gap" by hardening the check into its full form (**the attestation line appears exactly once and stays byte-identical from its introducing commit through archive — `adds==1 && dels==0`**). Both models agreed the gap was real; the content floor admitted the fix; `openspec validate --strict` was green.
+
+**Measured one day later, by *using* the gate: that hardening did not close the gap, and it bricked the honest path.**
+
+- **It does not stop the attack it was added for.** Three forgeries pass **all four checks** on never-reviewed content — reset-laundering, amend-forge, and the **split-commit forward forge** (**two plain forward commits, zero history rewriting**). The counter catches only the *naive in-place rewrite*, which no actor needs to use.
+- **It refuses 100% of honest forward recoveries.** Every way to re-record an invalidated attestation fails it, so any post-attestation drift is **unrecoverable without a history rewrite** — while the spec's own scenario *mandates* a fresh attestation.
+
+So the §11 edit was a **mechanical hardening of a git-provenance gate against the model that runs it** — exactly what **G-TARPIT-1** forbids — and it produced the exactly-predicted result: **no adversarial gain, real liveness cost.** That it was net-*smaller*, two-model-agreed, and floor-compliant is the sharpest lesson here: **the content floor and cross-model agreement bound *bloat*, not *wrongness*.** Neither is a substitute for building the thing and running it.
+
+**One nuance that survives, and it matters** ⚠️ Check (4) has **two separable clauses**, and they have **opposite verdicts**: the **counter** (`adds==1 && dels==0`) is null; the **confinement clause** (the attestation-introducing commit's `tasks.md` hunk is confined to the attestation line + ticks) is **genuinely load-bearing** — it is the *sole* guard against an `--amend`-bundled attestation smuggling unreviewed task text. A three-round, converged, cross-model co-research still concluded *"delete check (4) entirely"* — **and was wrong by one clause** (**G-GATE-5**). The correct fix is **delete 4a, preserve 4b**.
+
+**Fates.**
+
+| Theory | Refuted / confirmed by | Fate |
+| --- | --- | --- |
+| §11's check-(4) hardening closes the post-attestation-rewrite gap | three forgeries pass all four checks; the split-commit forward forge needs **no** history rewrite | ❌ |
+| A net-smaller, two-model-agreed, floor-compliant edit is therefore *sound* | it was all three, and still wrong — the floor bounds bloat, not correctness | ❌ |
+| **G-TARPIT-4** (a dev tool is validated by building + using it, not by reviewing its spec) | the defect was invisible across ~16 spec-review rounds and appeared on **first use** | ✅ (strongly) |
