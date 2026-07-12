@@ -18,7 +18,11 @@
 
 ## 1. The gate, as shipped (mechanism)
 
-Archiving an **in-scope** change is refused unless four checks hold. Their **only** committed executable is `exempt_by_act()` in `scripts/test-cross-review-scripts.sh` (a *test harness*); the rest is prose in AGENTS.md that a human/model re-types at archive time.
+Archiving an **in-scope** change is refused unless four checks hold — **as prose.**
+
+> ### ⚠️⚠️ **THERE IS NO EXECUTABLE ARCHIVE GATE.** (F7 — verified)
+> **Not one** of the four checks has a committed **archive-time** implementation. `exempt_by_act()` exists **only inside a test harness**; the digest tool *prints* a digest but nothing committed **extracts the attested value, compares them, or refuses archive**; and the archive skill (`.claude/skills/openspec-archive-change/SKILL.md`, `/opsx:archive`) contains **zero** references to cross-review, attestation, step-0, the classifier, or the digest — it gates only on *incomplete tasks*, then asks the user to confirm and proceeds.
+> **"Fail-closed" describes an instruction-following convention, not an enforced property.** The whole gate is AGENTS.md prose a model is trusted to re-type. **Read every drill below with that in mind:** they measure the *scripts*, not a gate.
 
 | # | Check | Encoding |
 | --- | --- | --- |
@@ -27,7 +31,7 @@ Archiving an **in-scope** change is refused unless four checks hold. Their **onl
 | 3 | tree/index clean | the digest tool's own refusal |
 | 4a | **counter:** line added exactly once, never deleted/modified | `now==1 && adds==1 && dels==0` over `git log -p -- tasks.md` |
 | 4b | **confinement:** the attestation-**introducing** commit's `tasks.md` hunk is confined to the attestation line + checkbox **ticks** | **prose only — no executable** |
-| 4c | **later-commits:** every commit *after* the attestation touches only bookkeeping surfaces — **no reviewed artifact, no gate implementation** | **prose only — no executable**; largely **redundant with check (2)** |
+| 4c | **later-commits:** every commit *after* the attestation touches only bookkeeping surfaces — **no reviewed artifact, no gate implementation** | **prose only — no executable.** ⚠️ **NOT "redundant with check (2)"** — an earlier draft said so and it is **refuted** (F3): after a re-attestation refreshes the digest, check (2) is **green** while 4c is **red**. 4c is the *only* remaining prohibition on post-attestation drift, and **it independently blocks the honest recovery.** |
 
 ⚠️ **Check (4) has THREE clauses as specified, not two.** An earlier draft of this doc decomposed it as 4a/4b and **omitted 4c** — corrected here. Any surgical edit to check (4) must say what happens to **all three**. Note the provenance, which is decisive for the fix: **commit `3319785` (tar-pit §11) added *only* 4a.** 4b and 4c **pre-existed** it. So *"delete 4a, keep 4b/4c"* is exactly *"revert what §11 added; keep what was already there."*
 
@@ -98,6 +102,17 @@ Without `dels==0`, **check (2) degrades to "the value equals itself."** And this
 
 **Horn 2 — 4a is liveness-fatal.** It refuses **100%** of honest forward recoveries (F1).
 
+**❗❗ AND THE HORNS ARE WORSE THAN THAT — deleting 4a does NOT restore liveness.** An external review (Codex, which *cannot run a drill* and found this **by reading the spec**) caught that **every drill in this doc measured only the *executable* subset** — checks (1)(2)(3)(4a). **The specified gate's clause 4c also blocks the honest recovery, independently.** Verified:
+
+```
+D4 (the honest recovery the spec MANDATES: drift → human re-reviews → re-attests)
+   check(2)  PASS        ← the digest was refreshed
+   check(4a) adds=2 dels=1  FAIL
+   check(4c) VIOLATED   ← a later commit touched a reviewed artifact — INDEPENDENT of 4a
+```
+
+So *"delete 4a ⇒ liveness restored"* — the premise under every prescription this doc ever carried — **is false.** Any liveness fix must address **4a and 4c together**. And it refutes this doc's own earlier claim that 4c is *"largely redundant with check (2)"*: here check (2) is **green** and 4c is **red**.
+
 **❗ The horns are the SAME PROPERTY.** A model silently re-attesting and a human deliberately re-attesting after a genuine re-review are **mechanically identical acts**. 4a's value *is* its cost: it forces every re-attestation to be a deliberate, effortful, history-rewriting act that a careless model will not casually perform. **You cannot delete the cost without deleting the value.** Any "fix" that admits the honest recovery admits the silent one **by construction** — the same unsolvable distinction as F2.
 
 #### What the review established (facts, not prescriptions)
@@ -113,6 +128,21 @@ Without `dels==0`, **check (2) degrades to "the value equals itself."** And this
 
 ⚠️ **But it does not resolve the tension above** — a re-attestation still rewrites the line, so the silent-re-attestation horn survives. It is a **promising partial**, unrun, and it belongs in an **explore**, not in this doc.
 
+#### Two results from the fully-informed external review (Codex, read-only — it could not drill)
+
+**(a) The tension is FORMALLY irreducible for a git-only gate — and the only exit is an external authority.**
+*"Let the gate observe repository history, trees, metadata, and deterministic script output. D3 and D4 can produce the same observation: identical content commit, attestation commit, parent relationship, digest, author fields, timestamps, reachable history. **Human review is an event in the world, not a property encoded by Git.** Any predicate over that observation must return the same answer for both."*
+
+The **only** distinguishing fact would be an **externally authenticated human act** — a signature over `(change, base, reviewed-head, digest)` from a key **the model cannot use**, verified at a boundary **the model cannot modify**. But: a plain `git commit -S` is insufficient (an unlocked key or an unattended agent defeats it); a signature proves *key use*, not *reading*; and verification **inside** the model-controlled loop is not an independent boundary. The repo's own **optional-not-default signing form** is precisely this idea, already documented **and declined**.
+
+> ❗ **The current design tries to retain BOTH liveness AND silent-re-attestation prevention WITHOUT an external authority. That combination is impossible.** Whatever the explore decides, it must *pick*: accept the deadlock, accept silent re-attestation as R3, or move attestation authority outside the model-controlled repo.
+
+**(b) A taxonomy contradiction this doc must not paper over.** D3 — a model computing and filling the attested value — is **expressly forbidden** by the spec (the human-only clause), and **D10 already accepts a repo-controlling model performing a forbidden act as the R3 residual**. Yet this doc reclassified the *same act* as *"the principal ordinary **accident**."* **Intent — malicious vs. well-meaning — is no more git-observable than review is.** The two taxonomies cannot both govern. **The explore must decide which one does**; the answer changes whether the counter is protecting anything the design has not already conceded.
+
+#### Head-pinning — evaluated and substantially KILLED
+
+The candidate's central mechanism claim was **backwards**. It was said that smuggled content *"is not in `head=`'s tree, so check (2) fails"*. **Its absence from `head=`'s tree is exactly why check (2) PASSES.** Head-pinning therefore does **not** subsume 4b on its own — it needs an *additional*, executable, **per-commit** `head..HEAD` bookkeeping-only check (and per-commit, not a net `git diff`: an edit followed by a revert has an empty net diff but violates the clause). It does **not** stop the split-commit forge (the forge simply names the malicious commit as `head=`). It does **not** resolve D3/D4, fix scope pollution, or fix D5. It **does** stabilise the digest against unrelated later commits — a real but **narrow, orthogonal** benefit. *Recorded as a partial; not a solution.*
+
 #### The instruction this doc actually gives
 
 **Do not propose a check-(4) change from this document.** Take the *measurements* (F1, F2, F4, F5, F6 — all solid) into an `/opsx:explore`, and design the fix there against **both horns**, with the three-clause decomposition and the re-anchoring requirement in hand. **A research capture records what is; it must not pre-decide a fix that three review rounds could not settle.**
@@ -123,6 +153,23 @@ Without `dels==0`, **check (2) degrades to "the value equals itself."** And this
 tasktexts(){ git show "$1:.../tasks.md" | sed -e "/$SENTINEL/d" -e 's/^\(- \)\[[ xX]\]/\1[ ]/'; }
 diff <(tasktexts "$IC^") <(tasktexts "$IC")   # empty ⇒ confined
 ```
+
+### F7 — ⚠️ **There is no executable archive gate at all** ✅ *(found by the read-only reviewer; the biggest finding here)*
+
+Verified:
+
+| claim | evidence |
+| --- | --- |
+| The archive skill never invokes the gate | `.claude/skills/openspec-archive-change/SKILL.md` and `/opsx:archive` → **0** hits for cross-review / attestation / step-0 / classifier / digest. They count **incomplete tasks**, ask the user to confirm, and proceed. |
+| Check (4a) has no archive-time executable | `exempt_by_act()` exists **only** in `scripts/test-cross-review-scripts.sh` — a *test harness*. |
+| Check (2) has no archive-time executable | `cross-review-digest.sh` **prints** a digest. **Nothing committed extracts the attested value, compares them, or refuses archive.** |
+| Checks (1)/(4b)/(4c) | prose only. |
+
+**So the four-check precondition is AGENTS.md prose that a model is trusted to re-type at archive time.** *"Fail-closed"* is an **instruction-following convention, not an enforced property** — which means **D5's bypass is not the only way past the gate; simply not running step-0 is another**, and nothing detects it.
+
+This is *partly* acknowledged by the design (R3: *"a session that ignores `⟶ archive-ritual` is already outside the workflow's contract"*). What was **not** acknowledged — and what this doc got wrong — is the **magnitude**: an earlier §1 table implied checks 1/2/3/4a *were* executable and only 4b/4c were prose. **None of them are.**
+
+❗ **Read every drill in this document with that scoping.** They measure the **scripts** and a **hand-reconstructed** version of the prose clauses. They do **not** measure a committed gate, because there isn't one.
 
 ### F4 — The scope classifier is **retrospective**: a not-in-scope verdict is a **false negative**, not an abstention ✅
 
@@ -222,13 +269,13 @@ Never re-read the spec to "confirm" any of this. Re-run:
 3. **F5** — leave real product code **uncommitted**, run the classifier ⇒ **exit 0**. That is the bypass.
 4. **F6** — `git diff --name-only "$B"..HEAD | wc -l` for any parked change, then make **one unrelated commit** and re-run. The number **moves**. That is the HEAD-dependence.
 
-**Fix verification (when the fixes land):** the counter's deletion is verified by the honest-recovery arm going **green** in `test-cross-review-scripts.sh`; confinement's survival by the amend-bundle arm staying **red**. Both arms must exist — one without the other proves nothing.
+**Fix verification — deliberately NOT specified here.** An earlier draft said the fix would be verified by *"the counter's deletion going green and confinement's survival staying red"* — **that presumed the very prescription this doc retracts** (F3), and it is wrong anyway (deleting the counter does not restore liveness — 4c blocks it too). **Whatever fix an explore lands must state its own by-effect verification**, and it must exercise the **specified** gate (all three clauses of check (4)), not merely the executable fragment these drills reached.
 
 ---
 
 ## 6. Reusable guidelines
 
-- **G-GATE-1 — A mechanical check the recovering party can launder by `git reset` guarantees nothing; if it *also* forbids the recovery, it is pure liveness cost.** Check (4a) refuses 100% of honest forward recoveries while three separate attacks walk past it. Delete such a check; do not "relax" it (a relaxation that admits the honest path admits the attack **by construction** — they are indistinguishable to the mechanism).
+- **G-GATE-1 — A mechanical check the recovering party can launder by `git reset` guarantees nothing against an adversary; and if it *also* forbids the honest recovery, it is a liveness cost you must price explicitly.** ⚠️ **But do not read this as "delete such a check"** — an earlier draft did, and that was wrong twice over: the counter turned out to be the gate's *principal accident tripwire* (a null-against-adversaries check can still be the only thing catching a *careless* actor), and deleting it would not even restore liveness (clause 4c blocks the honest recovery independently). **Price every clause against both an adversary AND an accident, and against liveness — then decide. This doc decides nothing** (F3).
 - **G-GATE-2 — Don't judge a check by a standard it never claimed.** D10 already scopes all four checks to **accident tripwires**, not adversarial guarantees. The honest question is never *"can it be forged?"* (yes — that is R3, accepted) but *"does it catch the **ordinary, non-adversarial** failure it is aimed at, without false-positiving the honest path?"* **My own error, recorded:** I judged check (4) adversarially, found it wanting, and proposed removal — then had to be corrected twice (once by the review, once by my own probe) before landing on the right question.
 - **G-GATE-3 — A retrospective classifier cannot be asked a prospective question.** One that scopes from *committed* paths returns, before implementation lands, a **confident false negative** — not an abstention. **Only its positive verdict is informative**; treat every other outcome as *"not yet knowable"*, never as *"no"*. Corollary: a check whose severity derives from such a classifier may take **blocker force only from the positive verdict**.
 - **G-GATE-4 — A precondition gated on a classifier blind to uncommitted work is bypassable by simply not committing — and an *inner* dirty-tree check cannot backstop an *outer* scope skip.** Put the cleanliness refusal in the **classifier**, at the outermost gate, not only in the tool that runs after the gate has already decided to apply.
