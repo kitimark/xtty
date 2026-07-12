@@ -9,9 +9,9 @@
 | `/opsx:propose` never emits the task | `grep -c -Ei 'cross-review\|attestation' openspec/config.yaml` = **0**, while all four existing point-of-tick markers *do* have `rules.tasks` entries. The propose loop reads `config.yaml`, not `AGENTS.md`. |
 | Nothing blocks on its absence | `xtty-openspec-critic` v4 (L42): gate-task presence is `heuristic → REVIEW`, *"never a BLOCKER"*; L80: *"REVIEW findings never block."* |
 | Both open changes violate the shipped spec | `add-ci-pipeline`, `add-git-diff-wrap-toggle` → classifier **exit 10 (in scope)**; attestation tasks in each `tasks.md` → **0**. |
-| The gate has fired once, by hand | The archived change's task 5.2 was hand-authored during its own dogfood. |
+| The gate has fired **twice**, both times with a **hand-authored** task | `add-cross-model-design-review`'s own dogfood (task 5.2), and `brief-cross-review-pass-b` (task 4.2, archived 2026-07-13 through the **full** gate). ⚠️ **Round-4 correction — an earlier draft said "once", and the second firing matters:** it proves the convention *can* reach an author with `config.yaml` still at **0** hits. It does **not** prove the loop emitted it (git cannot distinguish loop-emitted from hand-added in the same commit), so it is **not** counter-evidence either. See the anachronism record in `proposal.md` → Why. |
 
-The gate still **fail-closes at archive** (step-0 check (1) finds no attestation line), so nothing unreviewed slips through *silently*. The defect is that the human is never **prompted**: they learn of the requirement only when archive refuses, after the work is done. A *tool-doesn't-work-when-used* defect — **G-TARPIT-4**'s highest-value class, found by *using* the gate rather than reviewing its spec.
+The gate still **fail-closes at archive** (step-0 check (1) finds no attestation line), so nothing unreviewed slips through *silently*. The defect is one of **carriage, not of observed failure**: the obligation is stated only where the propose loop never looks, so whether an author gets prompted depends on whether that author happened to be carrying the guide's context. ⚠️ **An earlier draft called this a measured *"tool-doesn't-work-when-used"* defect. That framing is withdrawn** — round 4 showed the supporting evidence was **anachronistic** (both non-conforming changes predate the obligation) and the one clean post-gate change *did* carry the task. The case is **G13** (prose does not reach the loop; `rules.tasks` does), which is already settled by measurement elsewhere and needs no fresh empirical claim here. *(**G-TARPIT-4** still applies, but as a **method** note: what this change genuinely surfaced by **using** the gate — rather than reviewing its spec — is the structural range-pollution latch of D1/R3, not the emission story.)*
 
 ## Goals / Non-Goals
 
@@ -86,7 +86,7 @@ What survives is a real **procedural constraint**, not a proof: the migration co
 
 ### D4 — Four arms; only `exit 10` carries blocker force, and **no arm suppresses the check**
 
-The first draft made `exit 0` mean *"out of scope ⇒ SHALL NOT flag"*. That is **fail-open**: since the normal post-propose state *is* `exit 0`, it would have **mandated silence on a missing gate task for the entire propose→implement window** — a regression against today's v4 REVIEW, and a direct contradiction of D5's fail-closed principle. Corrected:
+The first draft made `exit 0` mean *"out of scope ⇒ SHALL NOT flag"*. That is **fail-open**: it would have **mandated silence on a missing gate task** whenever the classifier said "out" — a regression against today's v4 REVIEW, and a direct contradiction of D5's fail-closed principle. *(That draft justified itself with "the normal post-propose state **is** `exit 0`". Round 4 refuted the premise — after any intervening archive the steady state is `exit 10` (D1's latch) — but the **conclusion survives on stronger ground**: `exit 0` must not suppress the check, because per D1 the classifier's answer is **never about this change** and so can never license silence about it.)* Corrected:
 
 | classifier | Critic behavior |
 | --- | --- |
@@ -166,7 +166,9 @@ No `verification-harness` delta: dev-workflow tooling, no observable app behavio
 
 ## Migration Plan
 
-Additive. The `config.yaml` rule affects only future propose runs; the critic upgrade only future reviews; `add-git-diff-wrap-toggle`'s tail gains one task (a **separate commit** from any attestation, per D3). Rollback = revert; the gate returns to its inert-at-propose state. No attested state is involved.
+Additive. The `config.yaml` rule affects only future propose runs; the critic upgrade only future reviews. **Which existing change (if any) gains the task is ⛔ blocked on Q3** — see D7; the earlier plan (migrate `add-git-diff-wrap-toggle` only) is withdrawn. Whatever Q3 chooses, any hand-added gate task MUST land in a **separate commit** from any later attestation (D3). Rollback = revert; the gate returns to emitting nothing at propose. No attested state is involved.
+
+**⚠️ This design assumes it lands as-is — and Q1/Q2 may invalidate that.** The spec delta enshrines the classifier's **non-attributive / latching** behavior as normative text. That description is **factually verified** and correct **today**. But if the human answers **Q1 = "land the base-resolution change first"** or **Q2 = "narrow the classifier before granting BLOCKER force"**, then `cross-review-scope.sh` changes and **this very delta gets re-modified** by that change — its `openspec/specs/` text would then describe a classifier that no longer behaves that way. The polished spec is therefore **a proposal contingent on Q1/Q2**, not settled text. Sequence accordingly.
 
 ## Open Questions
 

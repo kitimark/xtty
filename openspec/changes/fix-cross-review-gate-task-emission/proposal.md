@@ -1,6 +1,8 @@
 ## Why
 
-The cross-model-review archive gate shipped one day ago (`add-cross-model-design-review`) with a **blocking human-attestation task** as the mechanism that makes a human actually run the review before archive. **Nothing emits that task, and nothing blocks on its absence** — so for every change except the one that hand-wrote its own task during the dogfood, the gate is effectively inert.
+The cross-model-review archive gate (`add-cross-model-design-review`, archived 2026-07-12) uses a **blocking human-attestation task** as the mechanism that makes a human actually run the review before archive. **That obligation lives only in guide prose: nothing emits the task, and nothing blocks on its absence.**
+
+**⚠️ The claim here is STRUCTURAL, not empirical — and an earlier draft overreached.** That draft said the gate is *"effectively inert"* for every change *"except the one that hand-wrote its own task"*. **Both halves are withdrawn** (see the dated record below): a **second** change has since carried the task and archived cleanly through the full gate, and the two changes that lack it **predate the obligation** — so there is **no clean evidence** the propose loop fails, in either direction. What remains, and what this change actually rests on, is that the obligation sits on a surface **the propose loop does not read**.
 
 Two independent gaps, both **measured on disk**:
 
