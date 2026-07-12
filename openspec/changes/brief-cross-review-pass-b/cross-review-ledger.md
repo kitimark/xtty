@@ -44,3 +44,20 @@ This is the cleanest possible validation of the A' change: **run on itself, the 
 ## Authority restatement
 
 Advisory. No gate force. The model did **not** tick task 4.2, computed no digest, wrote no attestation line. A genuine archive still requires the human to read this ledger, run `scripts/cross-review-digest.sh` themselves, and attest.
+
+---
+
+## Round 2 (briefed, additive-instruction) — ⚠️ and the diminishing-returns cliff
+
+Re-ran Pass B (briefed A', **with the D2a additive instruction** — "check these claims AND report anything outside them") on the round-1-fixed state (`B..HEAD` = `639b3b0`). **The additive instruction worked, in the most convincing way: Codex used it to critique the additive instruction itself** — every finding went beyond the fix-verification checklist. That validates D2a by effect. It also produced four findings; adjudicated against one discriminator — *does this change what gets BUILT, or elaborate the spec of an unbuilt tool?*
+
+| # | Sev | Finding | Disposition |
+| --- | --- | --- | --- |
+| **R2-4** | medium | **The B2 fix wasn't propagated to all surfaces** — task 1.1 (the point-of-tick authority) and proposal.md still said *"survives verbatim"*; R3 + proposal impact still referenced the *dropped* file fallback. | **FIXED** — changes what gets *built*; propagated verbatim→semantic to task 1.1 + proposal, stripped the stale fallback refs. |
+| **R2-2** | medium | **The "overflow rides the ledger" fallback is under-specified** (no pre-pass commit / pointer / read instruction; the ledger persists *after* the passes run, so it can't reach them). | **FIXED subtractively** — dropped ledger-overflow entirely; an over-budget brief is **compacted with a noted compaction**, never spilled. |
+| **R2-1** | medium | **The additive *instruction* doesn't restore an independent blind slice** — both passes still share framing; "consensus only when both rest *only* on the brief" is hard to adjudicate. Proposed: keep one pass **blind**. | **LOGGED, not adopted** (design Open Questions). It reintroduces under-briefing by design, to protect an *advisory* consensus flag that barely fires and is now human-auditable. If the flag proves untrustworthy in **use**, soften the flag — don't redesign briefing. Decide from usage. |
+| **R2-3** | medium | **Version re-probe has no persistent trigger** — it lives only in a one-time verify task; an upgrade could silently regress arg parsing. Proposed: record + compare the companion version in the worker. | **DEFERRED** (design Open Questions) — cheap to add if a version bump ever regresses briefing; premature to build now. |
+
+### ⚠️ The cliff — and why round 2 is the last review round
+
+`brief-cross-review-pass-b` is **0/12: the command edit does not exist yet.** This is round 2 of adversarially reviewing the *spec* of an unbuilt dev tool, and adversarial review never returns zero (**G-TARPIT-3**) — each round mints fresh "real" findings. This repo's own **G-TARPIT-4** names the failure precisely: *"~16 rounds on a proposal at 0 tasks; a dev tool is validated by **building and using it**."* Round 1 was worth it (it proved A' works and killed the unimplementable fallback). Round 2 returned one build-affecting bug (R2-4) and otherwise spec-polish. **Past the cliff.** No round 3. The real test is **implementing the two command edits and running `/xtty:cross-review` on a real change with a populated brief** — the exit prescribed by the change's own research (§8). Findings 1/3 are logged; decide them from that usage, never from another review pass.

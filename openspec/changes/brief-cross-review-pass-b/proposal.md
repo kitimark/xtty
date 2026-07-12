@@ -9,14 +9,14 @@ Two measured causes (`research/03-analysis/codex-review-integration-forensics.md
 
 **The read-only sandbox was NOT the bottleneck.** The discriminating datum: once finally handed a full brief + drill results, a **read-only** Codex found this session's two biggest gate defects *by reading* (`cross-review-gate-defect-forensics.md`). The gap is **under-briefing**, not read-only.
 
-**The fix is verified by effect (A').** Passing a brief as the trailing positional on the *existing* `adversarial-review` call: the brief survives verbatim (`--base` + `--model` keep `argv.length > 1`, so the CLI's single-arg mangler never fires), Codex engages it precisely (a two-question design brief produced two findings mapping onto exactly those questions), the validated `review-output` JSON schema is preserved, and the pass stays read-only and safe.
+**The fix is verified by effect (A').** Passing a brief as the trailing positional on the *existing* `adversarial-review` call: the brief reaches the model with its semantic content and internal newlines intact (`--base` + `--model` keep `argv.length > 1`, so the CLI's single-arg mangler never fires — delivery is semantic, not byte-identical), Codex engages it precisely (a two-question design brief produced two findings mapping onto exactly those questions), the validated `review-output` JSON schema is preserved, and the pass stays read-only and safe.
 
 ## What Changes
 
 - **The `/xtty:cross-review` worker SHALL supply Pass B a brief** through the reviewer's focus channel: one paragraph of **design intent** + the **specific claims/assumptions the soundness pass must verify** + a **compact digest of any drills the main loop already ran**. Delivered **inline** as the trailing positional on the `adversarial-review` invocation.
 - **The command's poisoned note is corrected** — `cross-review.md:44` is reframed from *"focus text does not scope the review"* to: focus text does **not** change *which* diff is reviewed, but it **is** the brief / soundness-lens channel (`USER_FOCUS`) and **must be populated**.
 - **The brief is additive, not a replacement for open-ended review** (dogfood-confirmed R1): each soundness pass checks the briefed claims **and** reports anything material outside them. A finding is **not** elevated to two-model consensus when both passes rest only on the same briefed assertion (shared framing ≠ independent corroboration), and the brief is **recorded in the advisory ledger** so the shared framing behind any consensus flag is auditable.
-- **Inline delivery only; no brief-file fallback.** Both dogfood runs flagged a separate brief file as unimplementable — the digest tool excludes exactly `cross-review-ledger.md`, so a new file would either enter the reviewed-state digest or trip the dirty-tree refusal. An over-long brief carries its overflow in the **already-excluded advisory ledger**, never a new file.
+- **Inline delivery only; no brief-file fallback.** Both dogfood runs flagged a separate brief file as unimplementable — the digest tool excludes exactly `cross-review-ledger.md`, so a new file would either enter the reviewed-state digest or trip the dirty-tree refusal. An over-long brief is **compacted with a noted compaction** — never silently under-briefed, and never spilled to a separate file or the ledger.
 - **No new machinery.** No `task` subcommand, no `--write`, no `--resume`, no new script, no new flag. Pass B stays on the **hardcoded-read-only** `adversarial-review` path (structurally cannot touch the tree). The `task --write` drilling mode is **explicitly rejected** (it loses the schema, adds a write-safety surface, and OpenAI's content-safety filter aborts security-flavoured drills mid-run) — documented as a non-default out-of-band escape hatch only.
 
 ## Capabilities
@@ -31,7 +31,7 @@ Two measured causes (`research/03-analysis/codex-review-integration-forensics.md
 
 ## Impact
 
-- **`.claude/commands/xtty/cross-review.md`** — two edits: populate the brief on the Pass B invocation (§2 of the command); correct the line-44 focus note. Optionally document the gate-inert file-pointer fallback and the Mode-B rejection.
+- **`.claude/commands/xtty/cross-review.md`** — two edits: populate the brief on the Pass B invocation (§2 of the command); correct the line-44 focus note. Document the Mode-B rejection (no brief-file fallback — see below).
 - **`openspec/specs/cross-model-review/spec.md`** — one ADDED requirement (Soundness-pass briefing) with scenarios.
 - **`AGENTS.md`** — the worker-protocol description (Pass B bullet) notes the brief channel.
 - **No product code, no tests, no harness surface.** Dev-workflow tooling; no observable app behavior, so no `verification-harness` delta.
