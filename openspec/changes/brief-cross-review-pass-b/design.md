@@ -27,11 +27,22 @@ Pass the brief as the trailing positional on the existing invocation:
 
 Reproduced live (`research/…/codex-review-integration-forensics.md` §3): a two-question design-soundness brief produced two findings mapping onto exactly those questions, with valid schema output, read-only, xtty untouched. **The claim the test proves:** the brief reaches the model and shapes the review, *and* the structured schema survives — both verified against the real companion, not asserted.
 
-### D2 — Deliver the brief **inline**; survival is a measured property of the arg parser
+### D2 — Deliver the brief **inline**; the survival claim is *semantic*, not byte-identical (dogfood-corrected)
 
-The brief goes inline (not a file) because the companion mangles arguments **only** when `normalizeArgv` sees `argv.length === 1` (`codex-companion.mjs:130-138`). Pass B's `--base` + `--model` keep `argv.length > 1`, so the trailing brief positional passes through **untouched** (newlines intact) via `focusText = positionals.join(' ')`. *(Verified at source; end-to-end survival on a live paid run is the cheap first-use confirmation — tasks §5.)*
+The brief goes inline. The companion reconstructs focus as `focusText = positionals.join(' ').trim()` and its single-arg mangler fires **only** when `normalizeArgv` sees `argv.length === 1` (`codex-companion.mjs:130-138`); Pass B's `--base` + `--model` keep `argv.length > 1`, so the trailing brief positional is **not** mangled.
 
-**File-pointer fallback, gate-inert:** promote to an in-repo brief-file pointer **only** if a brief must lead with `-` or exceed `ARG_MAX`. If ever used, the brief file MUST be **excluded by `cross-review-digest.sh` and allowlisted by `cross-review-scope.sh`** — exactly like the advisory `cross-review-ledger.md` — so it never enters the attested reviewed state. Inline is the default precisely because it needs no such handling.
+⚠️ **Corrected by the change's own dogfood** (the briefed Pass B on this very change): the earlier claim that the brief survives *"verbatim"* is **overstated**. `join(' ').trim()` strips leading/trailing whitespace and normalizes inter-positional spacing; a single quoted positional preserves its **internal newlines** but is not byte-identical. The claim is therefore: **the brief is delivered with its semantic content and internal structure intact** — which the effect test confirms (Codex engaged the brief's specific questions). It does **not** claim byte-preservation.
+
+**Version-sensitivity (also a dogfood catch):** measured against companion **`1.0.6`**, and the worker resolves the *highest installed* companion by version-ordered glob — a future version could change positional parsing and silently restore the blind-review failure. → **Mitigation (tasks §3):** the by-effect probe (a briefed review whose findings reference the brief's questions) *is* the contract check; re-run it when the resolved companion version changes, and treat a brief the reviewer clearly did not engage as a **regression, not a pass**.
+
+**No brief-file fallback — DROPPED (both dogfood runs flagged it unimplementable).** The gate tooling excludes exactly `cross-review-ledger.md`; a *new* brief file would either enter the reviewed-state digest (committed) or trip the digest tool's dirty-tree refusal (untracked) — contradicting the gate-inert claim and task 4.3's "neither gate script changes". So there is **no separate brief file**. If a brief ever exceeds the inline budget, carry the overflow in the **already-excluded advisory ledger** (which the digest tool already skips), never a new file. Inline suffices for the design-brief sizes this worker produces (YAGNI on the ARG_MAX edge).
+
+### D2a — The brief is **additive**, and shared framing is not consensus (dogfood-added)
+
+The change's own dogfood surfaced **R1 by effect**: the *blind* review's top finding — a shared brief can manufacture a fake independent two-model consensus — was **crowded out** of the *briefed* run, which spent its attention on the author's framing. So the requirement gains three guards:
+- Each soundness pass is instructed to check the briefed claims **AND** report anything material outside them — the brief steers, it does not blinker.
+- A finding is **not** elevated to two-model consensus when both passes rest **only** on the same briefed assertion (shared framing ≠ independent corroboration).
+- The brief is **recorded in the advisory ledger**, and any worker-run drill digest is presented **as claims to challenge**, so the human can audit the shared framing behind any consensus flag.
 
 ### D3 — Reject `task --write` (drilling Codex)
 

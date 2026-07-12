@@ -3,8 +3,8 @@
 - [ ] 1.1 In `.claude/commands/xtty/cross-review.md`, populate the **brief** on the Pass B invocation: `node "$COMPANION" adversarial-review --base "$B" --model gpt-5.6-sol "<brief>"`, where `<brief>` = one paragraph of design intent + the specific claims/assumptions to soundness-check + a compact digest of any drills the main loop already ran. State that the brief is delivered **inline** and survives verbatim (the companion's single-arg mangler fires only at `argv.length === 1`; `--base` + `--model` keep it > 1 — design D2).
 - [ ] 1.2 **Correct the poisoned note** at `cross-review.md:44`: reframe *"Focus text does not scope the review"* to — focus text does **not** change *which* diff is reviewed, but it **is** the brief / soundness-lens channel (`USER_FOCUS`) and **must be populated** every run.
 - [ ] 1.3 Give Pass C (the inline Opus soundness pass) the **same brief**, so both soundness passes reason from the same design context (spec: "each soundness pass").
-- [ ] 1.4 Document the **gate-inert brief-file fallback** (design D2) — used only when a brief must lead with `-` or exceed `ARG_MAX`; if used, the file MUST be excluded by `cross-review-digest.sh` + allowlisted by `cross-review-scope.sh`.
-- [ ] 1.5 Document the **Mode-B rejection** (design D3) as a non-default out-of-band escape hatch — `task --write` loses the schema, adds a write-safety surface (default cwd = the xtty repo root), and OpenAI's content-safety filter aborts security-flavoured drills; revisit only if a real defect proves a briefed read-only pass missed something a drill would have caught.
+- [ ] 1.4 Make the brief **additive** (design D2a, dogfood R1): instruct each soundness pass to soundness-check the briefed claims **and** report any material finding **outside** the brief. Record the brief (or a faithful reference) in the **advisory ledger**, present any worker-run drill digest **as claims to challenge**, and do **not** elevate a finding to two-model consensus when both passes rest only on the same briefed assertion.
+- [ ] 1.5 **No brief-file fallback** (design D2, dogfood catch): inline only; overflow, if ever needed, rides the already-excluded advisory ledger — do **not** introduce a new file the digest tool would hash. Document the **Mode-B rejection** (design D3) as a non-default out-of-band escape hatch — `task --write` loses the schema, adds a write-safety surface (default cwd = the xtty repo root), and OpenAI's content-safety filter aborts security-flavoured drills; revisit only if a real defect proves a briefed read-only pass missed something a drill would have caught.
 
 ## 2. Guide
 
@@ -13,7 +13,7 @@
 ## 3. Verify
 
 - [ ] 3.1 Verify **by effect** (design D5 — a grep for the brief string in the command file is a read-back check, NOT evidence): run `adversarial-review --base <B> --model gpt-5.6-sol "<a two-question design-soundness brief>"` against a **throwaway** repo with a real diff; confirm (a) the findings **reference the brief's questions** (not generic notes), (b) the output **parses as `review-output`**, (c) the pass stayed **read-only** and the throwaway was the only thing touched.
-- [ ] 3.2 Confirm the brief **survives verbatim** inline (newlines intact) on that live call — the first end-to-end confirmation of design D2's source-level claim.
+- [ ] 3.2 Confirm the brief is delivered with **semantic content + internal newlines intact** on that live call (design D2 — the claim is *semantic* delivery, **not** byte-identical: the companion does `positionals.join(' ').trim()`). Treat a brief the reviewer clearly did not engage as a **regression**; re-run this probe when the resolved companion version changes.
 - [ ] 3.3 `openspec validate brief-cross-review-pass-b --strict` (cheap, mechanical — inline).
 
 ## 4. Land the change
