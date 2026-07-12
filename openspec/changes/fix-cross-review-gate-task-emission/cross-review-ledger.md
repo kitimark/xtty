@@ -8,36 +8,59 @@
 
 ## Header — the transparency contract
 
+> ⚠️ **HEADER REFRESHED IN ROUND 4 — and the old one was materially false.** It recorded
+> *"Scope: `exit 0` — OUT of scope … the human overrode the classifier"* and a 6/12-file range.
+> **Live today: `exit 10` — IN scope, 21 files.** That inversion is not a bookkeeping slip: it is
+> **this run's most important finding** (R4-1). The header is the human's audit surface for the
+> 6.2 attestation, so the stale values are corrected in place and the old ones named as retired.
+
 | Field | Value |
 | --- | --- |
-| **Reviewed range** | base `B = 895088430b9b` (parent of `3815113`) .. HEAD — **rounds 1–2: `3815113`, 6 files; round 3 (a new human-launched run): `dca6b11`, 12 files** (the range now includes the research capture, AGENTS.md, HISTORY.md, and the tar-pit addendum) |
-| **Base rule** | positional: parent of the commit that added `proposal.md`. No ownership metadata. |
-| **Scope (mechanical)** | **`exit 0` — OUT of scope.** The classifier reports docs/tracker-only, because only the change's own artifacts have landed. **The human launched the review anyway, overriding the classifier.** *This is not a footnote — it is the change's central finding, reproduced on itself (see F1).* |
-| **Passes run** | **All three, all three rounds.** None skipped. Round 3's Pass C had to be nudged twice to emit (it stopped without reporting) — recovered, not lost. |
-| **Pass A** | Opus — `xtty-openspec-critic`, stamp **`Definition: v4 (2026-07-12)`**; delivery check **served == committed** ⇒ valid, not stale. |
-| **Pass B** | **`gpt-5.6-sol`** (GPT family), model pinned at invocation. Effort **`xhigh`**, config-governed and readable (`~/.codex/config.toml`: `model_reasoning_effort = "xhigh"`) — `adversarial-review` exposes no per-call effort flag. Companion `codex/1.0.6`; `codex.available` + `auth.loggedIn` both true. |
-| **Pass C** | Opus — inline agent (anti-roster: not a standing agent), effort invocation-controlled. |
+| **Reviewed range** | base `B = 895088430b9b` (parent of `3815113`) .. HEAD — **round 4: HEAD = `c47a5c1`, 21 files.** *(Rounds 1–2: `3815113`, 6 files. Round 3: `dca6b11`, 12 files.)* |
+| **Base rule** | positional: parent of the commit that added `proposal.md`. No ownership metadata. `B` is itself the **archive commit of `add-cross-model-design-review`** — the gate's own ship commit. |
+| **Scope (mechanical)** | ⚠️ **`exit 10` — IN scope. Driven 100% by FOREIGN paths.** The two out-of-allowlist paths (`.claude/commands/xtty/cross-review.md`, `openspec/specs/cross-model-review/spec.md`) were introduced **entirely** by `brief-cross-review-pass-b` (`ca7b235`, `39fd78c`, `c47a5c1`). This change's **own 7 paths are 100% allowlisted**, and it stands at **1/20 tasks — zero implementation landed**. *(Rounds 1–3 read `exit 0`; the flip came from unrelated work, not from this change.)* |
+| **Range pollution** | **21 paths: 7 own, 14 foreign (67%).** The 14 belong to the archived `brief-cross-review-pass-b`. |
+| **Passes run** | **All three, all four rounds.** None skipped. |
+| **Pass A** | Opus — `xtty-openspec-critic`, stamp **`Definition: v4 (2026-07-12)`**; delivery check **served == committed** ⇒ valid, **not stale** (v5 is this change's *unlanded* task 2.2, so v4 is the correct current stamp). Verdict: **ISSUES-FOUND**, 1 BLOCKER. |
+| **Pass B** | **`gpt-5.6-sol`** (GPT family), model pinned at invocation. Effort **`xhigh`**, config-governed and readable (`~/.codex/config.toml`: `model_reasoning_effort = "xhigh"`) — `adversarial-review` exposes no per-call effort flag. Companion **`codex/1.0.6`**; `codex.available` + `auth.loggedIn` both true. Verdict: **needs-attention** (3 findings). |
+| **Pass C** | Opus — **inline** agent (anti-roster: not a standing agent), effort invocation-controlled. Verdict: **needs-attention** (10 findings, 1 critical). *(Launch defect, recovered: the initial prompt carried a literal `<<<BRIEF>>>` placeholder; the real brief was delivered by follow-up message before the pass reported. Recorded, not hidden.)* |
 | **Cross-family?** | **Yes** — genuinely two-family soundness (B = GPT, C = Opus). Not single-model. |
-| **Two-model consensus (B∩C)** | **Rounds 1–2: YES** — both soundness passes independently landed on the exit-arm model being wrong (Pass A reached it as a BLOCKER too — a **three-pass** convergence). **Round 3: YES again, on a bigger one** — A and C **independently** refuted the research capture's own operative prescription (H1). ⚠️ **But note the near-miss:** Pass B, in round 3, *endorsed* the very claim A and C then refuted (it recommended *"preserving the confinement clause"*). **A model agreeing with you is not evidence.** |
+| **The brief (round 4)** | **Both soundness passes were briefed** (design intent + 8 claims-to-check `C1–C8` + a 4-item drill digest `D-1…D-4` + 2 do-not-reopen items `S1/S2`), staged out-of-repo (`mktemp`) and delivered as a **single positional**. Explicitly **additive** (*"…and report any material finding outside this brief"*) and **advisory** (zero gate force). **Full text reproduced in the appendix below**, so the human can audit the shared framing behind every consensus flag. |
+| **Consensus discipline** | ⚠️ **Because the brief was shared, B∧C agreement on a *briefed* claim is NOT independent corroboration** — and this ledger does not flag it as such. Consensus is claimed **only** for findings that arose **outside** the brief. Round 3 already recorded a near-miss where B endorsed a claim A and C then refuted: **a model agreeing with you is not evidence.** |
 
-### Reviewed file list (verbatim, `git diff --name-only B..HEAD`)
+### Reviewed file list (verbatim, `git diff --name-only B..HEAD` — 21 paths)
 
 ```
-openspec/changes/fix-cross-review-gate-task-emission/.openspec.yaml
-openspec/changes/fix-cross-review-gate-task-emission/design.md
-openspec/changes/fix-cross-review-gate-task-emission/proposal.md
-openspec/changes/fix-cross-review-gate-task-emission/specs/coherence-review/spec.md
-openspec/changes/fix-cross-review-gate-task-emission/specs/cross-model-review/spec.md
-openspec/changes/fix-cross-review-gate-task-emission/tasks.md
+ OWN (7 — all inside the allowlist)
+   openspec/changes/fix-cross-review-gate-task-emission/.openspec.yaml
+   openspec/changes/fix-cross-review-gate-task-emission/cross-review-ledger.md
+   openspec/changes/fix-cross-review-gate-task-emission/design.md
+   openspec/changes/fix-cross-review-gate-task-emission/proposal.md
+   openspec/changes/fix-cross-review-gate-task-emission/specs/coherence-review/spec.md
+   openspec/changes/fix-cross-review-gate-task-emission/specs/cross-model-review/spec.md
+   openspec/changes/fix-cross-review-gate-task-emission/tasks.md
+
+ FOREIGN (14 — the archived `brief-cross-review-pass-b`; ★ = drives the exit-10 verdict)
+ ★ .claude/commands/xtty/cross-review.md
+ ★ openspec/specs/cross-model-review/spec.md
+   AGENTS.md
+   HISTORY.md
+   research/README.md
+   research/03-analysis/codex-review-integration-forensics.md
+   research/03-analysis/cross-model-review-tar-pit-forensics.md
+   research/03-analysis/cross-review-gate-defect-forensics.md
+   openspec/changes/archive/2026-07-12-brief-cross-review-pass-b/.openspec.yaml
+   openspec/changes/archive/2026-07-12-brief-cross-review-pass-b/cross-review-ledger.md
+   openspec/changes/archive/2026-07-12-brief-cross-review-pass-b/design.md
+   openspec/changes/archive/2026-07-12-brief-cross-review-pass-b/proposal.md
+   openspec/changes/archive/2026-07-12-brief-cross-review-pass-b/specs/cross-model-review/spec.md
+   openspec/changes/archive/2026-07-12-brief-cross-review-pass-b/tasks.md
 ```
 
-*(Round-1 list. Round 3's range adds `AGENTS.md`, `HISTORY.md`, `cross-review-ledger.md`,
-`research/README.md`, `research/03-analysis/cross-review-gate-defect-forensics.md`, and
-`research/03-analysis/cross-model-review-tar-pit-forensics.md` — 12 paths, still all allowlisted, still `exit 0`.)*
-
-*Honest limitation: work committed **before** `proposal.md` outside the change dir is invisible to
-`B..HEAD`. Here the range is clean — 0 foreign — because the change was proposed on a fresh HEAD.
-(Contrast `add-git-diff-wrap-toggle`: 35 files, 28 foreign.)*
+*Honest limitation (unchanged): work committed **before** `proposal.md` outside the change dir is
+invisible to `B..HEAD`. **The new limitation round 4 exposes is the opposite one** — work committed
+**after** `proposal.md` by **anyone else** is fully inside `B..HEAD`, and it is what flipped this
+change's scope verdict. The reviewed surface is a **range**, not a change.*
 
 ---
 
@@ -105,6 +128,58 @@ Range extended to `dca6b11` (12 paths), adding the research capture. Passes A �
 
 ---
 
+## Round 4 (a NEW human-launched run — and the range flipped under the change's feet)
+
+**Why this run found more than rounds 1–3 combined:** between round 3 and now, an entire other change
+(`brief-cross-review-pass-b`) was proposed, implemented, attested and **archived** — *inside this
+change's reviewed range*. That did two things: it grew the range from 12 → 21 paths (67% foreign),
+and it **flipped the scope verdict from `exit 0` to `exit 10`** — falsifying the design's central
+demonstration. Rounds 1–3 could not have caught this: the range was clean then (*"0 foreign"*).
+
+| # | Src | Sev | Finding | Resolution |
+| --- | --- | --- | --- | --- |
+| **R4-1** | **self (adjudicator)**, re-derived by **A ∩ B ∩ C** | **BLOCKER** | **The classifier reads `exit 10` on this change RIGHT NOW — at 1/20 tasks, zero implementation landed — driven 100% by FOREIGN paths.** Both out-of-allowlist paths belong to `brief-cross-review-pass-b`; this change's own 7 are 100% allowlisted. **Design D1's lifecycle table is dead** (*"propose committed → `exit 0`"*), and with it the change's headline self-demonstration (*"it reads `exit 0` — the bug reproducing on itself"*). **Task 6.1's validity precondition is now a FALSE-POSITIVE TEST:** it disqualifies a run *"while the change still reads `exit 0`"* — a condition that **can never fire again** — so it would green-light a pre-archive review of an unimplemented change. *(I briefed all three passes on this, so their agreement is **confirmation, not independent consensus** — but each re-derived it from disk, and C **extended** it structurally: see R4-2.)* | **FIXED.** **D1 re-anchored** on the classifier's **non-attributive** nature (the property `D-1` does *not* falsify — see R4-2) and the dead table replaced with the live `exit 10` measurement. **Task 6.1's precondition replaced with an ATTRIBUTIVE test**: assert this change's own implementation paths (`openspec/config.yaml`, `.claude/agents/xtty-openspec-critic.md`) are present in `B..HEAD` **and** tasks 1.1–2.2 are ticked+committed. The classifier proxy is gone. |
+| **R4-2** | **C** *(then confirmed on disk)* | **critical** | **⚠️ THE DEEPEST FINDING OF THE RUN — and no pass was briefed on it. The pollution is STRUCTURAL, not a quirk, and the spec was about to FREEZE A FALSE DESCRIPTION of the classifier into `openspec/specs/`.** Two parts. **(a) The latch:** `openspec archive` **always** writes `openspec/specs/**`, which is **not** in the allowlist (verified: `cross-review-scope.sh:45-51` allows only `openspec/changes/*`, `research/*`, the 4 root docs, `packer/README.md`). So **any change left open across any other change's archive latches to `exit 10` permanently and can never return.** With concurrent changes — the repo's normal state — that is the **common case**. Measured: **all three** open changes read `exit 10`; for **two** of them every driving path is foreign. **(b) The false spec text:** the MODIFIED requirement still called it *"a mechanical classifier over **the change's changed paths**"* and kept the scenario *"a pure-documentation **change** … is out of scope"*. **Both false** — it scopes over a repo-wide **range**. And `openspec archive` would merge that into `openspec/specs/`, which the repo defines as *what is true* — **the exact F2 error class (a false mechanism claim frozen into the permanent spec), recurring in the opposite direction, in the very paragraph this change edits, on the verdict this change is promoting to BLOCKER force.** | **FIXED.** The spec delta now describes the classifier correctly and normatively: it scopes over the **reviewed range**; its verdict is **non-attributive** (an in-scope result says only that *some* path is out-of-allowlist — never *whose*), **retrospective**, and **monotone under intervening archives**. An in-scope verdict **SHALL NOT** be read as evidence the change's own implementation landed. The pure-docs scenario is corrected (`change` → **range**) and a **new scenario** added for the foreign-driven verdict. *(Pass A reached the same tension independently at REVIEW severity — "latent tension carried into the permanent spec" — so this is **genuine A ∩ C consensus, arising OUTSIDE the brief.**)* |
+| **R4-3** | **B** | **high** | **D7's "unsatisfiable" premise is REFUTED — the whole migrate/exclude split rests on a false claim.** The design excluded `add-ci-pipeline` because its attestation would be *"unsatisfiable"* (owner-step commits would restage the HEAD-dependent digest, and check (4) forbids re-recording). **Verified on disk: false.** Its remaining work — **5.4** (a test PR) and **5.5** (a GitHub **repo setting**, not even a commit) — sits **before** its tail. So *owner-steps → commit → **then** attest → **then** archive* is an ordinary, available ordering with **zero** intervening commits. And the missing `⟶ xtty-openspec-critic` anchor (a real gap — confirmed) is fixable by simply *adding one*. The range is a **cost** (324 paths, 98.5% foreign), not an impossibility — **and the design migrates `add-git-diff-wrap-toggle` at 83% foreign.** The line between *"migrate at 83%"* and *"impossible at 98.5%"* is **arbitrary and unstated.** | **PREMISE FIXED; DECISION ESCALATED (Q3).** D7 rewritten: the unsatisfiability claim is retracted with the measurement that kills it, and the decision is **withdrawn from the model**. Tasks 4.1–4.3 are marked **⛔ BLOCKED ON Q3** with the three branches spelled out. **I did not choose** — this is a scope/policy call about another change's obligations. |
+| **R4-4** | **C** | **medium** | **The proposal's evidence is ANACHRONISTIC — and it refutes the brief's C4 in *both* directions.** The *"the gate is inert / doesn't work when used"* severity rested on *"both open changes are in scope and carry zero attestation tasks."* But **both predate the obligation**: `add-cross-model-design-review` archived **2026-07-12**; `add-ci-pipeline` proposed **2026-06-30** (12 days before), `add-git-diff-wrap-toggle` **2026-07-11** (1 day before). Neither could emit a task for a rule that did not exist — they evidence a **retroactively-applied rule**, not a broken loop. And the **only** post-gate change (`brief-cross-review-pass-b`) **did** carry the task, with `config.yaml` at 0 hits. **C then refuted its own counter-evidence too:** that data point is *also* confounded (a gate-saturated session; git cannot distinguish loop-emitted from hand-added). **Net: no clean evidence in either direction, n=1 either way.** | **FIXED — severity claim narrowed, not defended.** The *"inert / doesn't work when used"* framing is **withdrawn as unsupported**. The Why section now states the honest record (with the date table) and re-grounds the change on a **structural** argument that needs no empirical claim: the obligation lives only in prose, and `/opsx:propose` reads `config.yaml`, not `AGENTS.md` — the repo's own **G13**, already settled by measurement elsewhere. Prose is a fragile carrier; `rules.tasks` is the surface the loop **provably** reads. *(This is a model **refuting the brief that briefed it** — exactly what an additive brief is supposed to permit.)* |
+| **R4-5** | **B ∩ C** | **high** | **D5's "over-emission costs one strikeable task" is FALSE — there is no strike, and D4's own BLOCKER closes the hatch.** (1) **No striking procedure exists anywhere** — every hit for *strike/remove/delete the task* across AGENTS.md, both established specs, and this change is **the assertion itself**: no actor, no authority, no form. The model may not **tick** the task; nothing sanctions it **deleting** the task either, and no rule distinguishes *"strike an over-emitted task"* from *"delete an inconvenient gate task"* — the very act the gate exists to prevent. (2) **The BLOCKER re-raises it:** under the latch (R4-2), an open change reads `exit 10`; D4 then **mandates a BLOCKER** if the tail lacks the task — so striking it **immediately produces a BLOCKER**. **The two halves of the change are in tension: emission is justified as cheap *because reversible*; enforcement makes it irreversible.** | **CLAIM RETRACTED; RESOLUTION ESCALATED.** D5 no longer claims cheapness-by-reversibility. It now claims only the **direction** (fail-closed errs toward an extra obligation, never a missed review) and states the tension plainly. The fix — define the strike as a first-class human-only act, or accept the task as effectively mandatory — is **escalated**, not chosen. *(Briefed as C5, so **not** flagged as independent consensus — though C's mechanism, the BLOCKER closing the hatch, went beyond the brief.)* |
+| **R4-6** | **A** | **REVIEW** | **⚠️ The cardinality BLOCKER would FALSE-POSITIVE on this very change.** D6 mandates a BLOCKER on a **duplicated** gate task. But this change's own `tasks.md` carries **three** lines with HUMAN-ONLY / model-MUST-STOP wording: **1.1** (the task that *authors* the emission rule), **4.1/4.2** (the task that *migrates* the gate task into another change's tail), and **6.2** (the one real gate task). A naive grep-based cardinality check reports a **duplicate on the change that introduces the check** — failing 6.1's own self-review with a self-inflicted false red. **The design never says how the check distinguishes *the task* from a line *describing* it.** | **FIXED.** Both the `coherence-review` spec delta and task 2.1 now state the rule: cardinality counts **gate *tasks*, not gate *mentions*** — a line that **describes, specifies, or migrates** a gate task is not counted — and where the two cannot be told apart the check reports a **REVIEW naming the ambiguity**, never a false-duplicate BLOCKER. A **new scenario** covers it. |
+| **R4-7** | **A** | **REVIEW** | **Task 2.4 — the arm the change itself calls "the single most important" — has NO natural specimen left on disk.** It requires *"a committed-but-unimplemented change with no gate task"* to yield a REVIEW. But **all three** open changes now read `exit 10` (the latch), **including `add-git-diff-wrap-toggle`** (0/20 tasks, own paths 100% allowlisted). So testing this arm against any real change would **silently exercise the exit-10 arm instead** and report a **false pass** — the precise failure mode the task exists to prevent. | **FIXED.** Task 2.4 now states the specimen problem explicitly and requires a **synthesized scratch change on a clean range** (proposed at HEAD so its range holds only its own allowlisted artifacts), with the classifier confirmed at `exit 0` **before** asserting the REVIEW. |
+| **R4-8** | **B ∩ C** | **medium** | **Alarm fatigue is wider than D7 models — and the "Enforcement" layer is not executable.** Because the latch is structural (R4-2), the BLOCKER will be **red by default on nearly every open change**, not just `add-ci-pipeline`. Compounding it: **nothing executable consumes a critic BLOCKER** — no script refuses, no gate fires. Per the repo's own **G-GATE-1** (*"fail-closed is an instruction-following convention, not an enforced property"*), this change upgrades the check from **REVIEW-prose to BLOCKER-prose**. Both are instruction-following. So the design's Goals bullet — *"a missing … gate task is **mechanically blocking**"* — **overclaims**: it is mechanically **detected**, not mechanically **blocking**. And a check that is red by default spends the only currency it has: **the reader's attention.** | **FIXED (honesty) + ESCALATED (substance).** The Goals bullet now says **detected, not enforced**, and cites G-GATE-1 explicitly. Whether an arm this coarse should carry BLOCKER force **at all** is now **open question Q2** — with the concrete alternative named (narrow `cross-review-scope.sh` to the change's own paths **first**, which is already routed to the base-resolution change and would dissolve most of this). **Not chosen by the model.** |
+| **R4-9** | **A ∩ C** | **medium** | **The ledger header — the human's audit surface for the 6.2 attestation — was materially FALSE.** It recorded *"Scope: **`exit 0` — OUT of scope** … the human launched the review anyway, **overriding the classifier**"* and a 6/12-file range. Live: **`exit 10` — IN scope, 21 files**. A human attesting today would read a header that understates the reviewed surface by 15 files and tells them the **opposite** of the classifier's actual verdict. | **FIXED.** Header rebuilt from disk: live base/HEAD, the **21-path verbatim file list** split **own (7) vs foreign (14)** with the two exit-10 drivers starred, the brief reproduced in full, and the retired `exit 0` framing named as retired. *(Both passes flagged it **outside the brief** — genuine consensus.)* |
+| **R4-10** | **A** | **REVIEW** | **HEAD-dependent counts: three different values for one quantity, all stale.** `add-ci-pipeline`'s digest range appears as *"~315"* (proposal), *"~316"* (R4), *"~317"* (D7/task 4.2). Disk today: **324** (319 foreign = 98.5%). `add-git-diff-wrap-toggle`: *"~33"* → disk **42**. All hedged `~` and labeled HEAD-dependent per round 2's G10 fix, so **informational** — but they should at least agree with each other. **This is G10 recurring a third time**, which is itself R4's point: HEAD-dependent numbers self-invalidate. | **FIXED.** All counts re-derived from disk and unified (**324 / 319 / 98.5%**; **42 / 35 / 83%**), presented in R3 as a **table** so they cannot drift apart independently again. |
+| **R4-11** | **C** | low | **The spec delta drops the recorded *reason* there is no auto-firing marker** (*"…the point-of-tick grammar can express only delegate-to-subagent or run-inline, and a paid review that must not fire on task-arrival is neither"*). The prohibition survives; the **rationale** does not. In a repo that runs an explicit *"Learned refutations — do not re-propose"* discipline, deleting the reason from the durable artifact while keeping only the rule is **exactly how a settled refutation gets re-proposed later**. | **ACCEPTED AS-IS — dismissal recorded.** This is F8's intended mechanism-neutrality trim (AGENTS.md: requirements state the *what*; the *why* lives in `design.md`), and the reason **is** durably recorded — in **design D2** and in AGENTS.md's refutation list, both of which survive archive. Restoring it to the SHALL block would re-import the rationale-bloat F8 removed. **A real trade-off, noted not hidden**; if the refutation is ever re-proposed, this dismissal is where to look. |
+| **R4-12** | **C** | low | **Task 6.3's *"no self-validation hazard"* reads as a blanket clearance and is not one.** True for the two gate **scripts** (this change touches neither — verified). But the change **authors the v5 critic**, which *is* the enforcement layer it introduces, and task 6.1 then runs that v5 critic **on this change**. AGENTS.md's reviewed-base rule is scoped to the two scripts, so the critic falls **outside** it. | **FIXED.** Task 6.3's parenthetical narrowed: the clearance covers the two scripts only; the v5 self-review is bounded by 6.1's validity precondition — **which is exactly why that precondition had to become attributive** (R4-1) rather than the dead classifier proxy. Bounded, not fatal (a critic BLOCKER is advisory), but no longer overstated. |
+
+### Confirmed clean by round 4 (fact-checked against disk — no finding)
+
+**Spec-delta integrity (the highest-stakes check, and it passed in all three passes independently):**
+the `cross-model-review` MODIFIED block pastes the **entire current post-`c47a5c1` established
+requirement** — all 4 paragraphs and all 7 scenarios preserved (6 verbatim + 1 deliberately
+**corrected**, `change` → **range**, because it was false as written), plus 3 new. `coherence-review`:
+entire block, 6 scenarios retained + the old gate scenario deliberately replaced by 3 arm-specific
+ones + 1 new. **No silent truncation. No collision** with `brief-cross-review-pass-b`'s newly-added
+*"Soundness passes are briefed"* requirement (it **ADDED** a separate requirement and did not touch
+the one this change modifies — so the paste is against current text). `openspec validate --strict` ⇒
+**valid**; 10/10 four-hash scenarios in each delta, **0** three-hash, **0** five-hash.
+
+**Pass-4 code-accuracy — every other design claim verified TRUE on disk:** `config.yaml` has exactly
+**4** `rules.tasks` entries and **0** cross-review/attestation hits ✓ · critic **L42** = *"heuristic →
+REVIEW … never a BLOCKER"* and **L80** = *"REVIEW findings never block"* ✓ (line numbers exact) ·
+`cross-review-scope.sh:54` = `git diff --name-only "$B"..HEAD` ✓ · both scripts refuse a dirty tree /
+`range-omission` ✓ · digest excludes the ledger + attestation line and normalizes checkbox state ✓ ·
+`add-ci-pipeline` has **no** `⟶ xtty-openspec-critic` task ✓ (D7's anchor claim — the *one* part of D7
+that held) · `add-git-diff-wrap-toggle` carries **3 of 4** applicable markers and **zero** attestation
+tasks ✓ · proposal↔specs contract holds **both** directions ✓ · delegation markers + change tail
+well-formed ✓ · no `verification-harness` delta correctly justified ✓ · AGENTS.md open-changes row
+`1/20` == disk ✓ · established-specs list (23) == `ls openspec/specs/` ✓.
+
+**Inherited disk-drift (NOT introduced by this change, reported for the human):** `AGENTS.md:201` says
+*"25 of the **52** archived changes carried a harness delta"* — disk: **53** archived (the denominator
+went stale at `c47a5c1`, the `brief-cross-review-pass-b` archive). Numerator (25) is correct.
+
+---
+
 ## ⚠️ ESCALATED TO THE HUMAN — the sequencing decision (F6 / G11) — **TWO-MODEL CONSENSUS**
 
 **This is the most consequential open question, and the model is not the right party to settle it.**
@@ -122,6 +197,81 @@ Range extended to `dca6b11` (12 paths), adding the research capture. Passes A �
 **⚠️ RETRACTED — what round 3 says about whichever check-(4) change lands.** An earlier version of this ledger instructed the next change to *"target the counter and **preserve the separable confinement clause**"*. **That instruction is withdrawn — it was wrong and actively harmful** (H1/H3/H4): the confinement clause is **adversarially null too**, is **not separable** (its anchor depends on the counter), and **deleting the counter deletes the gate's principal *accident* tripwire** (silent re-attestation — measured). **The check-(4) fix is UNSETTLED.** This ledger — and the research capture — now impose **no constraint** on it beyond the measured facts. Design it in an `/opsx:explore` against **both horns** of the tension; do not inherit a prescription from any model-authored artifact here.
 
 **Both positions are coherent. The human decides the order — and the model has not decided it.**
+
+### ⚠️ Round-4 update to the sequencing escalation — it is no longer hypothetical
+
+Codex has now returned a **fourth consecutive no-ship**. But the material change in round 4 is not
+the vote count — **it is that the pollution hazard the sequencing argument is *about* has now
+actually bitten this very change.** Rounds 1–3 argued the risk in the abstract, on a clean range.
+Round 4 measured it: this change reads **`exit 10`, driven 100% by foreign paths, with zero
+implementation landed**, and the mechanism is **structural** (`openspec archive` always writes the
+non-allowlisted `openspec/specs/**`, so *any* change open across *any* archive latches in-scope
+permanently and can never return).
+
+That does not settle the order — the counter-argument still stands (the deadlock is only *reachable*
+once a change acquires an attestation, and today nothing prompts one). But the human should weigh it
+knowing that **the range-narrowing fix routed to the base-resolution change would dissolve Q2, most
+of Q3, and much of R4/R5 at once** — which is precisely what "land that first" would buy.
+
+---
+
+## ⚠️ THE THREE DECISIONS ROUND 4 PUTS TO THE HUMAN — **the model chose none of them**
+
+| | Question | Why it is not the model's call |
+| --- | --- | --- |
+| **Q1** | **Sequencing** — land this change now, or after the range-pollution + check-(4) fixes? | Standing escalation, now 4 consecutive Codex no-ships, **and now empirically demonstrated** (above). A scope/order call with real cost either way. |
+| **Q2** | **Should the `exit 10` arm carry BLOCKER force at all?** *(new)* | The verdict is **non-attributive** and **latches**: for 2 of 3 open changes it is driven **entirely by foreign paths**. The BLOCKER stays **safe in direction** (it can never open a bypass) but will be **red by default on nearly every change** — and since nothing executable consumes it (**G-GATE-1**), its whole force *is* the reader's attention. Alternative: **narrow the classifier first** (a `cross-review-scope.sh` edit, already routed to the base-resolution change). |
+| **Q3** | **Migrate, grandfather, or exclude?** *(new)* | D7's *"unsatisfiable"* premise is **refuted**, and **both** open changes **predate the obligation** (by 12 days / 1 day) — this is a **retroactively-applied rule**. Options: **(a)** migrate both; **(b)** **grandfather** pre-gate changes (a mechanical, dateable rule vs the gate's ship commit `8950884`) and migrate neither; **(c)** keep the split + accept a standing unclearable BLOCKER. Tasks 4.1–4.3 are **⛔ blocked** pending this. |
+
+## Why this run STOPS here instead of running a round 5
+
+The protocol permits a bounded **N = 2** fix→re-review loop. **I am deliberately stopping after one
+round of fixes, and not re-reviewing.** The residual is **not a review-convergence problem** — it is
+**three design-shape decisions that belong to the human** (Q1–Q3). Re-running the passes on patched
+prose would predictably return a **fifth** Codex no-ship on Q1 and re-litigate Q2/Q3 without new
+information: that is the tar pit's **non-termination signature** (**G-TARPIT-3**), and the repo's own
+rule is *operationalize convergence as "no open actionable beyond documented-accepted residuals"* —
+which is exactly where this now sits. Every finding is either **fixed** or **escalated with its
+measurement attached**. **G-TARPIT-4** applies too: what this change needs next is not another
+spec-review round but a **human decision**, and then **building and using it**.
+
+---
+
+## Appendix — the brief given to both soundness passes (for auditing shared framing)
+
+Reproduced so the human can judge which agreements are **independent** and which merely reflect the
+brief. **Findings arising OUTSIDE this brief — and therefore genuinely independent — are R4-2 (A ∩ C),
+R4-3 (B), R4-4 (C, which *refuted* the brief), R4-6 (A), R4-7 (A), R4-9 (A ∩ C), R4-10 (A), R4-11 (C),
+R4-12 (C).** The brief's own claims (`C1`–`C8`, drills `D-1`–`D-4`) were **confirmed** by the passes,
+which is **not** independent corroboration and is **not** flagged as consensus anywhere above.
+
+<details>
+<summary>Full brief text (staged out-of-repo, delivered as a single positional)</summary>
+
+The brief carried, in order: **(1) a scope warning** — the diff is 67% foreign (7 own files vs 14 from
+the archived `brief-cross-review-pass-b`), review the foreign files only for cross-contamination;
+**(2) design intent** — the two-layer emission/enforcement fix and the measured defect it addresses;
+**(3) eight claims to soundness-check**, framed as *"challenge these; do not confirm them"* — `C1` D1's
+lifecycle table, `C2` task 6.1's validity precondition, `C3` what `exit 10` actually asserts under
+pollution, `C4` the *"gate is inert"* premise vs the `brief-cross-review-pass-b` natural experiment,
+`C5` whether over-emission is really cheap / who may strike the task, `C6` D7's exclusion and alarm
+fatigue, `C7` whether the two-layer split still earns its keep with D3 demoted, `C8` spec-delta
+truncation; **(4) a four-item digest of drills I had already run** (`D-1` the exit-10-from-foreign-paths
+measurement, `D-2` the pollution census, `D-3` the config/critic premise checks, `D-4` the truncation
+check), each explicitly framed as *"claims to challenge, not established fact"*; **(5) two do-not-reopen
+items** — `S1` the standing sequencing escalation, `S2` the check-(4) fix (formally UNSETTLED; the repo
+forbids re-litigating it in-model, and *"append-only attestation generations"* is already refuted);
+and **(6) the additive instruction**: *"Soundness-check the claims above **AND report any material
+finding outside this brief** … Do not agree with a claim merely because I asserted it; a model agreeing
+with the brief is not evidence for the brief."*
+
+**The additive instruction worked, and is worth recording as evidence for the A′ brief design:** the
+passes' **most valuable findings came from outside the brief** (R4-2's structural latch + false spec
+text; R4-3's refutation of D7's premise), and Pass C **used the licence to refute the brief itself**
+(R4-4 — it dismantled my `C4` framing in *both* directions rather than picking the side I leaned
+toward). A brief that had merely been *confirmed* would have been a warning sign, not a result.
+
+</details>
 
 ---
 

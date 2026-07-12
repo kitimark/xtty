@@ -6,7 +6,7 @@ The repository SHALL provide **version-controlled** Claude Code tooling that rev
 
 The single-change pass SHALL additionally include a **cross-review-gate-task check**, whose severity derives from the authority of the scope call available to it. The agent SHALL run the **committed mechanical scope classifier**, and:
 
-- when the classifier reports the change **in scope**, SHALL report a **BLOCKER** unless the `tasks.md` tail carries **exactly one** blocking human-attestation cross-review task, **positioned after the coherence-review task and before the archive task**, with its **human-only (model-must-stop)** wording — so an absent, **duplicated**, **misordered**, or mis-worded task blocks;
+- when the classifier reports the change **in scope**, SHALL report a **BLOCKER** unless the `tasks.md` tail carries **exactly one** blocking human-attestation cross-review task, **positioned after the coherence-review task and before the archive task**, with its **human-only (model-must-stop)** wording — so an absent, **duplicated**, **misordered**, or mis-worded task blocks. The cardinality judgment SHALL count only **actual task lines that are themselves the gate task**, and SHALL NOT count a line that merely **describes, migrates, or specifies** such a task (for example a task that authors the emission rule, or one that appends the gate task to *another* change's tail) — the check is semantic on this point, and when it cannot distinguish the two it SHALL report a **REVIEW** naming the ambiguity rather than a false duplicate BLOCKER;
 - when the classifier reports **not-in-scope**, or refuses because the change's `proposal.md` is **not yet committed**, SHALL treat that as **not yet knowable to be in scope** — never as *out of scope* — and so SHALL NOT suppress the check: it SHALL fall back to a **semantic** in-scope judgment, report at most a **REVIEW** (a semantic scope call cannot carry blocker force), and **state what the classifier returned**;
 - when the classifier **refuses on a change whose `proposal.md` is committed** (a malformed reviewed range, which the archive step will also refuse), SHALL report a **blocked-prerequisite** finding rather than a non-blocking REVIEW.
 
@@ -44,6 +44,11 @@ The single-change pass SHALL additionally include a **cross-review-gate-task che
 
 - **WHEN** the agent reviews a change the committed mechanical scope classifier reports **in scope**, and the change's `tasks.md` tail lacks the blocking human-attestation cross-review task, carries more than one of them, positions it outside the span after the coherence-review task and before the archive task, or omits its human-only wording
 - **THEN** the agent reports a **BLOCKER** naming the defect — so the change cannot receive a coherent verdict — while a change carrying exactly one correctly-positioned, correctly-worded task is not flagged
+
+#### Scenario: A task describing the gate task is not counted as a duplicate
+
+- **WHEN** the agent applies the cardinality check to a change whose `tasks.md` carries the gate task once, alongside other task lines that merely **describe or specify** it (a task authoring the emission rule, or a task appending the gate task to another change's tail)
+- **THEN** it counts **one** gate task and reports no duplicate — and where it cannot distinguish a real gate task from a line describing one, it reports a **REVIEW** naming the ambiguity rather than a false-duplicate BLOCKER
 
 #### Scenario: A not-yet-in-scope verdict degrades to a REVIEW, never a silent pass
 

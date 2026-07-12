@@ -2,7 +2,15 @@
 
 ### Requirement: Mechanically-scoped, human-attested, fail-closed archive gate
 
-The cross-model review's **applicability** SHALL be decided by a **mechanical classifier over the change's changed paths**, computed by committed deterministic tooling — **not a model judgment**: a change touching any path **outside a fixed allowlist of documentation and tracker surfaces** SHALL be **in scope**, and an **unrecognized or ambiguous path SHALL default to in scope (fail-closed)**, so an accidental out-of-scope slip is mechanically detectable and no ambiguity judgment remains a scoping surface. A change all of whose changed paths fall inside the allowlist (pure documentation, tracker reconciliation, a rename) SHALL remain eligible for the single-agent coherence review alone. The classifier scopes from **committed** paths, so a **not-in-scope** verdict on a change whose implementation has not yet landed means **not yet knowable to be in scope**, never *out of scope*, and SHALL NOT suppress a finding. The review runs at **pre-archive** (and MAY run post-propose), not per-edit.
+The cross-model review's **applicability** SHALL be decided by a **mechanical classifier over the change's reviewed range**, computed by committed deterministic tooling — **not a model judgment**: if **any path in that range** falls **outside a fixed allowlist of documentation and tracker surfaces** the change SHALL be **in scope**, and an **unrecognized or ambiguous path SHALL default to in scope (fail-closed)**, so an accidental out-of-scope slip is mechanically detectable and no ambiguity judgment remains a scoping surface. A range all of whose paths fall inside the allowlist SHALL leave the change eligible for the single-agent coherence review alone.
+
+The classifier's verdict SHALL be understood as a property of the **range**, not of the change, and it is **neither attributive nor stable**:
+
+- it is **non-attributive** — the range is `parent(<the change's proposal commit>)..HEAD`, which is **repo-wide**, so the classifier **cannot tell whether an out-of-allowlist path belongs to the change under review or to unrelated work**; an **in-scope** verdict asserts only that *some* path in the range is out-of-allowlist;
+- it is **retrospective** — it reads **committed** paths only, so a **not-in-scope** verdict on a change whose implementation has not yet landed means **not yet knowable to be in scope**, never *out of scope*, and SHALL NOT suppress a finding;
+- it is **monotone under intervening archives** — merging any change's spec deltas writes `openspec/specs/**`, which is **not** allowlisted, so **any change left open across any other change's archive becomes in-scope permanently**, regardless of its own content.
+
+Consequently an **in-scope** verdict SHALL NOT be read as evidence that the change's own implementation has landed, nor that the change's own paths are out-of-allowlist. The review runs at **pre-archive** (and MAY run post-propose), not per-edit.
 
 Because the worker carries no authority, archive eligibility SHALL rest entirely on an **explicit human attestation**, never on any artifact a model authored. An in-scope change's task tail SHALL keep the standard single-agent coherence-review delegation marker as its own task, and SHALL additionally carry **exactly one blocking human-attestation cross-review task**, placed after the coherence-review task and before the archive task. That task SHALL be **human-only**: the model SHALL NOT tick it, and SHALL NOT derive, compute, or fill in the attested value; reaching it never auto-fires the paid external reviewer, and there SHALL be **no auto-firing cross-model delegation marker**. The human deliberately runs the review, reads the complete ledger, runs the **committed deterministic reviewed-state digest tool** themselves, and ticks the task, **recording the reviewed-state digest on a delimited attestation line** — a stable marker precisely bounding the attested surface within the task file, so that surface is exactly identifiable for exclusion and integrity checks.
 
@@ -17,10 +25,15 @@ The canonical project guide SHALL document the **worker protocol** (the passes, 
 - **WHEN** the archive step evaluates a change whose changed paths include one outside the documentation/tracker allowlist (product code, a non-doc spec delta, or review/verification/CI tooling), or an unrecognized/ambiguous path
 - **THEN** the mechanical classifier deems it in scope — an ambiguous path defaulting to in scope — and the fail-closed human-attestation precondition applies, leaving no semantic scoping judgment by which an in-scope change could accidentally slip past the gate
 
-#### Scenario: A pure-documentation change needs only the single-agent review
+#### Scenario: A pure-documentation range needs only the single-agent review
 
-- **WHEN** every changed path of a change falls inside the documentation/tracker allowlist (docs, tracker reconciliation, a rename)
+- **WHEN** every path in a change's reviewed range falls inside the documentation/tracker allowlist (docs, tracker reconciliation, a rename)
 - **THEN** the mechanical classifier deems it out of scope for cross-model review and it is eligible for the single-agent coherence review alone
+
+#### Scenario: An in-scope verdict driven by foreign paths is not read as a claim about the change
+
+- **WHEN** the classifier reports a change in scope, but the out-of-allowlist paths in its reviewed range were all introduced by unrelated work (for example another change's archive writing `openspec/specs/**`, which is not allowlisted), while the change's own paths are entirely allowlisted
+- **THEN** the verdict still applies (fail-closed, over-inclusion is safe), but it is **not** treated as evidence that the change's own implementation has landed or that its own paths are out-of-allowlist — so no check may use an in-scope verdict as a proxy for either
 
 #### Scenario: The gate task is emitted when the change's tasks are authored
 
