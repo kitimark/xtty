@@ -119,7 +119,7 @@ Range extended to `dca6b11` (12 paths), adding the research capture. Passes A �
 
 **A fact that constrains both readings:** the archive gate **already** applies to both open changes (`exit 10`) **with or without this change**. So this change does **not create** the exposure — it makes it **routine**.
 
-**A constraint on whichever check-(4) change lands (G4):** it must target the `adds==1 && dels==0` counter and **preserve the separable confinement clause** — that clause is the only guard against an `--amend`-bundled attestation carrying unreviewed task text.
+**⚠️ RETRACTED — what round 3 says about whichever check-(4) change lands.** An earlier version of this ledger instructed the next change to *"target the counter and **preserve the separable confinement clause**"*. **That instruction is withdrawn — it was wrong and actively harmful** (H1/H3/H4): the confinement clause is **adversarially null too**, is **not separable** (its anchor depends on the counter), and **deleting the counter deletes the gate's principal *accident* tripwire** (silent re-attestation — measured). **The check-(4) fix is UNSETTLED.** This ledger — and the research capture — now impose **no constraint** on it beyond the measured facts. Design it in an `/opsx:explore` against **both horns** of the tension; do not inherit a prescription from any model-authored artifact here.
 
 **Both positions are coherent. The human decides the order — and the model has not decided it.**
 
