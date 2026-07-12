@@ -10,15 +10,15 @@
 
 | Field | Value |
 | --- | --- |
-| **Reviewed range** | base `B = 895088430b9b` (parent of `3815113`, the `proposal.md`-introducing commit) .. HEAD `3815113` — **6 files** |
+| **Reviewed range** | base `B = 895088430b9b` (parent of `3815113`) .. HEAD — **rounds 1–2: `3815113`, 6 files; round 3 (a new human-launched run): `dca6b11`, 12 files** (the range now includes the research capture, AGENTS.md, HISTORY.md, and the tar-pit addendum) |
 | **Base rule** | positional: parent of the commit that added `proposal.md`. No ownership metadata. |
 | **Scope (mechanical)** | **`exit 0` — OUT of scope.** The classifier reports docs/tracker-only, because only the change's own artifacts have landed. **The human launched the review anyway, overriding the classifier.** *This is not a footnote — it is the change's central finding, reproduced on itself (see F1).* |
-| **Passes run** | **All three.** None skipped. |
+| **Passes run** | **All three, all three rounds.** None skipped. Round 3's Pass C had to be nudged twice to emit (it stopped without reporting) — recovered, not lost. |
 | **Pass A** | Opus — `xtty-openspec-critic`, stamp **`Definition: v4 (2026-07-12)`**; delivery check **served == committed** ⇒ valid, not stale. |
 | **Pass B** | **`gpt-5.6-sol`** (GPT family), model pinned at invocation. Effort **`xhigh`**, config-governed and readable (`~/.codex/config.toml`: `model_reasoning_effort = "xhigh"`) — `adversarial-review` exposes no per-call effort flag. Companion `codex/1.0.6`; `codex.available` + `auth.loggedIn` both true. |
 | **Pass C** | Opus — inline agent (anti-roster: not a standing agent), effort invocation-controlled. |
 | **Cross-family?** | **Yes** — genuinely two-family soundness (B = GPT, C = Opus). Not single-model. |
-| **Two-model consensus (B∩C)** | **YES — on the central defect.** Both soundness passes independently landed on the exit-arm model being wrong, and Pass A independently reached it as a **BLOCKER**. A **three-pass** convergence; the highest-confidence finding of the run. |
+| **Two-model consensus (B∩C)** | **Rounds 1–2: YES** — both soundness passes independently landed on the exit-arm model being wrong (Pass A reached it as a BLOCKER too — a **three-pass** convergence). **Round 3: YES again, on a bigger one** — A and C **independently** refuted the research capture's own operative prescription (H1). ⚠️ **But note the near-miss:** Pass B, in round 3, *endorsed* the very claim A and C then refuted (it recommended *"preserving the confinement clause"*). **A model agreeing with you is not evidence.** |
 
 ### Reviewed file list (verbatim, `git diff --name-only B..HEAD`)
 
@@ -31,9 +31,13 @@ openspec/changes/fix-cross-review-gate-task-emission/specs/cross-model-review/sp
 openspec/changes/fix-cross-review-gate-task-emission/tasks.md
 ```
 
+*(Round-1 list. Round 3's range adds `AGENTS.md`, `HISTORY.md`, `cross-review-ledger.md`,
+`research/README.md`, `research/03-analysis/cross-review-gate-defect-forensics.md`, and
+`research/03-analysis/cross-model-review-tar-pit-forensics.md` — 12 paths, still all allowlisted, still `exit 0`.)*
+
 *Honest limitation: work committed **before** `proposal.md` outside the change dir is invisible to
-`B..HEAD`. Here the range is clean — 6 own files, 0 foreign — because the change was proposed on a
-fresh HEAD. (Contrast `add-git-diff-wrap-toggle`: 33 files, 26 foreign.)*
+`B..HEAD`. Here the range is clean — 0 foreign — because the change was proposed on a fresh HEAD.
+(Contrast `add-git-diff-wrap-toggle`: 35 files, 28 foreign.)*
 
 ---
 
@@ -69,7 +73,7 @@ Re-ran all three passes against `eadd8d0`. **The round-1 BLOCKER is confirmed ge
 | **G1** | A | **BLOCKER** | **The last surviving trace of the fail-open model.** `proposal.md`'s *Modified Capabilities → `coherence-review`* bullet still summarized the model in **two** states (exit 10, exit-2-uncommitted) and **omitted the exit-0 arm entirely** — the very arm the round-1 BLOCKER was about. Reads as a fall-through. | **FIXED.** The bullet now states all four arms, naming `exit 0` as *not yet knowable to be in scope* with a **REVIEW that is never suppressed**. |
 | **G2** | **self (adjudicator)** | high | **F12 above** — I over-promoted D3 in round 1; my own probe refuted it. | **FIXED** (see F12). |
 | **G3** | C | medium | **Surviving pre-D7 trace:** `proposal.md`'s **Impact** list still said `add-ci-pipeline/tasks.md` gets the task appended — contradicting D7 and task 4.2 in the artifact that states the change's file-level contract. | **FIXED.** Impact now names only `add-git-diff-wrap-toggle`, with the D7 exclusion stated. |
-| **G4** | C | medium | **Confinement is load-bearing, and the sequenced check-(4) change could destroy it.** A *sophisticated* bundle — commit task text → compute digest → `git commit --amend` the attestation into that commit — passes checks (1)(2)(3) **and** check (4)'s `adds==1 && dels==0` counter. **Only the confinement clause catches it.** | **FIXED — and it constrains the next change.** D3 now records this, plus an explicit constraint: **any fix to the re-attestation deadlock targets the `adds==1 && dels==0` counter and MUST preserve the *separable* confinement clause.** |
+| **G4** | C | medium | **Confinement is load-bearing and the sequenced check-(4) change could destroy it.** An `--amend` bundle passes checks (1)(2)(3) **and** the counter; only confinement catches it. | ⚠️ **RETRACTED IN ROUND 3 — this was WRONG, and the constraint it imposed on the next change was actively harmful.** Passes A **and** C, independently, refuted it: **two plain forward commits defeat confinement exactly as they defeat the counter**, so it is *not* a guard. It is also **not separable** (its "introducing commit" anchor is well-defined only while the counter holds). And deleting the counter **deletes the gate's principal *accident* tripwire** (silent re-attestation). **The check-(4) fix is UNSETTLED**; the constraint is removed from design D3 and from the research doc, which now prescribes no fix. See round 3 below. |
 | **G5** | C | medium | **D7's "excluding it strands nothing" is overstated.** The exclusion creates (a) a **standing, unclearable critic BLOCKER** on `add-ci-pipeline` — it is `exit 10` and will permanently lack the task, so every review emits a BLOCKER no D7-permitted action can clear; and (b) archive stays reachable for it **only** because step-0 check (1) greps the attestation **line**, not the gate **task**. | **FIXED.** Both recorded in D7 as **accepted residuals**, not glossed. The standing BLOCKER is accepted deliberately: a loud honest flag beats an unsatisfiable obligation. |
 | **G6** | C | low | **The exit-2-committed arm asserted more than the rules deliver.** *Measured:* on a committed malformed range **both** tools refuse, so check (2) cannot be satisfied. **But** no committed rule *requires* step-0 to run on a refusal (its SHALL is conditioned on *"in scope"*; a refusal is neither in nor out). | **FIXED by softening.** The design now states the measurement **and** the honest limit — it no longer claims archive is *mechanically forced* to refuse. Same shape as R5; reduces to the accepted residual. |
 | **G7** | **A ∩ C** | low/REVIEW | **D4's heading was stale fail-open vocabulary** — *"Three arms, and only `exit 10` may suppress or block"* over a four-row table, when **no arm suppresses** under the corrected model. | **FIXED** → *"Four arms; only `exit 10` carries blocker force, and no arm suppresses the check."* |
@@ -79,6 +83,25 @@ Re-ran all three passes against `eadd8d0`. **The round-1 BLOCKER is confirmed ge
 | **G11** | **B** | **high ×2** | **Explicit "no-ship":** *"leaves a verified archive bypass and makes an unrecoverable attestation deadlock routine."* Both are R5 and R4 — already documented residuals. Codex demands the dirty-tree scope fix and the re-attestation fix **land first**. | **NOT a new finding — it is the SEQUENCING argument, and it now carries a TWO-MODEL consensus** (C in round 1, B in round 2). **Escalated below.** *Codex's proposed remedy — "append-only, superseding attestation generations" — is **DISMISSED**: it is the **refuted "recoverable attestation epoch"** (G-TARPIT-1/2). Its **sequencing** argument stands; its **remedy** does not.* |
 
 **Pass C's convergence call (G-TARPIT-3):** *"converged modulo bounded edits; no open actionable beyond documented-accepted residuals once they land. NO round 3 is warranted — do not iterate to agreement."* Those edits have landed. **Bound reached; the loop stops here.**
+
+---
+
+## Round 3 (a NEW human-launched run — the capture is now in the reviewed range)
+
+Range extended to `dca6b11` (12 paths), adding the research capture. Passes A ‖ B ‖ C re-run.
+
+| # | Src | Sev | Finding | Resolution |
+| --- | --- | --- | --- | --- |
+| **H1** | **A ∩ C** | **critical** | **The research doc's operative prescription was WRONG, and my round-1 "correction" (G4) was the error.** I claimed the confinement clause is *"the sole adversarial guard"* — in explicit contrast to the counter's *"adversarially null"*. **Both passes independently refuted it:** apply the doc's *own* one-step generalization (the split-commit forge) and **confinement collapses identically** — commit A carries the content, commit B carries attestation + ticks (confined *by construction*) ⇒ **all four checks pass on unreviewed content**. Measured. My asymmetric standard (adversarial for one clause, bundle-only for the other) manufactured a guard that does not exist. | **FIXED — prescription RETRACTED.** |
+| **H2** | **A ∩ C** | **high** | **Check (4) has THREE clauses, not two.** The shipped spec adds *"every later commit touches only the remaining bookkeeping surfaces"*. My 4a/4b decomposition **omitted it** — in the section the capture-depth bar most demands be right (*settle the mechanism*). | **FIXED** — §1 now enumerates all three, with the decisive provenance: **`3319785` added only the counter; the other two pre-existed it.** |
+| **H3** | C | **high** | **The confinement clause is NOT separable from the counter.** Its subject is *"the attestation-**introducing** commit"* — uniquely defined **only because** the counter guarantees `adds==1`. Delete the counter (which legalises a second add — the entire point) and the anchor is **ambiguous**: anchored to the *first* add, an actor re-attests later and confinement passes against the *original* clean commit. **So "delete 4a, MUST NOT touch 4b" is not implementable** — any deletion **must re-anchor** it. | **FIXED** — the instruction is retracted as *actively harmful*; recorded as a fact the fix must handle. |
+| **H4** | C | **high** | **⚠️ Deleting the counter deletes the gate's PRINCIPAL ACCIDENT TRIPWIRE.** Check (2)'s teeth come **entirely** from the attested value being frozen by `dels==0`. Delete it and check (2) degrades to *"the value equals itself"*: **measured** — after drift, a model refreshes the digest in **one plain forward commit** and check (2) goes **green on content the human never re-read**; **only the counter catches it**. This is not adversarial — it is *the most plausible accident in this repo* (an over-helpful model "repairing" a stale attestation). **I condemned the counter on adversarial grounds — the exact error my own G-GATE-2 forbids.** | **FIXED — and it is the reason the prescription is retracted.** ❗ **The counter's value and its liveness cost are THE SAME PROPERTY**: a silent re-attestation and an honest one are *mechanically identical acts*. You cannot delete the cost without deleting the value. |
+| **H5** | C | medium | **F6 over-claimed "no metadata-free fix".** Two of its four consequences *do* have clean metadata-free fixes: the archived-ledger **glob** (a one-line fix the doc names and then files under "no fix"), and **head-pinning** — `base=`/`head=` are recorded on the attestation line but the digest **reads neither** (0 references; it re-derives `B` positionally and hashes at live HEAD), so they are **decorative**. | **FIXED** — claim narrowed to *"no metadata-free narrowing of the reviewed **file set**"*; head-pinning recorded as an **unevaluated candidate**, explicitly **not endorsed** (it does not resolve H4's tension). |
+| **H6** | C | medium | **G-GATE-5 was distilled from my mistake** and would be cited to block the correct fix. | **FIXED** — rewritten on C's **symmetric-standard** lesson: *test every clause against the same adversary/accident model; an asymmetric standard makes a null clause look load-bearing*; plus *when your prescription flips every round, **stop prescribing***. |
+| **H7** | **B** | medium | **The "strands nothing" claim survived in `proposal.md` + `tasks.md`** after design D7 had already recorded the standing unclearable BLOCKER as an accepted residual. | **FIXED** — all three artifacts now agree. |
+| **H8** | **B** | high ×2 | Sequencing (**third** consecutive Codex "no-ship"). Notably **B has now adopted the confinement refinement**, recommending *"…preserving the confinement clause"* — which **H1 then refuted.** A model endorsing a claim is not evidence for it. | **ESCALATED** (below), and B's endorsement is recorded as a **near-miss**: the tri-pass nearly ratified a false claim by agreement. |
+
+**The meta-finding — and it is the most valuable output of this run.** The check-(4) prescription **flipped on every round**: *keep it* → *delete it entirely* → *delete-the-counter-keep-confinement* → **all wrong**. That is the **tar pit's non-termination signature applied to *un*-hardening**, and the correct response is **G-TARPIT-3/4**: **stop prescribing.** The research doc now records the **measurements** (solid) and the **tension** (genuine, two-horned, unresolved), and explicitly **routes the fix design to an `/opsx:explore`**. *A forensics doc records what is; it must not pre-decide a fix that three review rounds could not settle.*
 
 ---
 

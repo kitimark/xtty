@@ -82,7 +82,7 @@ Archive check (4) requires the attestation-introducing commit's `tasks.md` hunk 
 
 What survives is a real **procedural constraint**, not a proof: the migration commit (4.1), and any hand-added gate task, MUST be a **separate commit** from any later attestation. The two-layer split stands on **D1** alone (propose-time scope is irreducibly semantic, and an obligation stated only in the guide demonstrably does not reach the propose loop — G13), not on check (4).
 
-**Why the confinement clause is nonetheless load-bearing (a review finding worth keeping).** A *sophisticated* bundle — commit the task text, compute the digest on that state, then `git commit --amend` the attestation line and ticks **into that same commit** — passes check (1), check (2), check (3), **and** check (4)'s `adds==1 && dels==0` counter. **Only the confinement clause catches it** (the hunk carries a new task *line*, not a checkbox-state *tick*). So confinement is the sole guard against an attestation that silently carries unreviewed task text. **Constraint on the sequenced check-(4) change:** any fix to the re-attestation deadlock targets the `adds==1 && dels==0` counter — it **MUST preserve the confinement clause**, which is a *separable* clause. The design does not otherwise depend on check (4), but this one clause it does.
+**⚠️ Constraint on the sequenced check-(4) change — and it is NOT what an earlier draft said.** An earlier draft of this design asserted the confinement clause must be *preserved untouched* as *"the sole adversarial guard"*. **That is retracted — it was false.** Measured (research doc F3): the confinement clause is **adversarially null too** (two plain forward commits defeat it), it is **not separable** from the counter (its *"introducing commit"* anchor is well-defined only while the counter holds), and **deleting the counter deletes the gate's principal *accident* tripwire** (silent re-attestation). **The check-(4) fix is therefore UNSETTLED.** This change must not encode a constraint on it: the only thing it may assume is that **some** attestation gate exists at archive. See `research/03-analysis/cross-review-gate-defect-forensics.md` F3 — which deliberately prescribes no fix and routes the design to an explore.
 
 ### D4 — Four arms; only `exit 10` carries blocker force, and **no arm suppresses the check**
 
@@ -111,7 +111,7 @@ The shipped spec requires **exactly one** attestation task, **placed after the c
 
 `add-ci-pipeline` is **excluded, as a recorded decision, not an oversight**:
 - it has **no** `⟶ xtty-openspec-critic` task, so *"place after the critic task"* has **no anchor**;
-- its digest range is **~315 files (98.4% foreign)** — and HEAD-dependent, so it grows with every commit — the human would be asked to attest a review of code they did not write;
+- its digest range is **~317 files (98.4% foreign)** — and HEAD-dependent, so it grows with every commit — the human would be asked to attest a review of code they did not write;
 - its remaining work is *owner steps* (repo public, pr-lint PR, branch protection); the pr-lint PR is **itself a commit**, which restages the HEAD-dependent digest — and check (4) forbids re-recording an attestation, so any attestation made before those commits is **unrecoverable**.
 
 Appending a blocking task whose only satisfying act is impossible is worse than not appending it. Its disposition belongs to the base-resolution change.

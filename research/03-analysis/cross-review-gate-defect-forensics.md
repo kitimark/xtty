@@ -2,7 +2,7 @@
 
 **Provenance:** 2026-07-12, produced by **using** the archive gate shipped one day earlier (`add-cross-model-design-review`, archived 2026-07-12) on the next real change — not by reviewing its spec. Every claim below was **measured by effect** against the **real committed scripts** (`scripts/cross-review-scope.sh`, `scripts/cross-review-digest.sh`) in **throwaway `mktemp -d` repos**; the live repository was never mutated. Time-sensitive: file counts are **HEAD-dependent by construction** (that is finding **F6**) and are stamped at `HEAD = f1f9edc`.
 
-**Headline:** *The gate's four checks contain **one clause that is adversarially null and liveness-fatal** (check (4)'s `adds==1 && dels==0` counter), **one clause that is genuinely load-bearing and separable** (check (4)'s confinement clause), a **classifier that answers a prospective question with a confident false negative**, and a **verified bypass**: with the implementation merely **uncommitted**, the classifier reads "out of scope" and the entire four-check precondition is **skipped**. The counter must be **deleted**; the confinement clause must be **preserved**. This is **G-TARPIT-4 in action** — none of it was visible from the spec; all of it appeared on first use.*
+**Headline:** *Four measured defects in the shipped gate — a **re-attestation deadlock**, a scope classifier that **answers a prospective question with a confident false negative**, a **verified bypass** (uncommitted implementation ⇒ the entire precondition is **skipped**), and **HEAD-dependent range pollution**. ⚠️ **This doc deliberately prescribes NO fix for check (4).** Its prescription flipped **three times** under review — the last flip proving that deleting the counter also deletes the gate's **principal accident tripwire** (silent re-attestation), and that the counter's value and its liveness cost are **the same property**. That oscillation is itself the finding (**G-TARPIT-1/3**). Take the measurements into an explore; do not propose a check-(4) change from this document. This is **G-TARPIT-4 in action** — none of it was visible from the spec; all of it appeared on first use.*
 
 **Companion docs.** [`cross-model-review-tar-pit-forensics.md`](cross-model-review-tar-pit-forensics.md) (why *hardening* this gate does not terminate — **G-TARPIT-1..5**) and [`cross-model-design-review-axes.md`](cross-model-design-review-axes.md) (why two model families are complementary). **This doc is the third:** what the shipped gate actually does when you run it. Note the direct line: **§11 of the tar-pit doc *added* check (4)'s strong form** (commit `3319785`, a two-model co-draft, net-neutral) to close the post-attestation-rewrite gap. **F2 below shows that hardening did not close it** — and it bricked the honest path. **§11's hardening was itself a tar-pit relapse.**
 
@@ -26,7 +26,10 @@ Archiving an **in-scope** change is refused unless four checks hold. Their **onl
 | 2 | reviewed-state digest **recomputes** and string-equals the attested value | `scripts/cross-review-digest.sh <change>` |
 | 3 | tree/index clean | the digest tool's own refusal |
 | 4a | **counter:** line added exactly once, never deleted/modified | `now==1 && adds==1 && dels==0` over `git log -p -- tasks.md` |
-| 4b | **confinement:** the attestation-introducing commit's `tasks.md` hunk is confined to the attestation line + checkbox **ticks** | **prose only — no executable** |
+| 4b | **confinement:** the attestation-**introducing** commit's `tasks.md` hunk is confined to the attestation line + checkbox **ticks** | **prose only — no executable** |
+| 4c | **later-commits:** every commit *after* the attestation touches only bookkeeping surfaces — **no reviewed artifact, no gate implementation** | **prose only — no executable**; largely **redundant with check (2)** |
+
+⚠️ **Check (4) has THREE clauses as specified, not two.** An earlier draft of this doc decomposed it as 4a/4b and **omitted 4c** — corrected here. Any surgical edit to check (4) must say what happens to **all three**. Note the provenance, which is decisive for the fix: **commit `3319785` (tar-pit §11) added *only* 4a.** 4b and 4c **pre-existed** it. So *"delete 4a, keep 4b/4c"* is exactly *"revert what §11 added; keep what was already there."*
 
 The digest hashes **HEAD content of every path in `git diff --name-only B..HEAD`** (B = parent of the `proposal.md`-introducing commit), *excluding* the advisory ledger and, inside `tasks.md`, the attestation line + checkbox **state** (so a tick does not move the digest, but task **text** does).
 
@@ -69,17 +72,52 @@ So check (4a) catches only the **naive in-place rewrite** — a variant no actor
 
 **Precision that matters** ❗ An honest recovery and the attack do **not** produce "the same git state" — they differ (`adds=2/dels=1` vs `adds=1/dels=0`). The correct claim is that they are **mechanically indistinguishable *to the gate***: git can record *what changed*, never *whether a human read it*. That distinction is **unsolvable by design** — attempting to mechanize it is the refuted tar pit.
 
-### F3 — …but check (4**b**), the confinement clause, **is** load-bearing, and it is **separable** ✅ ⚠️
+### F3 — ⚠️ **The fix is NOT settled. This doc deliberately prescribes NONE.** ✅ (the tension is the finding)
 
-**This narrows the co-research's conclusion, and it is the single most important correction in this doc.**
+**Read this before acting on anything above.** Earlier drafts of this section prescribed a fix. **The prescription flipped three times under review**, and the third flip found an unpriced cost in the second. That oscillation *is* the finding — it is the tar pit recurring (**G-TARPIT-1/3**), and the honest response is to **record the measurements and stop prescribing.**
 
-The co-research (3 bounded rounds, converged) concluded: ***"delete check (4) entirely — the gate becomes three checks."*** The subsequent cross-review of `fix-cross-review-gate-task-emission` refuted that (finding **G4**, verified by effect):
+| round | prescription | killed by |
+| --- | --- | --- |
+| adversarial verification fan-out | *"keep check (4) — the friction is the feature"* | co-research: it is adversarially null **and** liveness-fatal |
+| co-research (3 rounds, **converged**) | *"delete check (4) entirely"* | cross-review: it has **three** clauses, and the decomposition was wrong |
+| cross-review round 1 (**my** correction) | *"delete 4a, **keep 4b** — the sole adversarial guard"* | **Passes A + C, independently**: 4b is defeated by two plain forward commits, exactly like 4a. My "sole guard" claim was **false** |
+| cross-review round 2 (Pass C) | *"…and deleting 4a is not free either"* | **measured** — see the tension below |
 
-> A **sophisticated bundle** — commit the gate-task **text** → compute the digest on that state → `git commit --amend` the attestation line + ticks **into that same commit** — passes check (1), check (2), check (3), **and check (4a)'s counter**. **Only the confinement clause catches it**, because the hunk carries a new task **line**, not a checkbox-state **tick**.
+#### The genuine, unresolved tension (measured, both horns)
 
-**Operative conclusion:** **delete check (4a)'s `adds==1 && dels==0` counter; PRESERVE check (4b)'s confinement clause.** They are separable clauses of the same numbered check. Any future re-attestation fix targets **4a** and **MUST NOT** touch **4b**.
+**Horn 1 — 4a is the gate's PRINCIPAL accident tripwire.** Delete it and a model can **silently re-attest** in one plain forward commit. Measured:
 
-**Probe subtlety — this is why it was easy to miss** ❗ Testing confinement requires **normalizing checkbox state before diffing**. A *tick* (`[ ]`→`[x]`) and a *new task line* are both `+`/`-` checkbox lines in a raw hunk. My first probe filtered *all* checkbox lines and therefore reported a **false negative** — it could not tell them apart. The correct probe compares the **set of task texts** with the box normalized:
+```
+human attests → reviewed file drifts → model re-runs the digest tool and refreshes the attested value
+check(2) PASS  ← green again, on content the human NEVER re-read
+check(4a) adds=2 dels=1 FAIL   ← the ONLY check that catches it
+HEAD content: "DRIFTED content the human never re-read"
+```
+
+Without `dels==0`, **check (2) degrades to "the value equals itself."** And this is not an exotic adversary — it is the **most plausible accident in this repo: a well-meaning, over-helpful model "repairing" a stale attestation**, so the human never re-reads the changed state. That is *exactly* the failure the gate exists to prevent.
+
+**Horn 2 — 4a is liveness-fatal.** It refuses **100%** of honest forward recoveries (F1).
+
+**❗ The horns are the SAME PROPERTY.** A model silently re-attesting and a human deliberately re-attesting after a genuine re-review are **mechanically identical acts**. 4a's value *is* its cost: it forces every re-attestation to be a deliberate, effortful, history-rewriting act that a careless model will not casually perform. **You cannot delete the cost without deleting the value.** Any "fix" that admits the honest recovery admits the silent one **by construction** — the same unsolvable distinction as F2.
+
+#### What the review established (facts, not prescriptions)
+
+- **Check (4) has THREE clauses** (§1) — the two-clause decomposition was wrong.
+- **All three are adversarially null.** 4b is defeated by two plain forward commits exactly as 4a is (Passes A + C, independently — a two-pass consensus). *"Sole adversarial guard"* was **false**.
+- **4b is NOT separable from 4a as written.** Its subject is *"the attestation-**introducing** commit"* — uniquely defined **only because 4a guarantees `adds==1`**. Delete 4a (which legalises a second add — the whole point) and the anchor becomes ambiguous: anchored to the **first** add, an actor re-attests in a later commit and 4b passes against the *original* clean commit. **Any 4a-deletion MUST re-anchor 4b.** The instruction an earlier draft carried — *"targets 4a and MUST NOT touch 4b"* — was **actively harmful**; it is retracted.
+- **`base=` and `head=` are decorative.** `cross-review-digest.sh` reads **neither** (0 references) — it re-derives `B` positionally and hashes at **live HEAD**.
+
+#### An unevaluated candidate worth exploring (Pass C's — NOT endorsed here)
+
+**Head-pinning.** Make the already-recorded `head=` field **load-bearing**: compute the digest **at the attested head**, and require that sha to be the parent of the attestation commit and an ancestor of HEAD with bookkeeping-only deltas. It is metadata-free (git ground truth + a *human-authored* field — no ownership trailer). It would **subsume 4b's catch** (smuggled content is not in `head=`'s tree, so check (2) fails without any confinement clause) and **kill F6's HEAD-dependence**.
+
+⚠️ **But it does not resolve the tension above** — a re-attestation still rewrites the line, so the silent-re-attestation horn survives. It is a **promising partial**, unrun, and it belongs in an **explore**, not in this doc.
+
+#### The instruction this doc actually gives
+
+**Do not propose a check-(4) change from this document.** Take the *measurements* (F1, F2, F4, F5, F6 — all solid) into an `/opsx:explore`, and design the fix there against **both horns**, with the three-clause decomposition and the re-anchoring requirement in hand. **A research capture records what is; it must not pre-decide a fix that three review rounds could not settle.**
+
+**Probe subtlety — this is why the 4b error was easy to make** ❗ Testing confinement requires **normalizing checkbox state before diffing**. A *tick* (`[ ]`→`[x]`) and a *new task line* are both `+`/`-` checkbox lines in a raw hunk. My first probe filtered *all* checkbox lines and reported a **false negative**. The correct probe compares the **set of task texts** with the box normalized:
 
 ```bash
 tasktexts(){ git show "$1:.../tasks.md" | sed -e "/$SENTINEL/d" -e 's/^\(- \)\[[ xX]\]/\1[ ]/'; }
@@ -134,7 +172,7 @@ Consequences:
 3. **The paid external reviewer reads ~80% foreign diff** for a parked change.
 4. **A foreign, *archived* change's `cross-review-ledger.md` is currently hashed INTO the digest** — the exclusion is `LEDGER="$CHANGE_DIR/cross-review-ledger.md"` (line 46), which does **not** match `openspec/changes/archive/<date>-<name>/cross-review-ledger.md`.
 
-**No metadata-free narrowing exists.** Co-commit attribution, tested retroactively on the repo's own archived change, **misses 8/20 paths including both gate scripts** (xtty commits code separately from the `tasks.md` tick). Narrowing further would re-import the **`OpenSpec-Change:` ownership trailer this repo explicitly refuted and deleted**.
+**No metadata-free narrowing of the reviewed FILE SET exists** ❗ *(narrowed claim — an earlier draft said "no metadata-free **fix**", which over-claimed: consequence **1** may be fixable by **head-pinning** (F3) and consequence **4**, the archived-ledger glob, is a **one-line fix** this doc names and then wrongly filed under "no fix".)* Co-commit attribution, tested retroactively on the repo's own archived change, **misses 8/20 paths including both gate scripts** (xtty commits code separately from the `tasks.md` tick). Narrowing further would re-import the **`OpenSpec-Change:` ownership trailer this repo explicitly refuted and deleted**.
 
 **Severity:** pollution is **fail-closed** — over-inclusion costs one unnecessary review, it can **never** produce a bypass. So it is **noise, not a hole** — but it is the mechanism that makes F1 *terminal* rather than merely annoying.
 
@@ -192,7 +230,7 @@ Never re-read the spec to "confirm" any of this. Re-run:
 - **G-GATE-2 — Don't judge a check by a standard it never claimed.** D10 already scopes all four checks to **accident tripwires**, not adversarial guarantees. The honest question is never *"can it be forged?"* (yes — that is R3, accepted) but *"does it catch the **ordinary, non-adversarial** failure it is aimed at, without false-positiving the honest path?"* **My own error, recorded:** I judged check (4) adversarially, found it wanting, and proposed removal — then had to be corrected twice (once by the review, once by my own probe) before landing on the right question.
 - **G-GATE-3 — A retrospective classifier cannot be asked a prospective question.** One that scopes from *committed* paths returns, before implementation lands, a **confident false negative** — not an abstention. **Only its positive verdict is informative**; treat every other outcome as *"not yet knowable"*, never as *"no"*. Corollary: a check whose severity derives from such a classifier may take **blocker force only from the positive verdict**.
 - **G-GATE-4 — A precondition gated on a classifier blind to uncommitted work is bypassable by simply not committing — and an *inner* dirty-tree check cannot backstop an *outer* scope skip.** Put the cleanliness refusal in the **classifier**, at the outermost gate, not only in the tool that runs after the gate has already decided to apply.
-- **G-GATE-5 — When a check has multiple clauses, test them *separately* before deleting the check.** Check (4)'s counter (4a) and confinement (4b) are **separable**, and they have **opposite verdicts**: 4a is null, 4b is the sole guard against an amend-bundled attestation carrying unreviewed task text. A converged, cross-model, three-round conclusion still said *"delete check (4)"* — and was **wrong by one clause**.
+- **G-GATE-5 — Test every clause of a check against the *same* adversary/accident model. An asymmetric standard makes a null clause look load-bearing.** This doc's own error: it judged the counter by an **adversarial** standard (null ⇒ delete) and the confinement clause by a **bundle-only** standard (catches the one attack I constructed ⇒ *"load-bearing"*) — then a one-step generalization of its *own* F2 attack defeated confinement too. Corollaries, each paid for: **(a)** enumerate *all* clauses first (check (4) had **three**; I found two). **(b)** Check whether a clause's *subject* depends on another clause (4b's *"introducing commit"* is well-defined **only** while 4a holds — they are **not** separable). **(c)** Ask what each clause catches **non-adversarially** *before* deleting it (the counter turned out to be the gate's **principal accident tripwire**). **(d)** When your prescription flips on each round, **stop prescribing** — that is the tar pit (**G-TARPIT-3**), and a forensics doc's job is to record what *is*, not to pre-decide a contested fix.
 
 ---
 
