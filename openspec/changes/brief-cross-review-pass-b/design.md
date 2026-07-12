@@ -1,0 +1,68 @@
+## Context
+
+`/xtty:cross-review` composes three review passes; **Pass B** is the external soundness pass (Codex `gpt-5.6-sol` via the `codex-plugin-cc` companion, `adversarial-review` subcommand). The full mechanism map and both reproductions are in `research/03-analysis/codex-review-integration-forensics.md`. The load-bearing facts:
+
+- `adversarial-review` accepts **focus text** (the trailing positional → `USER_FOCUS` in `prompts/adversarial-review.md`) and returns the **validated `review-output` JSON schema**; its sandbox is **hardcoded read-only** (`codex-companion.mjs:414`).
+- The command currently passes **no focus text** — `cross-review.md:44` frames focus as "does not scope the review", so it ships empty.
+- The discriminating datum (`cross-review-gate-defect-forensics.md`): a **read-only** Codex, once briefed, found the two biggest gate defects **by reading**. Under-briefing — not the sandbox — was the gap.
+
+## Goals / Non-Goals
+
+**Goals:**
+- Pass B receives a **brief** (design intent + specific claims to verify + a digest of drills already run) every run.
+- Keep the **structured `review-output` schema**, the **read-only** sandbox, and the **advisory / zero-gate-force** posture.
+- **Zero new machinery.**
+
+**Non-Goals:**
+- **No `task --write` drilling** (D3).
+- No change to the reviewed **range** (the base rule is unchanged; a brief is not a range).
+- No change to Pass A (critic) or Pass C (inline Opus), the bounded-N loop, degradation behavior, or the archive gate.
+
+## Decisions
+
+### D1 — A' (brief-via-focus), verified by effect
+
+Pass the brief as the trailing positional on the existing invocation:
+`node "$COMPANION" adversarial-review --base "$B" --model gpt-5.6-sol "<brief>"`.
+
+Reproduced live (`research/…/codex-review-integration-forensics.md` §3): a two-question design-soundness brief produced two findings mapping onto exactly those questions, with valid schema output, read-only, xtty untouched. **The claim the test proves:** the brief reaches the model and shapes the review, *and* the structured schema survives — both verified against the real companion, not asserted.
+
+### D2 — Deliver the brief **inline**; survival is a measured property of the arg parser
+
+The brief goes inline (not a file) because the companion mangles arguments **only** when `normalizeArgv` sees `argv.length === 1` (`codex-companion.mjs:130-138`). Pass B's `--base` + `--model` keep `argv.length > 1`, so the trailing brief positional passes through **untouched** (newlines intact) via `focusText = positionals.join(' ')`. *(Verified at source; end-to-end survival on a live paid run is the cheap first-use confirmation — tasks §5.)*
+
+**File-pointer fallback, gate-inert:** promote to an in-repo brief-file pointer **only** if a brief must lead with `-` or exceed `ARG_MAX`. If ever used, the brief file MUST be **excluded by `cross-review-digest.sh` and allowlisted by `cross-review-scope.sh`** — exactly like the advisory `cross-review-ledger.md` — so it never enters the attested reviewed state. Inline is the default precisely because it needs no such handling.
+
+### D3 — Reject `task --write` (drilling Codex)
+
+`task --write --cwd <throwaway>` genuinely unlocks drilling (reproduced: Codex built the split-commit forge by effect, safely confined). Rejected for four measured reasons:
+1. **Loses the schema** — task turns pass `outputSchema:null` → free text; breaks B/C comparability.
+2. **Content-safety abort** — OpenAI's filter killed the reproduced security-flavoured drill mid-run.
+3. **Write-safety surface** — `--write` ⇒ `workspace-write`; the throwaway `--cwd` becomes load-bearing (default cwd = the **xtty repo root**).
+4. **`--resume` cross-wiring** — targets "the latest task job in this session" with no thread-id pin; single-flight broker → `-32001` → silent cold fallback.
+
+It buys only **independent drill construction**, which the round-4 datum shows was **not** the missing capability — reading a brief (incl. drill results the main loop already ran) is. Documented as a non-default out-of-band escape hatch. **Revisit only if a future real defect proves a briefed read-only pass missed something a drill would have caught** — never from analysis.
+
+### D4 — The brief is advisory; zero gate force
+
+The brief is input to the review, exactly like the diff and the ledger. It carries **no** archive-eligibility meaning and is read by **no** downstream mechanical step. The human-attestation archive gate is untouched. *(This keeps the change cleanly on the advisory-worker axis, separate from the `G-GATE` archive-gate defects parked in their own explore.)*
+
+### D5 — Test precision vs. the claim
+
+The claim is *"Pass B is briefed, and the brief reaches the model without breaking the schema or safety."* It lives in the **command's invocation + the companion's arg handling**, and is verified **by effect**: a briefed `adversarial-review` on a throwaway diff whose findings **reference the brief's questions** (not generic notes) and whose output **parses as `review-output`**. A grep asserting the brief string is present in the command file is a **read-back check, not evidence**. No `verification-harness` delta — dev tooling, no observable app behavior.
+
+## Risks / Trade-offs
+
+- **R1 — A brief could bias the reviewer toward the author's framing.** → The `adversarial-review` system prompt is *"break confidence in the change"*; the brief supplies claims **to attack**, not conclusions to confirm. Frame briefs as *"soundness-check these claims"*, never *"confirm X"*.
+- **R2 — A brief phrased around forging/bypassing may trip OpenAI's content-safety filter** (observed on the Mode-B drill). → Keep briefs as neutral **design-soundness** questions; hand Codex drill *results*, not "help me forge" instructions.
+- **R3 — Inline brief survival is source-verified, not yet run through a live paid review.** → Cheap first-use confirmation (tasks §5); the file-pointer fallback (D2) exists for the edge case.
+- **R4 — Large diffs are still summary-only** (the ≤2-file/≤256 KiB inline threshold). → Orthogonal and complementary: the brief helps **most** exactly where the diff isn't inlined; the range-pollution fix (separate change) shrinks the diff. Neither blocks the other.
+
+## Migration Plan
+
+Additive; affects only future `/xtty:cross-review` runs. Rollback = revert; Pass B returns to its (blind) state. No data, no attested state, no product surface.
+
+## Open Questions
+
+- Should the command **template** the brief (a fixed skeleton: intent / claims / drill-digest) or leave it free-form? Lean free-form to start; template only if briefs prove inconsistent in use.
+- The one capability A' gives up vs Mode B is GPT-family **independent drill construction**. Trigger to revisit: a future real defect a briefed read-only pass provably missed — not analysis now.

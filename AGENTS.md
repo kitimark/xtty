@@ -21,6 +21,7 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 | `add-ci-pipeline` | implemented — owner steps left | CI is live; remaining: repo public, pr-lint PR, branch protection, archive | `research/03-analysis/github-actions-ci-cd.md` |
 | `add-git-diff-wrap-toggle` | proposed — 0/20 tasks | git-review diff fills the panel width in a **wrap** (new default) / **no-wrap** mode + in-panel toggle + `git-review-diff-wrap` config key | `research/03-analysis/p6-file-diff-decisions.md` |
 | `fix-cross-review-gate-task-emission` | proposed — 1/20 tasks | the cross-review gate task is never emitted (no `config.yaml` rule) nor blocking (critic check is REVIEW-only) — so the gate is inert at propose: a `rules.tasks` entry emits it, a classifier-driven critic check blocks on it | `openspec/changes/fix-cross-review-gate-task-emission/design.md` |
+| `brief-cross-review-pass-b` | proposed — 0/12 tasks | `/xtty:cross-review` Pass B (Codex `gpt-5.6-sol`) ships **blind** — no brief, only a diff; the fix (**A'**, verified by effect) passes a brief through the existing read-only `adversarial-review` focus channel, keeping the schema + safety | `research/03-analysis/codex-review-integration-forensics.md` |
 
 **Shipped and archived** (full narratives: [HISTORY.md](HISTORY.md); what is true: `openspec/specs/`; mechanisms: `research/`):
 
