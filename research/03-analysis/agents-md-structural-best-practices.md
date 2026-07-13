@@ -951,6 +951,58 @@ concern survives only for the ADVISORY arm**, where over-matching is free.
 
 ❗ **The "immune to the tool-choice bypass" headline needed a carve-out, and now has one.**
 
+### A5-vicies-ter. ❗❗ ROUND 7 — TWO OF MY OWN FIXES COLLIDED AND CANCELLED. Neither was wrong.
+
+**The single most instructive finding of the whole investigation, and it is about the REVIEW PROCESS, not the
+design.**
+
+- **Round 3** established: *"a guard never observed to fail is not a guard"* ⇒ acceptance = **observe the guard
+  RED on the live 81 KB file.**
+- **Round 6** established: the comparator must be **growth-vs-baseline**, not absolute-ceiling-while-over —
+  otherwise the guard **freezes the repo** during the mandated red window.
+
+**Both fixes are correct. Together they CANCEL.** DERIVED:
+
+```
+HEAD == origin/main == 8e626a93c00e
+HEAD:AGENTS.md = 81,012 B   origin/main:AGENTS.md = 81,012 B
+comparator: refuse iff current(81012) > baseline(81012)  ->  FALSE  ->  GREEN
+```
+
+⇒ ❗ **The guard is GREEN on the very file that motivated it, and the round-3 acceptance evidence CANNOT
+FIRE.** *A change that had shipped both fixes would have claimed "the guard was observed red on the live file"
+— and it would have been impossible.*
+
+✅ **Fix:** the RED evidence must be **a COMMITTED POSITIVE MUTATION that exceeds the baseline** (not the
+unchanged live file), **and** the unchanged-file **NEGATIVE** fixture must be retained (proving no freeze).
+**The two fixtures together are the acceptance test; either alone is a lie.**
+
+> 🔑 **GUIDELINE — In an iterated review, each fix is validated against the design AS IT WAS, never against the
+> design AS IT WILL BE. Two independently-correct fixes can silently cancel.** *The only defence is a fresh
+> adversarial read of the WHOLE artifact after the fixes land — which is exactly what caught this. **This is
+> the strongest argument in the entire investigation for a final full-artifact review pass, as opposed to
+> iterating patch-by-patch.***
+
+### A5-vicies-quater. ROUND 7 — four more ACCIDENT-class defects in the git-hook engine
+
+1. ❗ **A TRACKED HOOK IS INERT IN EVERY FRESH CLONE.** DERIVED: `git config --get core.hooksPath` → **UNSET**;
+   `.git/hooks/pre-push` → **ABSENT**. ***`.git/config` is NOT CLONED*** ⇒ **a fresh clone (or a new machine, or
+   CI) silently ships with NO GATE.** ⇒ **The "silent non-fire lane: none" claim was FALSE — the git hook has
+   one too, just a different one.** ✅ **Fix: make it SELF-INSTALLING** (`make setup` already exists,
+   `Makefile:71` — add `git config core.hooksPath .githooks`), **and make CI verify the hook is installed**
+   (the detector for the silently-absent lane). **Acceptance MUST test a genuinely fresh clone.**
+2. ❗ **`origin/main` IS THE WRONG BASELINE — it is a CACHED, NON-REF-ATTRIBUTIVE ref.** The `pre-push` hook
+   **receives the AUTHORITATIVE `$remote_oid` on stdin** and the design **ignored it.** A stale clone can push a
+   branch that exceeds **both its base and the ceiling** while measuring **below** a stale, oversized
+   `origin/main`: *(base 43,667 · ceiling 65,666 · current 80,000 · cached `origin/main` 81,012 ⇒ **PASSES**)*.
+   ⇒ **Use `$remote_oid` per pushed ref. A first push (all-zero `$remote_oid`) needs an explicitly defined
+   base.**
+3. ❗ **DELETION PUSHES BREAK THE BLOB LOOKUP.** Git supplies an **all-zero `$local_oid`** for a deletion;
+   `git show 000…0:AGENTS.md` **exits 128** ⇒ **fail-closed handling would block ordinary branch/tag deletion.**
+   ⇒ **Add an explicit deletion case and a fixture.**
+4. **The bypass list was too narrow.** Not only `--no-verify`: also **`git -c core.hooksPath=/dev/null push`**,
+   removing the hook, and direct plumbing/API pushes. **All the same accepted R3 trust class** — but say so.
+
 ### A6-pre. ❗ CORRECTION (probe, 2026-07-13) — there IS a decision-time channel, and §A6 below missed it
 
 §A6's table concluded *"the refutations cannot be relocated; compression is the only lever."* **That
