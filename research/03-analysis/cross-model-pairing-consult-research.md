@@ -407,33 +407,56 @@ model computed this.** Consistent with **G-CONSULT-2**: the third party is not a
 
 ### 12e. ⚙️ Codex operational forensics — the run cost three dead jobs, and the failure mode was invisible
 
-❌ **REFUTED (the loop-driver's own theory): "the packet was too big / `xhigh` was too much."** Three
-`codex task` jobs produced **zero output** and hung. Diagnosis by log forensics, and it is **not** packet size —
-the small F7 packets died identically:
+✅ **FIRM — the ZOMBIE failure mode.** `codex task` jobs die **silently**: the underlying codex thread
+terminates, **the companion never observes it**, and the job sits in `status: running` **indefinitely** —
+measured at **1h49m** and **1h59m** with the last real log line ~1h40m earlier. Cancelling prints the tell:
+`Codex turn interrupt failed: thread not found: <thread-id>`.
 
 | | `Turn completed` | `thread not found` on cancel |
 | --- | --- | --- |
-| the **3 that died** (2 × F7 packet, 1 × the 5 KB AGENTS.md packet) | **0** | **yes** |
-| the **3 that completed** | **1** | **no** |
+| jobs that **died** | **0** | **yes** |
+| jobs that **completed** | **1** | **no** |
 
-**The mechanism: the codex thread dies silently and the companion never observes it.** The job then sits in
-`status: running` **forever** — 1h49m and 1h59m before being cancelled, with the last real log line ~1h40m
-earlier. Cancelling prints the tell: `Codex turn interrupt failed: thread not found: <thread-id>`.
+- ❗ **`status: running` is NOT a liveness signal. Only LOG-FILE GROWTH is.** (`wc -c` the job's `logFile`;
+  a live job writes every few seconds. A stall of ≥5 min with `status: running` = a zombie.) Discriminator for
+  a genuine completion: `grep -c 'Turn completed'` → **1**.
+- **Measured rate: 4 zombies in 10 `task` runs (~40%).** This is not an edge case; **budget for it.**
 
-- ❗ **`status: running` is NOT a liveness signal. Only LOG-FILE GROWTH is.** (`stat`/`wc -c` the job's
-  `logFile`; a live job writes every few seconds.) Discriminator for a completed run: `grep -c 'Turn completed'`.
-- **All 3 deaths overlapped another running job; all 3 successes ran alone.** ⇒ the **single-flight broker
-  collision** (already **G-CONSULT-7**) — *this run failed by not applying the repo's own recorded finding.*
-  **Serialize codex calls. Check the queue is empty before launching.**
-- The companion's `task` is **detached**: driving it under the harness's `run_in_background` returns **exit 0
-  immediately**, and *"finished"* and *"still running"* look identical. Poll `status --json`, **and** the log.
-- `result <id>` resolves **only finished** jobs — it errors with *"No job found"* for a running one, which
-  reads like a crash and is not.
-- ⚠️ **`codex task --help` RUNS A TASK.** There is no help flag on the subcommand; the string is taken as the
+### ❗ 12e-bis. RETRACTION — the CAUSE is NOT established, and this doc asserted one that was FALSE
+
+⚠️ **An earlier version of this section (committed in `fb6121e`) claimed: *"all 3 deaths overlapped another
+running job; all 3 successes ran alone ⇒ the single-flight broker collision."* That claim is REFUTED, by the
+very next observation.** A 4th job zombied while running **completely alone**, with the queue **verified empty
+at launch** (`status --json` → `running: 0`). The full population:
+
+| packet | concurrent? | outcome |
+| --- | --- | --- |
+| 2,421 B | alone | ✅ completed (~4 min) |
+| **5,505 B** | concurrent | ❌ zombie |
+| **6,553 B** | — | ✅ **completed** |
+| 7,266 B | concurrent | ❌ zombie |
+| **15,469 B** | **ALONE (queue verified 0)** | ❌ **ZOMBIE** |
+
+⇒ ❌ **Concurrency is REFUTED as the cause** (a job died alone). ⇒ ❌ **Packet size is REFUTED as the cause**
+(a **6,553 B** packet completed while a **5,505 B** one died). ❓ **The cause is UNKNOWN.** Both theories were
+n=3 generalizations that the 4th data point killed.
+
+❗ **This is a self-inflicted instance of G-CONSULT-2 — *"check the POPULATION, not the sample."*** The doc
+had that guideline written down, and the loop-driver **still shipped a confident causal claim from n=3**, in
+the same commit that restated the guideline. **Serializing codex calls remains good practice (G-CONSULT-7 is
+independently motivated), but it is NOT a fix for the zombies, and this doc must not be cited as saying it is.**
+
+### 12e-ter. Operational facts that DID hold
+
+- The companion's `task` runs **inline/blocking**, not detached — but **killing the invoking `node` process
+  does NOT kill the job** (the companion owns it; it kept running after a harness Bash timeout at 2 min).
+  Driving it under the harness's `run_in_background` returns **exit 0 immediately**, so *"finished"* and
+  *"still running"* look identical. **Never read exit 0 as completion.**
+- `result <id>` resolves **only finished** jobs — for a running one it errors *"No job found"*, which reads
+  like a crash and is not.
+- ⚠️ **`codex task --help` RUNS A TASK.** There is no help flag on the subcommand; the string becomes the
   prompt. It burned a 12 s job and a runtime slot.
-
-**Cost of the lesson:** ~3h of wall-clock across three zombie jobs. The relaunched lean packet, run **alone**,
-completed in **~4 minutes**.
+- **Cost of the lesson:** ~3h of wall-clock across four zombie jobs.
 
 ### 12f. Fates table (round 3)
 
@@ -441,8 +464,9 @@ completed in **~4 minutes**.
 | --- | --- | --- |
 | "A per-unit word cap is compression-proof" (loop-driver) | ❌ **REFUTED, ACCIDENT-class** | `gpt-5.6-sol`: split into 24 short bullets |
 | "This is doctrine ⇒ the second model will add little" (loop-driver, citing G-CONSULT-8) | ❌ **REFUTED as stated** → ✅ **sharpened** into G-CONSULT-13 | the arm attacked a **fresh design**, not doctrine — no answer key existed |
-| "The codex jobs hung because the packet was too big / `xhigh`" (loop-driver) | ❌ **REFUTED** | the **small** packets died identically; the discriminator is **thread death**, and all deaths overlapped another job |
-| "`status: running` means the job is alive" | ❌ **REFUTED** | 3 zombies held `running` for up to 1h59m with a dead thread |
+| "The codex jobs hung because the packet was too big / `xhigh`" (loop-driver) | ❌ **REFUTED** | a **6,553 B** packet completed while a **5,505 B** one died |
+| "The codex zombies are caused by the single-flight collision — every death overlapped another job" (loop-driver, **shipped in `fb6121e`**) | ❌ **REFUTED — and it was MY OWN n=3 overgeneralization** | the **next** job zombied while running **ALONE**, queue verified empty. ⇒ **cause UNKNOWN**; see §12e-bis. A self-inflicted violation of this doc's own **G-CONSULT-2** (*check the population, not the sample*) |
+| "`status: running` means the job is alive" | ❌ **REFUTED** | 4 zombies held `running` for up to 1h59m with a dead thread (**~40% of all `task` runs**) |
 | "The two models will agree (both read the same auto-injected file)" | ✅ **agreed on the DIAGNOSIS, disagreed on the FIX** — and the fix is where the value was | third-party re-measurement adjudicated |
 | gpt's own claim: "the top two entries are non-atomic" | ✅ **CONFIRMED and UNDERSTATED** | **2 of 25** non-atomic, holding **54.5%** and **23/23** subclaims |
 
@@ -458,12 +482,16 @@ completed in **~4 minutes**.
   do not pay — you will be handed your own file back. **Corollary: the highest-value consult target is the
   design the loop-driver has NOT yet written down** — that is also the last moment a bad mechanism is cheap
   to kill (12b: it was killed **before** it reached a proposal).
-- **G-CONSULT-14 — Verify a background model's LIVENESS by output growth, never by its status field.** Three
-  `codex task` jobs reported `status: running` for **up to 1h59m** with a **dead** underlying thread (`thread
-  not found` on cancel; `Turn completed` = 0). A status field reports *what the supervisor believes*; a growing
-  log reports *what is happening*. ⚠️ And **serialize** — every death overlapped another job (the single-flight
-  collision of **G-CONSULT-7**, which this run **had recorded and still walked into**). *A finding you have
-  written down but do not check before acting is not yet a finding.*
+- **G-CONSULT-14 — Verify a background model's LIVENESS by output growth, never by its status field.** Four
+  `codex task` jobs (**~40% of all runs**) reported `status: running` for **up to 1h59m** with a **dead**
+  underlying thread (`thread not found` on cancel; `Turn completed` = 0). A status field reports *what the
+  supervisor believes*; a growing log reports *what is happening*. **Poll `wc -c` on the job's `logFile`; treat
+  ≥5 min of zero growth as death and reap it.** ⚠️ **The CAUSE of the zombies is UNKNOWN — neither concurrency
+  nor packet size survives the data (§12e-bis). Do not ship a fix for a cause you have not established;
+  ship the DETECTOR.** ❗ *This guideline exists because the loop-driver shipped a confident causal claim from
+  **n=3** — in the same commit that restated **G-CONSULT-2** (check the population, not the sample) — and the
+  **next** observation refuted it. **A guideline you have written down but do not APPLY TO YOURSELF is not yet
+  a guideline.***
 - **G-CONSULT-15 — State your thesis to the adversary EXPLICITLY, as the target.** The contamination hazard was
   maximal here (the artifact under review is **auto-injected**, and it already contains a hypothesis close to
   the loop-driver's). Naming the thesis and ordering the model to **falsify it** converts the leak into a
