@@ -606,6 +606,101 @@ The open question is whether skill-body invocation is **reliable at the point a 
 marker is an *explicit* pointer, so invocation may be deterministic rather than the heuristic model-invocation
 the docs decline to quantify).
 
+### A5-octies. ❗❗ ROUND 4 — THE ENGINE IS DEAD: a "blocking CI ceiling" CANNOT BLOCK IN THIS REPO
+
+**The single most important finding of the whole investigation, and it kills the mechanism every prior round
+had assumed.** DERIVED:
+
+```sh
+git log --merges --oneline | wc -l                          # -> 0   (entire history)
+gh api repos/kitimark/xtty/branches/main/protection         # -> 404 "Branch not protected"
+gh api repos/kitimark/xtty/rulesets                         # -> []  (0 rulesets)
+```
+
+**ZERO merge commits in the repo's entire history. No PR flow has EVER existed. `main` is unprotected. CI runs
+ON PUSH.**
+
+⇒ ❗ **A CI ceiling cannot stop the write or the push. It is POST-HOC ADVISORY — i.e. the FOURTH advisory
+surface, after the three that already failed (§A5-bis).** ***The design's own argument — "advisory has been
+tried three times and lost three times" — applies to its own proposed mechanism.***
+
+⇒ ❗ **And the ceiling + the human-STOP rule would jointly produce the design's OWN NAMED HARM as a STEADY
+STATE:** on an honest overflow the STOP rule **forbids the model to fix it**, so **`main` stays red for the
+entire human-latency window** and **every unrelated push during it is red** — ***"normalized tolerated red"***,
+the retry-tolerance class this repo has **banned**. Not a rollout wrinkle: **the normal operating regime**
+(eviction pressure bites in week one — §A5).
+
+✅ **THE FIX — the only lane that fires BEFORE the write lands: a `PreToolUse` HOOK** on `Edit`/`Write`
+against `AGENTS.md`, recomputing the content ceiling on the **proposed post-edit content** and **refusing the
+edit**. **This actually blocks; CI cannot.** CI keeps the same checker as an honest **POST-HOC DETECTOR**
+(it catches an out-of-harness human edit, or a bypassed hook) — **a detector, never "the gate."**
+⚠️ **Surfaced dependency:** `.claude/settings.json` is **currently UNTRACKED** (`.gitignore:7` → `.claude/*`);
+tracking it is a **deliberate one-line exception**, exactly the pattern already used for
+`.claude/commands/xtty/`, `.claude/skills/xtty-*`, `.claude/agents/xtty-*`.
+❗ **The hook had been DEFERRED on an untested assumption — THAT was the defect:** *deferring the unprobed,
+strictly-better-positioned mechanism while shipping one that cannot block.* **The probe belongs IN the guard
+change, not after it.**
+
+### A5-nonies. ROUND 4 — three more ACCIDENT-class defects, all against the loop-driver
+
+1. ❗ **MERGE-OR-REPLACE CONTRADICTS THE HUMAN-STOP RULE — and the meters go GREENER as it happens.**
+   The STOP rule says eviction *"must never be automated"*; the admission rule **mandates the writing session
+   perform merge-or-replace** — but **REPLACE *is* eviction** and **MERGE *is* compression**, both
+   model-performed, both **routine** in a "fixed-size cache" that churns by design. An honest session merging
+   two lessons drops the older one's qualification (*"HEDGED (n=1)"*, *"stated defeasibly"*) because **that is
+   the cheapest merge** — §A5-ter's harm, **relocated from ceiling-time to admission-time**, where **the byte/word
+   meters go GREENER, so the ceiling never fires and the human is never called.** *The design demoted the
+   critic's semantic judgment and then installed a new mandatory write-time semantic judgment in its place.*
+   ⇒ **Fix: a preservation test is necessary but NOT sufficient. A merge that would drop any existing entry's
+   rejected-action / replacement / correctness-critical caveat is FORBIDDEN — the session APPENDS and escalates
+   to the human. Model-performed merging is limited to the strictly LOSS-FREE case.**
+2. ❗ **"The session STOPS" was under-specified — as written it DESTROYS what it protects.** A session blocked
+   mid-capture had **no instruction for where the finding goes** ⇒ a fresh, expensive lesson survives only in a
+   transcript, or the trackers are left half-reconciled. **The guard's first real firing would damage exactly
+   the asset the tier exists to protect.** ⇒ **Fix (the parking spots already exist and are UNMETERED): on
+   refusal the session MUST (1) complete every unmetered write — research doc, `HISTORY.md`, trackers;
+   (2) record the pending eager-index admission as an EXPLICIT OPEN ITEM for the human; (3) stop ONLY the
+   `AGENTS.md` append.** Nothing is lost; only the eager append is withheld.
+3. ❗ **THE CEILING NUMBER IS STILL FICTION — the design committed v1's sin again at a different number.**
+   *"~50 KB"* is **itself an undrafted estimate.** Corrected arithmetic (`gpt-5.6-sol` caught a **152 B** error
+   in the loop-driver's sectional sum; the direct subtraction is authoritative):
+
+   | scenario | floor |
+   | --- | --- |
+   | tier fix only — `81,012 − (32,300 − 16,954)` | **65,666 B** |
+   | tier fix **+ the full 9,174 B procedure relocated** | **56,492 B** (before retained stubs) |
+   | realistic, after a ~600–900 B stub | **≈ 57–60 KB** |
+   | **50 KB** | ❗ requires **several KB of cuts to NEVER-ABLATED rules** — the compensating strip, **mandated by the design itself** |
+
+   ⇒ ❗ **SET NO NUMBER UNTIL THE COMPRESSED DRAFT EXISTS. The ceiling is an OUTPUT of the diet, never an input.**
+
+### A5-decies. ✅ THE RELOCATION LEVER — G13 is RELAXED, not refuted; and relocate PROCEDURES, never CONSTRAINTS
+
+❌ **"G13 is refuted" was an OVERCLAIM.** Its **operative** content survives: the apply loop reads only the
+**point-of-tick marker**, and the anchor must be **committed and not CLI-regenerable**. **The marker stays
+either way — only the ANCHOR moves.** What falls is *only* the over-strong **"in this file"** clause (the
+leanness rule reached the point of action **from a skill body** — overridden, not unheard; skill bodies are
+lazy: of a 4,460 B skill only the ~616 B frontmatter is eager; a hand-authored tracked `xtty-*` skill is
+neither machine-local nor CLI-generated).
+
+❗ **THE DECISIVE CONSTRAINT — relocate PROCEDURES, never CONSTRAINTS.** *The very evidence that relaxes G13
+also bounds it:* **the leanness rule reached the loop via a skill — AND LOST.** So **a skill-delivered
+CONSTRAINT still loses to write-time pressure.** Relocation buys eager-token relief **only for checklists
+executed at invocation**; it rescues **nothing** about admission control, the refutations tier, product values,
+or delegation boundaries — **those are decision-time and MUST stay eager.** *Stating this asymmetry is what
+stops the lever from becoming "move everything and hollow out the guide."*
+
+⚠️ **Two blockers before any of the ~8.4 KB net moves:**
+- **Split the procedure BY TRIGGER, not behind `⟶ archive-ritual` alone** — the **HUMAN-ONLY STOP task fires
+  BEFORE the archive task** (`AGENTS.md:221-223`), so a single archive-time anchor **loses the earlier
+  trigger.** ⇒ worker detail → `/xtty:cross-review`; **HUMAN-ONLY/STOP text → emitted into the attestation
+  task itself**; archive checks → a committed `xtty-archive-ritual` skill.
+- ❗ **The marker→skill hop has NEVER been observed here.** The measured marker evidence is for **agent-delegation**
+  markers; *marker → model invokes `Skill` at tick* is plausible but **unproven**, and if it fails **nothing
+  else routes there** (the openspec archive skill has **0** references to the gate). **The `fix-osc7`
+  improvisation is what failure looks like.** ⇒ **Dogfood ONE real archive with the relocated anchor and verify
+  BY EFFECT before deleting the eager text** (G-TARPIT-4).
+
 ### A6-pre. ❗ CORRECTION (probe, 2026-07-13) — there IS a decision-time channel, and §A6 below missed it
 
 §A6's table concluded *"the refutations cannot be relocated; compression is the only lever."* **That
