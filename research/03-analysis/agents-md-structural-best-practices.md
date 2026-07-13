@@ -849,6 +849,55 @@ ideas quarantined into an explicit "do not re-propose" table**, not another patc
 > is not a metaphor for the AGENTS.md problem — it is the same failure, observed live, in the artifact
 > arguing about it.**
 
+### A5-undevicies. ✅✅ ROUND 6 — THE ANSWER: a GIT `pre-push` HOOK. Three engines died; this one is at the right layer.
+
+**Engine #3 (a Claude `PreToolUse` hook on `Bash` matching `git push`) is DEAD too — ACCIDENT-class.** DERIVED:
+Claude Code's `matcher` filters the **tool name**; `Bash(git push *)` is a **best-effort permission filter, not
+a regex over the command string**. Honest forms that MISS it: `git -C "$PWD" push` · `/usr/bin/git push` ·
+`make publish` · a wrapper script · `gh` · a GitHub MCP push.
+
+> ❗ ***"The actual convergence point is a Git `pre-push` hook."*** — and `--no-verify` is then **ADVERSARY/R3,
+> an ACCEPTED residual.**
+
+✅ **ENGINE #4 — a tracked `.githooks/pre-push` + `git config core.hooksPath .githooks` ($0, two lines).**
+**Why this one is finally right, where three others were wrong:**
+
+| property | CI | PreToolUse(Edit/Write) | PreToolUse(Bash: git push) | ✅ **git pre-push** |
+| --- | --- | --- | --- | --- |
+| can it block? | ❌ post-hoc (0 merge commits ever) | ✅ | ✅ | ✅ |
+| survives a **Bash** write? | ✅ | ❌ **the bloat came in this way** | ✅ | ✅ |
+| survives `git -C` / `make` / `gh` / MCP push? | ✅ | — | ❌ | ✅ **below the agent** |
+| silent-non-fire lane? | — | ⚠️ workspace trust | ⚠️ workspace trust | ✅ **none** |
+| bypass class | — | ACCIDENT | ACCIDENT | ✅ **`--no-verify` = R3, accepted** |
+
+❗ **AND IT FIXES A HOLE NOBODY HAD SEEN — THE MEASUREMENT TARGET WAS WRONG.** `git push` transmits
+**COMMITTED OBJECTS**; `wc AGENTS.md` measures the **WORKING TREE**. ⇒ **An honest session with a RED committed
+`AGENTS.md` and a GREEN uncommitted diet would have the gate approve the disk while pushing the red commit.**
+A real `pre-push` hook **receives the local/remote OIDs** and must inspect **`git show "$local_oid:AGENTS.md"`**
+— the actual bytes going to the remote. *(Also: a `Stop` hook is a weak backstop — it fires only **after** Claude
+finishes responding, i.e. **after** the remote mutation, does **not** fire on interruption, and Claude Code
+**overrides it after 8 consecutive blocks**.)*
+
+### A5-vicies. ❗ THE METER DOES NOT MEASURE THE OBJECTIVE — bytes/words are a PROXY that can move the WRONG WAY
+
+**The objective is STARTUP TOKENS. The ratchet counts BYTES and WORDS. They are not monotonic.** A rewrite can
+**reduce both while INCREASING** the subword-token count — dense identifiers, hashes, paths, punctuation.
+Measured demonstration:
+
+```
+"the " x100        -> 400 B / 100 words
+300-char hex blob  -> 300 B /   1 word
+```
+
+⇒ **The ratchet would see "improvement" and never observe tokens.** *(This file already tokenizes at **2.46
+bytes/token**, ~40% denser than prose — it is ALREADY in the regime where the proxy misleads.)*
+
+✅ **Fix — the instrument already exists, committed:**
+`openspec/changes/archive/2026-07-06-slim-agents-context/probes/measure-context.sh`. ⇒ **Either add a stable
+token metric to the ratchet, or explicitly NARROW the ratchet's claim to a bytes/words proxy AND retain a
+recurring token-cost acceptance check.** *A guard whose meter is not monotone with its objective can be
+satisfied while the objective regresses.*
+
 ### A6-pre. ❗ CORRECTION (probe, 2026-07-13) — there IS a decision-time channel, and §A6 below missed it
 
 §A6's table concluded *"the refutations cannot be relocated; compression is the only lever."* **That
