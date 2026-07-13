@@ -3,8 +3,8 @@
 # arms were previously coupled through shared remote state and one early red
 # cascaded into spurious downstream reds.
 set -u
-HOOK="${HOOK:-/Users/markmark/.claude/jobs/2e729592/tmp/pre-push-v13}"
-INST=/Users/markmark/.claude/jobs/2e729592/tmp/install-hooks-v13.sh
+HOOK="${HOOK:-/Users/markmark/.claude/jobs/2e729592/tmp/pre-push-v15}"
+INST=/Users/markmark/.claude/jobs/2e729592/tmp/install-hooks-v15.sh
 ROOT=$(mktemp -d /Users/markmark/.claude/jobs/2e729592/tmp/suite.XXXX)
 CEIL=1000
 pass=0; fail=0; FAILED=()
@@ -61,8 +61,8 @@ fi
 W=$(newrepo t3); SH="$ROOT/sharedhooks"; mkdir -p "$SH"
 install -m755 "$HOOK" "$SH/pre-push"
 ( cd "$W"; guide 5000; git add -A; git commit -qm base ) >/dev/null 2>&1   # xtty-like: has a guide
-V=$(newrepo t3other)                                                       # a DIFFERENT project
-( cd "$V"; echo "print('hi')" > main.py; git add -A; git commit -qm work ) >/dev/null 2>&1
+V=$(newrepo t3other)                          # a DIFFERENT project THAT ALSO HAS AN AGENT GUIDE
+( cd "$V"; guide 9000; echo "print('hi')" > main.py; git add -A; git commit -qm work ) >/dev/null 2>&1
 out=$( cd "$V" && git -c core.hooksPath="$SH" push origin main 2>&1 ); rc=$?
 if [ $rc -eq 0 ]; then
   echo "✅  3. shared hooks dir: unrelated repo NOT gated (identity guard)"; pass=$((pass+1))
@@ -197,6 +197,119 @@ arm "18. unrelated push during the RED window (no freeze)" PASS \
 # 19. main grows the guide
 mkladder L19; ( cd "$W" && guide 1400 && git add -A && git commit -qm "regrow" ) >/dev/null 2>&1
 arm "19. main REGROWS the guide over the ceiling" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+
+echo
+echo "════ ROUND-12 ARMS (gpt-5.6-sol, against the CODE) ════"
+
+# 20. UNICODE: the meter must count BYTES, not characters. AGENTS.md is full of ❗✅⚠️.
+W=$(newrepo U20); ( cd "$W"
+  head -c 900 /dev/zero | tr '\0' 'x' > AGENTS.md; ln -sf AGENTS.md CLAUDE.md
+  git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  # same CHARACTER count, far more BYTES: 900 chars -> 2700 bytes (each ❗ is 3 bytes)
+  : > AGENTS.md; for i in $(seq 1 900); do printf '\342\235\227' >> AGENTS.md; done
+  git add -A; git commit -qm "unicode-only edit" ) >/dev/null 2>&1
+echo "        (chars=$(python3 -c "print(len(open('$W/AGENTS.md',encoding='utf-8').read()))")  bytes=$(wc -c < "$W/AGENTS.md" | tr -d ' '))"
+arm "20. UNICODE edit: bytes grow past ceiling, chars do not" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 21. an import hop at DEPTH 4 must still be weighed (declared max depth 4)
+W=$(newrepo U21); ( cd "$W"
+  printf '# root\n@a.md\n' > CLAUDE.md; printf '@b.md\n' > a.md; printf '@c.md\n' > b.md
+  printf '@d.md\n' > c.md; head -c 100 /dev/zero | tr '\0' 'x' > d.md
+  git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  head -c 1600 /dev/zero | tr '\0' 'x' > d.md; git add -A; git commit -qm "grow the DEEP import" ) >/dev/null 2>&1
+arm "21. growth at import HOP 4 is seen (no off-by-one)" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 22. a NEWLY-ADDED broken import is NOT a deletion (must not refuse)
+W=$(newrepo U22); ( cd "$W"
+  guide_regular 500; git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  printf '# CLAUDE.md\n@AGENTS.md\n@does-not-exist.md\n' > CLAUDE.md
+  git add -A; git commit -qm "add a broken import (typo)" ) >/dev/null 2>&1
+arm "22. NEWLY-added broken import: warn, do not refuse" PASS \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 23. empty core.hooksPath: git searches the WORKTREE ROOT => installer must not silently no-op
+W=$(newrepo U23); ( cd "$W"; guide 500; git add -A; git commit -qm base
+  git config core.hooksPath "" ) >/dev/null 2>&1
+out=$( cd "$W" && bash "$INST" "$HOOK" 2>&1 )
+if echo "$out" | grep -q 'NOT installing'; then
+  echo "✅  23. empty core.hooksPath: installer warns + stops"; pass=$((pass+1))
+else
+  echo "❌  23. empty core.hooksPath: installer silently wrote where git will not look"; fail=$((fail+1)); FAILED+=("23")
+fi
+
+# 24. a SECOND remote: the hook must use the remote it is pushing to, not hardcoded origin
+W=$(newrepo U24); ( cd "$W"
+  guide 1500; git add -A; git commit -qm "fat"; git push -q origin main   # origin/main is FAT
+  bash "$INST" "$HOOK"
+  git init -q --bare "$ROOT/U24/other.git"; git remote add upstream "$ROOT/U24/other.git"
+  ) >/dev/null 2>&1
+# vs origin's fat baseline this is "no growth" => allow. vs upstream (EMPTY) there is no
+# baseline at all => the absolute ceiling applies => REFUSE. Hardcoding `origin` allows it.
+arm "24. 2nd remote uses ITS OWN baseline, not origin's" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push upstream main"
+
+
+echo
+echo "════ ROUND-12 ARMS (fable-5, against the CODE) ════"
+
+# 25. D-1 THE MODE FLIP: symlink -> a 9-byte REGULAR file containing the literal text "AGENTS.md".
+#     Not an import. The injected guide really IS 9 bytes — and every path-based deletion rule
+#     saw a healthy, resolvable root and called it a legal shrink.
+W=$(newrepo V25); ( cd "$W"
+  guide 5000; git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  rm CLAUDE.md; printf 'AGENTS.md' > CLAUDE.md          # a REGULAR file, 9 bytes, no @
+  git add -A; git commit -qm "symlink materialized by a zip round-trip" ) >/dev/null 2>&1
+arm "25. symlink MATERIALIZED to a 9-byte stub (vaporize)" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 26. D-3(a): a malformed ceiling must REFUSE, never allow
+W=$(newrepo V26); ( cd "$W"
+  guide 600; git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  guide 1400; git add -A; git commit -qm regrow ) >/dev/null 2>&1
+arm "26. malformed XTTY_GUIDE_CEILING=64K refuses (fail-closed)" REFUSE \
+    "XTTY_GUIDE_CEILING=64K git push origin main"
+
+# 27. D-4: the remote advertised an OID we never fetched => measure, don't blanket-allow
+W=$(newrepo V27); ( cd "$W"
+  guide 400; git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK" ) >/dev/null 2>&1
+# a second clone pushes branch X; we never fetch it, then force-push our own fat X
+CL="$ROOT/V27/clone2"; git clone -q "$ROOT/V27/remote.git" "$CL" 2>/dev/null
+( cd "$CL"; git config user.email t@t; git config user.name t
+  git checkout -q -b X; echo y > y.txt; git add -A; git commit -qm x; git push -q origin X ) >/dev/null 2>&1
+( cd "$W"; git checkout -q -b X; guide 1500; git add -A; git commit -qm "fat X" ) >/dev/null 2>&1
+arm "27. unfetched advertised OID: measured, not blanket-allowed" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push --force origin X"
+
+# 28. D-5(i): a MID-LINE import (the docs' own example shape) must be followed
+W=$(newrepo V28); ( cd "$W"
+  printf '# Guide\nSee @AGENTS.md for the project overview.\n' > CLAUDE.md
+  head -c 300 /dev/zero | tr '\0' 'x' > AGENTS.md
+  git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  head -c 1600 /dev/zero | tr '\0' 'x' > AGENTS.md
+  git add -A; git commit -qm "grow behind a MID-LINE import" ) >/dev/null 2>&1
+arm "28. MID-LINE import is followed (docs grammar)" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 29. D-5(ii): an @token in PROSE / a fenced block is not an import — must not false-refuse
+W=$(newrepo V29); ( cd "$W"
+  guide 500; git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  { printf '# CLAUDE.md\n@AGENTS.md\n\n'
+    printf 'Paths under @openspec/changes/ are allowlisted, per the gate.\n\n'
+    printf '```sh\n@not-an-import.md\n```\n'; } > CLAUDE.md
+  git add -A; git commit -qm "prose + fenced @tokens" ) >/dev/null 2>&1
+arm "29. @token in prose / fenced code: no false refusal" PASS \
     "XTTY_GUIDE_CEILING=$CEIL git push origin main"
 
 echo

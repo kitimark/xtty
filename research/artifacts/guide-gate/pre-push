@@ -9,11 +9,20 @@
 #   `exit 0`'d — installed, armed, sentinel-stamped, and completely INERT, with its
 #   own death buried in git's transfer output. Any internal error must REFUSE.
 set -uo pipefail
+set -E            # without this the ERR trap never fires inside functions/subshells
 trap 'echo "guide-gate: INTERNAL ERROR (line $LINENO) — refusing rather than failing open." >&2; exit 1' ERR
 
+REMOTE="${1:-origin}"                       # pre-push receives <remote-name> <remote-url>
+MAIN_REF="refs/remotes/$REMOTE/main"
 CEILING="${XTTY_GUIDE_CEILING:-65666}"
 MAXDEPTH=4
+FLOOR="${XTTY_GUIDE_FLOOR:-2000}"     # below this, a "shrink" is a VAPORIZE, not a diet
 is_int() { case "${1:-}" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac; }
+# A malformed ceiling made `[ "$bas" -gt "$CEILING" ]` error and the push ALLOW. Fail closed.
+if ! is_int "$CEILING" || ! is_int "$FLOOR"; then
+  echo "guide-gate: REFUSE — malformed ceiling/floor (CEILING='$CEILING' FLOOR='$FLOOR')." >&2
+  exit 1
+fi
 
 # --- repo-identity guard (A-2): only ever act on THIS project. -------------
 # A hooks dir can be shared (global core.hooksPath). Never gate a repo that is not ours.
@@ -21,12 +30,10 @@ git rev-parse --verify -q HEAD >/dev/null 2>&1 || exit 0
 # ❗ Do NOT key this on HEAD alone: deleting the guide would then DISABLE the guard
 #    that exists to refuse the deletion (measured — a self-disabling gate).
 #    Ask instead: has this repo EVER had a guide, at the tip or at the published baseline?
-ours=no
-for ref in HEAD refs/remotes/origin/main; do
-  git cat-file -e "$ref:CLAUDE.md" 2>/dev/null && { ours=yes; break; }
-  git cat-file -e "$ref:AGENTS.md" 2>/dev/null && { ours=yes; break; }
-done
-[ "$ours" = yes ] || exit 0   # no agent guide anywhere in this repo => not our concern
+# ❗ "any repository that has an agent guide" is NOT an identity — a shared/global hook would
+#    gate a stranger's project with THIS project's ceiling. The installer stamps the repo it arms;
+#    the hook only ever acts on a repo bearing that stamp.
+[ "$(git config --get xtty.guide-gate 2>/dev/null || true)" = "true" ] || exit 0
 
 # resolve_guide <tree-ish> -> "<total_bytes> <status>"
 #   status: ok | root_missing | import_dangling
@@ -38,63 +45,105 @@ done
 #   `git show <oid>:CLAUDE.md` on main's 120000 symlink returns the 9-byte string
 #   "AGENTS.md" — NOT the 81 KB guide. A meter that does not check the tree MODE
 #   reads 9 bytes for the entire guide and can never see growth. Follow the link.
-read_entry() {  # $1=oid $2=path -> prints content; sets REAL_PATH to the file finally read
-  local oid="$1" path="$2" hops=0 mode blob
+# ❗ The meter counts BYTES, and it asks GIT for them.
+#   `${#body}` counts CHARACTERS in the current locale and command substitution STRIPS
+#   trailing newlines — so on a guide full of ❗✅⚠️ (this one) the meter under-reads the
+#   blob it exists to bound, and a Unicode-only edit can grow the object with no growth seen.
+#   `git cat-file -s <blob>` is the authoritative byte count: locale-proof, newline-exact.
+resolve_entry() {  # $1=oid $2=path -> echoes "<blob-oid> <real-path>"; 1 = unresolvable
+  local oid="$1" path="$2" hops=0 line mode blobid target
   while [ "$hops" -lt 8 ]; do
-    mode=$(git ls-tree "$oid" -- "$path" 2>/dev/null | awk '{print $1}')
-    [ -z "$mode" ] && return 1
-    blob=$(git show "$oid:$path" 2>/dev/null) || return 1
-    if [ "$mode" = "120000" ]; then                      # symlink: blob IS the target path
-      case "$blob" in
-        /*) return 1 ;;                                  # absolute link: un-pushable, weigh 0
-        *)  path=$(printf '%s' "$(dirname "$path")/$blob" | sed 's|^\./||;s|^/||') ;;
+    line=$(git ls-tree "$oid" -- "$path" 2>/dev/null) || return 1
+    [ -z "$line" ] && return 1
+    mode=${line%% *}; line=${line#* }; blobid=${line%%$'\t'*}; blobid=${blobid##* }
+    if [ "$mode" = "120000" ]; then                      # symlink: the BLOB IS the target path
+      target=$(git cat-file blob "$blobid" 2>/dev/null) || return 1
+      case "$target" in
+        /*|'~'/*) return 1 ;;                            # absolute/home link: un-pushable
       esac
+      case "$path" in
+        */*) path="${path%/*}/$target" ;;
+        *)   path="$target" ;;
+      esac
+      path=${path#./}
       hops=$(( hops + 1 )); continue
     fi
-    REAL_PATH="$path"; printf '%s' "$blob"; return 0     # regular file: this is the content
+    printf '%s %s' "$blobid" "$path"; return 0
   done
   return 1                                               # link loop
 }
 
+# -> "<bytes> <status> <dangling-paths,>"
+#    status: ok | root_missing | import_dangling
+#    the dangling PATH LIST is returned so the caller can compare baseline-vs-tip PER PATH:
+#    an import that DISAPPEARED is a deletion (refuse); one that was NEVER there is new-and-broken
+#    (warn, weigh 0) — an aggregate flag conflates them and mis-fires both ways.
 resolve_guide() {
-  local oid="$1" total=0 depth=0 status=ok
+  local oid="$1" total=0 hop=0 status=ok dangling=""
   local -a queue=("CLAUDE.md") next=()
-  local seen="" body imp p
+  local seen="" ent blobid real imp p sz body
 
-  git ls-tree "$oid" -- CLAUDE.md 2>/dev/null | grep -q . || { printf '0 root_missing'; return; }
-  # a symlink root whose TARGET is gone is a deleted guide, not a 9-byte guide:
-  read_entry "$oid" CLAUDE.md >/dev/null 2>&1 || { printf '0 root_missing'; return; }
+  git ls-tree "$oid" -- CLAUDE.md 2>/dev/null | grep -q . || { printf '0 root_missing '; return; }
+  resolve_entry "$oid" CLAUDE.md >/dev/null 2>&1 || { printf '0 root_missing '; return; }
 
-  while [ ${#queue[@]} -gt 0 ] && [ "$depth" -lt "$MAXDEPTH" ]; do
+  # `hop` counts IMPORT HOPS. The root is hop 0 and must not consume one, or a
+  # declared "max depth 4" only ever follows 3 (measured off-by-one).
+  while [ ${#queue[@]} -gt 0 ] && [ "$hop" -le "$MAXDEPTH" ]; do
     next=()
     for p in "${queue[@]}"; do
       case " $seen " in *" $p "*) continue ;; esac
       seen="$seen $p"
-      if ! body=$(read_entry "$oid" "$p"); then
+      if ! ent=$(resolve_entry "$oid" "$p"); then
         case "$p" in
           '~'/*|/*) : ;;                           # un-pushable home/absolute import: weigh 0
-          *) status=import_dangling ;;             # a repo-relative import that does not resolve
+          *) status=import_dangling; dangling="$dangling$p," ;;
         esac
         continue
       fi
-      seen="$seen ${REAL_PATH:-}"                  # don't double-count a link and its target
-      total=$(( total + ${#body} ))
+      blobid=${ent%% *}; real=${ent#* }
+      seen="$seen $real"                           # don't double-count a link and its target
+      sz=$(git cat-file -s "$blobid" 2>/dev/null) || { status=import_dangling; dangling="$dangling$p,"; continue; }
+      total=$(( total + sz ))
+      body=$(git cat-file blob "$blobid" 2>/dev/null) || true
+      # imports: any @path token anywhere in a line; skip fenced code; resolve relative to THIS file.
       while IFS= read -r imp; do
-        [ -n "$imp" ] && next+=("$imp")
-      done < <(printf '%s\n' "$body" | sed -n 's/^@\([^[:space:]]*\).*/\1/p')
+        [ -z "$imp" ] && continue
+        case "$imp" in
+          '~'/*|/*) next+=("$imp"); continue ;;          # home/absolute: un-pushable, weighed 0 later
+        esac
+        case "$real" in
+          */*) next+=("${real%/*}/$imp") ;;              # relative to the CONTAINING file
+          *)   next+=("$imp") ;;
+        esac
+      done < <(printf '%s\n' "$body" | awk '
+          /^[[:space:]]*```/ { fence = !fence; next }
+          fence { next }
+          {
+            line = $0
+            gsub(/`[^`]*`/, " ", line)                   # drop inline code spans
+            n = split(line, toks, /[[:space:]]+/)
+            for (i = 1; i <= n; i++) {
+              t = toks[i]
+              if (substr(t, 1, 1) == "@") {
+                sub(/^@/, "", t)
+                gsub(/[),.;:!?]+$/, "", t)               # trailing punctuation is prose, not path
+                if (t != "") print t
+              }
+            }
+          }')
     done
     # bash 3.2 (macOS): "${arr[@]}" on an EMPTY array is an UNBOUND-VARIABLE error under set -u.
     # That error killed the meter mid-measurement and the hook still exited 0 => a gate that was
     # installed, armed, and completely INERT. Guard the expansion.
     queue=(${next[@]+"${next[@]}"})
-    depth=$(( depth + 1 ))
+    hop=$(( hop + 1 ))
   done
-  printf '%s %s' "$total" "$status"
+  printf '%s %s %s' "$total" "$status" "${dangling:-none}"
 }
 
-canonical=$(git rev-parse -q --verify refs/remotes/origin/main 2>/dev/null || true)
+canonical=$(git rev-parse -q --verify "$MAIN_REF" 2>/dev/null || true)
 canon_bytes=""
-if [ -n "$canonical" ]; then read -r canon_bytes _ <<<"$(resolve_guide "$canonical")"; fi
+if [ -n "$canonical" ]; then read -r canon_bytes _ _ <<<"$(resolve_guide "$canonical")"; fi
 
 status=0
 zero='0000000000000000000000000000000000000000'
@@ -103,14 +152,14 @@ while read -r local_ref local_oid remote_ref remote_oid; do
   [ -z "${local_ref:-}" ] && continue
   [ "$local_oid" = "$zero" ] && continue                    # deletion push => allow
 
-  read -r cur cur_status <<<"$(resolve_guide "$local_oid")"
+  read -r cur cur_status cur_dangling <<<"$(resolve_guide "$local_oid")"
 
   # --- THE LADDER (order matters) -----------------------------------------
   base=""
   if [ "$remote_oid" = "$zero" ]; then
     # gpt#2: FIRST PUSH is detected BEFORE any tracking ref (a stale tracking ref
     # for a deleted-then-recreated branch would otherwise become the baseline).
-    base=$(git merge-base "$local_oid" refs/remotes/origin/main 2>/dev/null || true)
+    base=$(git merge-base "$local_oid" "$MAIN_REF" 2>/dev/null || true)
     # A-5/gpt#1: NO rung-4 fallback (borrowing main's guide as an orphan ref's baseline
     # made the deletion rule fire on a ref that never had a guide).
     if [ -z "$base" ]; then
@@ -118,6 +167,10 @@ while read -r local_ref local_oid remote_ref remote_oid; do
       # clone, or main's own first push) it waves EVERYTHING through. Split it:
       if [ "$cur_status" = root_missing ]; then
         echo "guide-gate: $local_ref — unrelated history, no guide => allow" >&2; continue
+      fi
+      if ! is_int "${cur:-}"; then
+        echo "guide-gate: REFUSE $local_ref — no baseline and the meter failed (fail-closed)." >&2
+        status=1; continue
       fi
       if [ "$cur" -gt "$CEILING" ]; then
         echo "guide-gate: REFUSE $local_ref — no baseline, and guide ${cur} B > ceiling ${CEILING}" >&2
@@ -128,12 +181,26 @@ while read -r local_ref local_oid remote_ref remote_oid; do
   elif git cat-file -e "$remote_oid" 2>/dev/null; then
     base="$remote_oid"                                      # advertised and resolves locally
   else
-    base=$(git rev-parse -q --verify "refs/remotes/${remote_ref#refs/heads/}" 2>/dev/null \
-        || git rev-parse -q --verify "refs/remotes/origin/${remote_ref#refs/heads/}" 2>/dev/null || true)
-    [ -z "$base" ] && { echo "guide-gate: $local_ref — no baseline resolvable => allow" >&2; continue; }
+    base=$(git rev-parse -q --verify "refs/remotes/$REMOTE/${remote_ref#refs/heads/}" 2>/dev/null || true)
+    if [ -z "$base" ]; then
+      # the remote advertised an OID we do not have (a second clone pushed it; we never fetched).
+      # "allow" here measured NOTHING. Guide-less => allow; guide-bearing => the absolute ceiling.
+      if [ "$cur_status" = root_missing ]; then
+        echo "guide-gate: $local_ref — unfetched baseline, no guide => allow" >&2; continue
+      fi
+      if ! is_int "${cur:-}"; then
+        echo "guide-gate: REFUSE $local_ref — unfetched baseline and the meter failed (fail-closed)." >&2
+        status=1; continue
+      fi
+      if [ "$cur" -gt "$CEILING" ]; then
+        echo "guide-gate: REFUSE $local_ref — unfetched baseline, and guide ${cur} B > ceiling ${CEILING}" >&2
+        status=1; continue
+      fi
+      echo "guide-gate: $local_ref — unfetched baseline, guide under ceiling => allow" >&2; continue
+    fi
   fi
 
-  read -r bas bas_status <<<"$(resolve_guide "$base")"
+  read -r bas bas_status bas_dangling <<<"$(resolve_guide "$base")"
   if ! is_int "${cur:-}" || ! is_int "${bas:-}"; then
     echo "guide-gate: REFUSE $local_ref — the meter failed to produce a measurement (fail-closed)." >&2
     status=1; continue
@@ -145,12 +212,36 @@ while read -r local_ref local_oid remote_ref remote_oid; do
     echo "guide-gate: REFUSE $local_ref — the guide ROOT (CLAUDE.md) was DELETED (baseline had one)" >&2
     status=1; continue
   fi
-  if [ "$bas_status" = ok ] && [ "$cur_status" = import_dangling ]; then
-    echo "guide-gate: REFUSE $local_ref — a guide IMPORT resolved at the baseline and DANGLES at the tip" >&2
-    echo "guide-gate:   (the root survives, so the meter would read a 'shrink' — this is the vaporize lane)" >&2
-    status=1; continue
+  # ❗ PER-PATH, not aggregate. An import that RESOLVED at the baseline and DANGLES at the tip is a
+  #    DELETION (the vaporize lane: the root survives, so the meter reads a "shrink"). An import that
+  #    was ALREADY broken, or is newly-added-and-broken, is not a deletion — warn, weigh 0, allow.
+  if [ "$cur_status" = import_dangling ]; then
+    vaporized=""
+    IFS=, read -ra _dangs <<<"${cur_dangling%,}"
+    for _d in ${_dangs[@]+"${_dangs[@]}"}; do
+      [ -z "$_d" ] || [ "$_d" = none ] && continue
+      if git ls-tree "$base" -- "$_d" 2>/dev/null | grep -q .; then vaporized="$vaporized $_d"; fi
+    done
+    if [ -n "$vaporized" ]; then
+      echo "guide-gate: REFUSE $local_ref — guide IMPORT(S) resolved at the baseline and DANGLE at the tip:$vaporized" >&2
+      echo "guide-gate:   (the root survives, so the meter reads a 'shrink' — this is the vaporize lane)" >&2
+      status=1; continue
+    fi
+    echo "guide-gate: warn $local_ref — unresolvable import(s) weighed 0: ${cur_dangling%,}" >&2
   fi
   if [ "$bas_status" != ok ] && [ "$cur_status" != ok ]; then continue; fi   # no guide either side => skip
+
+  # --- THE VAPORIZE FLOOR (D-1) -------------------------------------------
+  # A symlink replaced by a 9-byte regular file containing the literal text "AGENTS.md" is
+  # NOT an import — the injected guide really is 9 bytes, and the meter honestly reports a
+  # "shrink". Every path-based deletion rule missed it. Judge the OUTCOME, not the mechanism:
+  # a guide that had real content and now has almost none was vaporized, however it happened.
+  if [ "$bas" -ge "$FLOOR" ] && [ "$cur" -lt "$FLOOR" ]; then
+    echo "guide-gate: REFUSE $local_ref — the guide COLLAPSED ${bas} -> ${cur} B (floor ${FLOOR})." >&2
+    echo "guide-gate:   A diet shrinks the guide; it does not vaporize it. If this is intentional," >&2
+    echo "guide-gate:   raise XTTY_GUIDE_FLOOR for this push and say so in the commit." >&2
+    status=1; continue
+  fi
 
   # --- rung 0 (A-4): already-published canonical guide ---------------------
   # Mirroring origin/main's CURRENT guide introduces no bytes the remote lacks

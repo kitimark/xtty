@@ -30,6 +30,37 @@ defects that the first execution of the code found in seconds** (see
 4. **A fixture was vacuous** — arm 14 was green and proved nothing (built post-diet it was a *shrink*
    through the ordinary comparator). Only the **mutation matrix** could see that.
 
+## Round 12 — the models reviewed the CODE, and found 11 more (all fixed, all fixtured)
+
+Once the artifact stopped being prose, the findings stopped being arguments. Every one came with a
+command. **29/29 green.**
+
+**gpt-5.6-sol (6):** the meter counted **characters, not bytes** (`${#body}` — and this guide is full
+of `❗✅⚠️`; a Unicode-only edit grew the blob with **no growth seen**) ⇒ ask git: `git cat-file -s` ·
+the declared **4 import hops only followed 3** (the root consumed one) · dangling-import status was
+**aggregate, not per-path** (a *newly* broken import was mis-read as a deletion) · the identity guard
+matched *"any repo with a guide"*, **not xtty** · an **empty** `core.hooksPath` slipped the installer's
+"is it set" check while git searched the worktree root · the hook **hardcoded `origin`**, ignoring the
+remote name git passes as `$1`.
+
+**fable-5 (5) — three of them against its own earlier fixes:**
+- **D-1 — the symlink fix only handled path DELETION, not a MODE FLIP.** Replace the `120000` link with
+  a **9-byte regular file** containing the literal text `AGENTS.md` (a zip round-trip, `rsync` without
+  `-l`) and the injected guide really *is* 9 bytes — the root resolves, the meter honestly reports a
+  **shrink**, and every path-based deletion rule waves it through. ⇒ **a VAPORIZE FLOOR**, which judges
+  the *outcome* rather than the mechanism and **subsumes all three deletion rules**.
+- **D-3 — "fails closed" was FALSE.** `XTTY_GUIDE_CEILING=64K` made `[` error and the gate **ALLOW**
+  (`is_int` was never applied to the ceiling); and without `set -E` the ERR trap **never fires inside a
+  function or subshell**.
+- **D-4 — the unfetched-advertised-OID lane allowed with ZERO measurement.**
+- **D-5 — the import grammar did not match the docs**: imports appear **anywhere in a line** (the
+  official example is mid-sentence), fenced code is skipped, and a relative path resolves against the
+  **containing file**. A `^@`-anchored root-relative parser missed the whole mid-line class — 5,048 B of
+  injected content read as 48.
+
+Verified against the real repository: the meter now reads **`81012 ok none`** through `main`'s actual
+symlink. The version that survived 11 rounds of review would have read **9**.
+
 ## Still open (a design decision, not a bug)
 
 The ceiling is a **ratchet**, and its first notch needs the **compressed draft of `AGENTS.md`** —

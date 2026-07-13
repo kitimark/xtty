@@ -11,10 +11,15 @@ git rev-parse --git-dir >/dev/null 2>&1 || exit 0          # not a git repo: no-
 # which is the user's global hooks dir. Installing there arms the gate for EVERY
 # repository they push. So: resolve OUR OWN git dir, and if core.hooksPath is set
 # at all, git will not look there — warn and STOP rather than leak the gate out.
-if cfg=$(git config --get core.hooksPath 2>/dev/null) && [ -n "$cfg" ]; then
+if git config --get core.hooksPath >/dev/null 2>&1; then
+  cfg=$(git config --get core.hooksPath 2>/dev/null)
+  [ -z "$cfg" ] && cfg='(empty — git searches the worktree root)' 
   echo "hooks: core.hooksPath is set ($cfg) — git will not read this repo's own hooks dir." >&2
   echo "hooks: NOT installing (refusing to write into a hooks dir this project does not own)." >&2
-  echo "hooks: to arm the guide gate: unset it, or copy $SRC into $cfg yourself." >&2
+  echo "hooks: to arm the gate, UNSET core.hooksPath for this repo:" >&2
+  echo "hooks:     git config --unset core.hooksPath   # then re-run make hooks" >&2
+  echo "hooks: (do NOT copy the hook into a shared/global hooks dir — it would run for" >&2
+  echo "hooks:  every repository you push, gating strangers' projects with this ceiling.)" >&2
   exit 0
 fi
 
@@ -30,4 +35,5 @@ fi
 
 # Own copy (or none): always re-copy => staleness impossible, upgrades land.
 install -m 755 "$SRC" "$TARGET" 2>/dev/null || exit 0
+git config xtty.guide-gate true 2>/dev/null || true   # the repo stamp the hook checks
 exit 0
