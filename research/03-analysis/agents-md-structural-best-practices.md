@@ -798,6 +798,57 @@ retained only as an **early, friendlier warning** — never as the gate.
    accidentally missed or stale skill invocation **removes the constraint**. ⇒ **Keep the refusal INVARIANT
    eager and complete; lazy-load only its EXECUTION MECHANICS.**
 
+### A5-sexdecies. ✅ ROUND 5 CONVERGENCE — the gate is **GATE THE PUSH**, and the brief itself caught the disease
+
+**Both reviewers independently found the Bash lane** (a genuine convergence *on a defect* — the only kind that
+counts). fable-5 added three the other missed:
+
+1. ❗ **The `CLAUDE.md` symlink alias.** An `Edit`/`Write` addressed to **`CLAUDE.md`** changes identical
+   content, but `tool_input.file_path` contains **no "AGENTS.md"** — a predicate keyed to one basename misses
+   it. **Match both names; resolve the link.**
+2. ❗ **HOOKS CAN SILENTLY NOT FIRE.** Project `.claude/settings.json` hooks **require workspace trust — until
+   accepted they do not run, silently**; `disableAllHooks` also silently disables. *"It blocks"* is
+   **conditional on delivery** — ❗ **this repo's own measured failure class** (the `Definition:`-stamp lesson:
+   *verify delivery, never assume*). ⇒ **a liveness probe is mandatory.**
+3. ❗ **The parked admission had NO NAMED SURFACE.** *"Record it as an open item for the human"* names no
+   tracked file ⇒ it can evaporate into the transcript — and this repo has **measured** that unanchored
+   procedure steps get improvised (**that is how G13 was born**). ⇒ **Name it: the active change's `tasks.md`,
+   or a designated `HISTORY.md` block.**
+
+✅ **THE GATE — `GATE THE PUSH`.** *Every write path — `Edit`, `Write`, `sed`, `python3`, a subagent,
+`git apply` — converges on `git push`.* ⇒ **`PreToolUse` on `Bash` matching `git push`, re-measuring the file
+ON DISK and refusing the push.** **File-scoped in effect ⇒ immune to the tool-choice bypass.** Layered with an
+`Edit`/`Write` early warning (bypassable, not the gate), a **`Stop`-hook backstop** (file-scoped, tool-agnostic
+— the primitive is proven: `/goal` is a Stop hook), and **CI as an honest post-hoc detector**.
+
+### A5-septendecies. ⚖️ ADJUDICATED — the reviewers SPLIT, and both were half right
+
+`gpt-5.6-sol` said *"relocate PROCEDURES, never CONSTRAINTS"* **collapses** (the four archive-refusal checks
+**are** constraints, and a missed skill invocation removes them). `fable-5` said it **holds** (the operative
+sentence keys on **trigger-time**, so the naming is a proxy) — **and correctly flagged it as its own
+contribution, asking a non-participant to re-check.**
+
+⚖️ **Non-participant adjudication:** *"procedures vs constraints"* is a **bad proxy** — the refusal checks are
+constraint-shaped yet execute at a known invocation point (fable is right). **But a constraint whose
+enforcement depends on a HEURISTIC INVOCATION is strictly weaker than an eager one** (gpt is right).
+⇒ **Synthesis: keep each refusal INVARIANT eager and complete (one line — *what must be true*); lazy-load only
+its EXECUTION MECHANICS (*how to check it*).** Both constraints satisfied.
+
+### A5-duodevicies. ❗ THE BRIEF ITSELF CAUGHT THE DISEASE — a self-demonstration
+
+By round 5 the design brief had grown to **28,647 B of layered corrections**, and had gone **internally
+inconsistent**: §2 still asserted the *"~46 KB floor"* and *"12 KB from the RULES sections"* that §4 had
+already refuted; a stale **65,514** sat beside the corrected **65,666**; §2c's heading said *"refuted"* while
+its body said *"relaxed"*. `gpt-5.6-sol` reported the contradictions as a finding.
+
+❗ **The cause was exactly the mechanism under investigation: every correction was APPENDED, and the thing it
+corrected was never EVICTED.** The fix was the same one the design prescribes: **a clean rewrite with the dead
+ideas quarantined into an explicit "do not re-propose" table**, not another patch.
+
+> **A document that records its own corrections by accretion will always drift into self-contradiction. This
+> is not a metaphor for the AGENTS.md problem — it is the same failure, observed live, in the artifact
+> arguing about it.**
+
 ### A6-pre. ❗ CORRECTION (probe, 2026-07-13) — there IS a decision-time channel, and §A6 below missed it
 
 §A6's table concluded *"the refutations cannot be relocated; compression is the only lever."* **That
