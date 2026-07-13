@@ -760,6 +760,44 @@ improvisation class; (3) **probe skill-body STALENESS** — the adjacent measure
 **definition caching** (the agent-definition-lag refutation), **never tested for skill bodies**; a stale body is
 a silently wrong procedure.
 
+### A5-quaterdecies. ❗❗ ROUND 5 — THE HOOK ENGINE IS BROKEN TOO: a PreToolUse hook is TOOL-scoped, and the bloat came in through BASH
+
+**The `PreToolUse` pivot (§A5-octies) was right that CI cannot block — and wrong about what can.** DERIVED:
+
+- ❗ **Hooks match TOOL CALLS, not filesystem writes.** `Edit`/`Write` denial works (including inside
+  subagents) — **but an ordinary `Bash` mutation bypasses it entirely.**
+- ❗ **And the bloat DID come in through Bash. This is not hypothetical:** commit **`dca6b114`** — a
+  `python3`-driven edit — grew `AGENTS.md` **59,404 → 61,684 B** (`git cat-file -s dca6b114^:AGENTS.md` vs
+  `dca6b114:AGENTS.md`).
+- ❗ **And every commit of THIS investigation was a Bash heredoc** (`python3 - <<'PY'`, `cat >>`). **A
+  PreToolUse hook on `Edit`/`Write` would have seen NONE of them.**
+- `CLAUDE.md` → `AGENTS.md` is a **symlink alias** that any file-matching rule must **canonicalize**.
+- ⇒ **An honest session bypasses the gate ACCIDENTALLY, just by reaching for Bash.** **ACCIDENT-class ⇒ fatal.**
+
+✅ **THE FIX — measure the FILE, not the TOOL: the gate is a `Stop` HOOK.**
+A `Stop` hook is **file-scoped and tool-agnostic** — it re-measures `AGENTS.md` at session end **regardless of
+how the bytes got there**, so it **cannot be bypassed by choosing a different tool**. *(The primitive is
+proven: this repo's own `/goal` command is a Stop hook, and it blocks.)* `PreToolUse` on `Edit`/`Write` is
+retained only as an **early, friendlier warning** — never as the gate.
+
+### A5-quindecies. ROUND 5 — three more ACCIDENT-class defects
+
+1. ❗ **HOOK FAILURES ARE FAIL-OPEN.** Claude blocks **only on exit 2**; **any other nonzero exit lets the tool
+   call proceed.** A missing checker, a malformed input, a dependency failure, a timeout, or **invalid project
+   settings (silently ignored under `-p`)** therefore **REMOVES THE GATE.** ⇒ **Every failure path MUST be
+   converted to an explicit denial (exit 2), and that must be REGRESSION-TESTED.** *A gate that fails open is
+   not a gate — and this is the same class as F7 (a "fail-closed" property that was never enforced).*
+2. ❗ **THE CEILING DEADLOCKS ITS OWN DIET.** The file is **81,012 B**; the initial ratchet ceiling is
+   **~66 KB**. Under a blocking hook, **every intermediate edit whose result is still above 66 KB is REFUSED**
+   — so the file **cannot be dieted incrementally at all.** The design therefore **silently requires a one-shot
+   rewrite, or the very Bash bypass it is trying to close.** ⇒ **Fix: bootstrap semantics — while over budget,
+   PERMIT any STRICTLY DECREASING edit** (or activate the gate only once the diet is green).
+3. ❗ **"Relocate PROCEDURES, never CONSTRAINTS" COLLAPSES AT THE CHOSEN RELOCATION.** `AGENTS.md:223`'s **four
+   archive-refusal checks ARE eligibility CONSTRAINTS**, yet the design sent *"archive checks"* into an
+   **invocation-dependent skill**. **One successful dogfood proves possibility, not reliable routing** — an
+   accidentally missed or stale skill invocation **removes the constraint**. ⇒ **Keep the refusal INVARIANT
+   eager and complete; lazy-load only its EXECUTION MECHANICS.**
+
 ### A6-pre. ❗ CORRECTION (probe, 2026-07-13) — there IS a decision-time channel, and §A6 below missed it
 
 §A6's table concluded *"the refutations cannot be relocated; compression is the only lever."* **That
