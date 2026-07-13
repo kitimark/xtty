@@ -3,7 +3,7 @@
 # arms were previously coupled through shared remote state and one early red
 # cascaded into spurious downstream reds.
 set -u
-HOOK="${HOOK:-/Users/markmark/.claude/jobs/2e729592/tmp/pre-push-v15}"
+HOOK="${HOOK:-/Users/markmark/.claude/jobs/2e729592/tmp/pre-push-v16}"
 INST=/Users/markmark/.claude/jobs/2e729592/tmp/install-hooks-v15.sh
 ROOT=$(mktemp -d /Users/markmark/.claude/jobs/2e729592/tmp/suite.XXXX)
 CEIL=1000
@@ -311,6 +311,49 @@ W=$(newrepo V29); ( cd "$W"
   git add -A; git commit -qm "prose + fenced @tokens" ) >/dev/null 2>&1
 arm "29. @token in prose / fenced code: no false refusal" PASS \
     "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+
+echo
+echo "════ ROUND-13 ARMS (fail-open lanes) ════"
+
+# 30. unborn HEAD (git checkout --orphan) must not skip the gate
+W=$(newrepo X30); ( cd "$W"
+  guide 600; git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  git checkout -q -b fat main; guide 1500; git add -A; git commit -qm fat
+  git checkout -q --orphan brandnew            # HEAD now names an UNBORN branch
+  git rm -rqf . 2>/dev/null || true ) >/dev/null 2>&1
+arm "30. unborn HEAD does not skip the gate" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin fat"
+
+# 31. a PUBLISHED dangling import must not LATCH the gate open
+W=$(newrepo X31); ( cd "$W"
+  guide_regular 500; git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  printf '# CLAUDE.md\n@AGENTS.md\n@typo.md\n' > CLAUDE.md      # a broken import: allowed (warn)
+  git add -A; git commit -qm "broken import"
+  XTTY_GUIDE_CEILING=$CEIL git push -q origin main                # now it is PUBLISHED at the baseline
+  head -c 1600 /dev/zero | tr '\0' 'x' > AGENTS.md               # ...and now GROW past the ceiling
+  git add -A; git commit -qm "grow behind the published dangling import" ) >/dev/null 2>&1
+arm "31. growth AFTER a published dangling import still refused" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 32. rung 0 must key on the CLOSURE. Canonical (origin/main) is FAT; the branch forks from a
+#     THIN baseline and sets its guide to the SAME TOTAL as canonical but DIFFERENT imported bytes.
+#     Old rung 0 diffed only CLAUDE.md/AGENTS.md -> "identical to published" -> ALLOW (wrong).
+#     The comparator would refuse it: thin baseline (400) < ceiling, tip (1520) > ceiling.
+W=$(newrepo X32); ( cd "$W"
+  printf '# CLAUDE.md\n@inc.md\n' > CLAUDE.md
+  head -c 380 /dev/zero | tr '\0' 'a' > inc.md
+  git add -A; git commit -qm thin; THIN=$(git rev-parse HEAD)
+  head -c 1500 /dev/zero | tr '\0' 'a' > inc.md
+  git add -A; git commit -qm "canonical is FAT"; git push -q origin main
+  bash "$INST" "$HOOK"
+  git checkout -q -b side "$THIN"                     # baseline = the THIN commit
+  head -c 1500 /dev/zero | tr '\0' 'b' > inc.md      # same TOTAL as canonical, different BYTES
+  git add -A; git commit -qm "same total as published, different content" ) >/dev/null 2>&1
+arm "32. rung 0 keys on the CLOSURE, not two paths" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin side"
 
 echo
 echo "════ $pass passed, $fail failed ════"

@@ -26,7 +26,6 @@ fi
 
 # --- repo-identity guard (A-2): only ever act on THIS project. -------------
 # A hooks dir can be shared (global core.hooksPath). Never gate a repo that is not ours.
-git rev-parse --verify -q HEAD >/dev/null 2>&1 || exit 0
 # ❗ Do NOT key this on HEAD alone: deleting the guide would then DISABLE the guard
 #    that exists to refuse the deletion (measured — a self-disabling gate).
 #    Ask instead: has this repo EVER had a guide, at the tip or at the published baseline?
@@ -79,12 +78,12 @@ resolve_entry() {  # $1=oid $2=path -> echoes "<blob-oid> <real-path>"; 1 = unre
 #    an import that DISAPPEARED is a deletion (refuse); one that was NEVER there is new-and-broken
 #    (warn, weigh 0) — an aggregate flag conflates them and mis-fires both ways.
 resolve_guide() {
-  local oid="$1" total=0 hop=0 status=ok dangling=""
+  local oid="$1" total=0 hop=0 status=ok dangling="" closure=""
   local -a queue=("CLAUDE.md") next=()
   local seen="" ent blobid real imp p sz body
 
-  git ls-tree "$oid" -- CLAUDE.md 2>/dev/null | grep -q . || { printf '0 root_missing '; return; }
-  resolve_entry "$oid" CLAUDE.md >/dev/null 2>&1 || { printf '0 root_missing '; return; }
+  git ls-tree "$oid" -- CLAUDE.md 2>/dev/null | grep -q . || { printf '0 root_missing none -'; return; }
+  resolve_entry "$oid" CLAUDE.md >/dev/null 2>&1 || { printf '0 root_missing none -'; return; }
 
   # `hop` counts IMPORT HOPS. The root is hop 0 and must not consume one, or a
   # declared "max depth 4" only ever follows 3 (measured off-by-one).
@@ -104,6 +103,7 @@ resolve_guide() {
       seen="$seen $real"                           # don't double-count a link and its target
       sz=$(git cat-file -s "$blobid" 2>/dev/null) || { status=import_dangling; dangling="$dangling$p,"; continue; }
       total=$(( total + sz ))
+      closure="$closure$real:$blobid\n"          # the CONTENT of the whole closure, not 2 paths
       body=$(git cat-file blob "$blobid" 2>/dev/null) || true
       # imports: any @path token anywhere in a line; skip fenced code; resolve relative to THIS file.
       while IFS= read -r imp; do
@@ -138,12 +138,13 @@ resolve_guide() {
     queue=(${next[@]+"${next[@]}"})
     hop=$(( hop + 1 ))
   done
-  printf '%s %s %s' "$total" "$status" "${dangling:-none}"
+  printf '%s %s %s %s' "$total" "$status" "${dangling:-none}" "$(printf '%s' "$closure" | git hash-object --stdin)"
 }
 
 canonical=$(git rev-parse -q --verify "$MAIN_REF" 2>/dev/null || true)
 canon_bytes=""
-if [ -n "$canonical" ]; then read -r canon_bytes _ _ <<<"$(resolve_guide "$canonical")"; fi
+canon_digest=""
+if [ -n "$canonical" ]; then read -r canon_bytes _ _ canon_digest <<<"$(resolve_guide "$canonical")"; fi
 
 status=0
 zero='0000000000000000000000000000000000000000'
@@ -152,7 +153,7 @@ while read -r local_ref local_oid remote_ref remote_oid; do
   [ -z "${local_ref:-}" ] && continue
   [ "$local_oid" = "$zero" ] && continue                    # deletion push => allow
 
-  read -r cur cur_status cur_dangling <<<"$(resolve_guide "$local_oid")"
+  read -r cur cur_status cur_dangling cur_digest <<<"$(resolve_guide "$local_oid")"
 
   # --- THE LADDER (order matters) -----------------------------------------
   base=""
@@ -200,7 +201,7 @@ while read -r local_ref local_oid remote_ref remote_oid; do
     fi
   fi
 
-  read -r bas bas_status bas_dangling <<<"$(resolve_guide "$base")"
+  read -r bas bas_status bas_dangling bas_digest <<<"$(resolve_guide "$base")"
   if ! is_int "${cur:-}" || ! is_int "${bas:-}"; then
     echo "guide-gate: REFUSE $local_ref — the meter failed to produce a measurement (fail-closed)." >&2
     status=1; continue
@@ -229,7 +230,9 @@ while read -r local_ref local_oid remote_ref remote_oid; do
     fi
     echo "guide-gate: warn $local_ref — unresolvable import(s) weighed 0: ${cur_dangling%,}" >&2
   fi
-  if [ "$bas_status" != ok ] && [ "$cur_status" != ok ]; then continue; fi   # no guide either side => skip
+  # Skip ONLY when neither side has a guide at all. `import_dangling` still has a MEASURABLE
+  # guide — treating it as "no guide" latched the gate OPEN once a dangling import was published.
+  if [ "$bas_status" = root_missing ] && [ "$cur_status" = root_missing ]; then continue; fi
 
   # --- THE VAPORIZE FLOOR (D-1) -------------------------------------------
   # A symlink replaced by a 9-byte regular file containing the literal text "AGENTS.md" is
@@ -246,13 +249,9 @@ while read -r local_ref local_oid remote_ref remote_oid; do
   # --- rung 0 (A-4): already-published canonical guide ---------------------
   # Mirroring origin/main's CURRENT guide introduces no bytes the remote lacks
   # (a fast-forward branch sync / `main:<branch>` repoint transmits zero new objects).
-  if [ -n "$canon_bytes" ] && [ "$cur" -eq "$canon_bytes" ] && [ "$cur" -ne "$bas" ]; then
-    if [ "$(git rev-parse "$local_oid^{tree}" 2>/dev/null)" != "" ] \
-       && [ "$(resolve_guide "$local_oid" | cut -d' ' -f1)" -eq "$canon_bytes" ] \
-       && git diff --quiet "$canonical" "$local_oid" -- CLAUDE.md AGENTS.md 2>/dev/null; then
-      echo "guide-gate: $local_ref — guide identical to origin/main's published guide => allow" >&2
-      continue
-    fi
+  if [ -n "${canon_digest:-}" ] && [ "$cur_digest" = "$canon_digest" ] && [ "$cur" -ne "$bas" ]; then
+    echo "guide-gate: $local_ref — guide closure IDENTICAL to $REMOTE/main's published guide => allow" >&2
+    continue
   fi
 
   # --- the comparator ------------------------------------------------------
