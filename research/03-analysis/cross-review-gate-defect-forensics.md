@@ -171,18 +171,40 @@ This is *partly* acknowledged by the design (R3: *"a session that ignores `⟶ a
 
 ❗ **Read every drill in this document with that scoping.** They measure the **scripts** and a **hand-reconstructed** version of the prose clauses. They do **not** measure a committed gate, because there isn't one.
 
-### F4 — The scope classifier is **retrospective**: a not-in-scope verdict is a **false negative**, not an abstention ✅
+### F4 — The scope classifier scopes the **RANGE**, not the change: its verdict is **non-attributive** and it **LATCHES** ✅
 
-`scripts/cross-review-scope.sh:54` is `paths="$(git diff --name-only "$B"..HEAD)"` — **paths already committed**. It never sees paths a change *declares it will touch*. So the verdict is a function of *(repo HEAD, what is committed so far)* and **moves across a change's lifecycle**:
+> ⚠️ **REVISED 2026-07-13 — an earlier version of this section was REFUTED by measurement.** It framed the
+> classifier as merely **retrospective** and asserted *"the normal post-propose state **is** `exit 0`"*, with a
+> lifecycle table showing `propose committed → exit 0`. **Both are false.** The refutation came from the
+> `fix-cross-review-gate-task-emission` round-4 cross-review — the very change whose measurement the old text
+> cited. That change was **abandoned**; its findings are preserved here. The retired claim is kept below as a
+> ❌ so it cannot be re-cited.
 
-```
-uncommitted           → exit 2    (no proposal.md commit to anchor B)
-propose committed     → exit 0    ← "out of scope": only the change's own artifacts have landed,
-                                    and openspec/changes/** is allowlisted
-implementation landed → exit 10   ← "in scope": product/tooling paths now in range
-```
+`scripts/cross-review-scope.sh:54` is `paths="$(git diff --name-only "$B"..HEAD)"` where `B = parent(<proposal.md commit>)`. **That range is repo-wide** — it holds *every* commit that landed after the change was proposed, by anyone, for any reason. So the classifier answers *"is **some** path in this range out-of-allowlist?"* — **not** *"is **this change** in scope?"*
 
-**Only `exit 10` is positively informative.** `exit 0` and `exit 2` mean *"not yet knowable to be in scope"* — **never** *"out of scope"*. Treating `exit 0` as "out of scope" is **fail-open**, and the normal post-propose state *is* `exit 0`. Measured live on `fix-cross-review-gate-task-emission` itself (`exit 0`, 8 paths, all allowlisted).
+**Three properties, all measured:**
+
+- **Non-attributive.** An `exit 10` verdict says only that *some* path in the range is out-of-allowlist. It **cannot say whose**. It is therefore **never** evidence that *this change's* implementation landed.
+- **Retrospective.** It reads **committed** paths only, so it can never answer a *propose-time* question about paths that do not yet exist. `exit 0` / `exit 2` mean *"not yet knowable to be in scope"* — **never** *"out of scope"*; treating `exit 0` as "out of scope" is **fail-open**.
+- **⚠️ Monotone under intervening archives — the one that bites.** `openspec archive` **always** writes `openspec/specs/**`, which is **NOT** in the allowlist (`cross-review-scope.sh:44-51` allows only `openspec/changes/*`, `research/*`, the four root docs, `packer/README.md`). So **any change left open across any other change's archive latches to `exit 10` permanently and can never return.** With concurrent changes — this repo's normal state — that is the **common case, not the exception.**
+
+**Measured 2026-07-13, all three then-open changes:**
+
+| change | reviewed range | own paths | foreign | own paths out-of-allowlist? | verdict |
+| --- | --- | --- | --- | --- | --- |
+| `fix-cross-review-gate-task-emission` | 21 | 7 | 14 (67%) | **none** | `exit 10` — **100% foreign-driven**, at **1/20 tasks, zero implementation landed** |
+| `add-git-diff-wrap-toggle` | 42 | 7 | 35 (83%) | **none** | `exit 10` — **100% foreign-driven**, at **0/20 tasks** |
+| `add-ci-pipeline` | 324 | 5 | 319 (98.5%) | yes (`.github/workflows/**`) | `exit 10` |
+
+**Fates table — what this kills:**
+
+| Retired claim | ❌ Killed by |
+| --- | --- |
+| *"the normal post-propose state **is** `exit 0`"* | Measured: **all three** open changes read `exit 10`; two with **zero** own out-of-allowlist paths. After any intervening archive the steady state is `exit 10`. |
+| *"`propose committed → exit 0`"* (the lifecycle table) | `fix-cross-review-gate-task-emission` read `exit 10` at **1/20 tasks** — the flip came from **unrelated work**, not from the change. |
+| *"`exit 10` ⇒ the change's implementation landed"* (the proxy) | Non-attributivity: `exit 10` cannot say *whose* path triggered it. Any check using it as a "did implementation land?" proxy is a **false-positive test**. |
+
+**Consequence for any future gate design:** the direction is still safe (**over**-inclusion never opens a bypass), but the **precision is a function of repo activity, not of the change**. Do **not** hang a BLOCKER, an eligibility test, or a lifecycle assertion on this verdict without first **narrowing the range to the change's own paths** — that narrowing is the prerequisite fix, not an optimization.
 
 **`exit 2` conflates four distinct `die` causes** — missing change dir, uncommitted `proposal.md`, **range-omission** (dir touched before `proposal.md`), root commit. **Only one** means "uncommitted". Treating all four as "uncommitted ⇒ non-blocking" lets a **committed malformed range** pass review and fail late at archive.
 
@@ -221,7 +243,35 @@ Consequences:
 
 **No metadata-free narrowing of the reviewed FILE SET exists** ❗ *(narrowed claim — an earlier draft said "no metadata-free **fix**", which over-claimed: consequence **1** may be fixable by **head-pinning** (F3) and consequence **4**, the archived-ledger glob, is a **one-line fix** this doc names and then wrongly filed under "no fix".)* Co-commit attribution, tested retroactively on the repo's own archived change, **misses 8/20 paths including both gate scripts** (xtty commits code separately from the `tasks.md` tick). Narrowing further would re-import the **`OpenSpec-Change:` ownership trailer this repo explicitly refuted and deleted**.
 
-**Severity:** pollution is **fail-closed** — over-inclusion costs one unnecessary review, it can **never** produce a bypass. So it is **noise, not a hole** — but it is the mechanism that makes F1 *terminal* rather than merely annoying.
+**Severity:** pollution is **fail-closed** — over-inclusion costs one unnecessary review, it can **never** produce a bypass. So it is **noise, not a hole** — but it is the mechanism that makes F1 *terminal* rather than merely annoying. ❗ **F4 (revised) upgrades this:** pollution is not merely *possible*, it is **structural and monotone** — `openspec archive` writes the non-allowlisted `openspec/specs/**`, so **every** long-lived change latches to `exit 10`. The numbers in the table above are already stale by design; the *mechanism* is the durable finding.
+
+### F8 — The gate task reaches no author, and its "escape hatch" does not exist ✅
+
+*(Findings preserved from the **abandoned** `fix-cross-review-gate-task-emission` — see §9. All re-measured 2026-07-13.)*
+
+**(a) The emission + enforcement defects — the gate is not wired to the propose loop.**
+
+| Defect | Evidence |
+| --- | --- |
+| **Nothing emits the gate task.** `/opsx:propose` reads `openspec/config.yaml`, **not** `AGENTS.md`. That file carries a `rules.tasks` entry for all **four** existing point-of-tick markers and **zero** for the human-attestation cross-review task. | `grep -ci 'cross-review\|attestation' openspec/config.yaml` ⇒ **0** |
+| **Nothing blocks on its absence.** The critic's gate-task check is `heuristic → REVIEW`, explicitly *"never a BLOCKER"*, and REVIEW findings never block a coherent verdict. | `.claude/agents/xtty-openspec-critic.md:42`, `:80` |
+
+This is the repo's own **G13** reproduced exactly: *a rule that lives only in AGENTS.md does not reach the loop.* **Both defects remain UNFIXED** — the change that would have fixed them was abandoned (§9).
+
+**⚠️ But the *severity* framing must stay honest — an earlier draft's evidence was ANACHRONISTIC.** The claim *"the gate is inert; both open changes violate the spec"* does **not** show the propose loop failing, because **both changes predate the obligation**:
+
+```
+add-cross-model-design-review  ARCHIVED 2026-07-12   ← the obligation ships here
+add-ci-pipeline               proposed 2026-06-30    ← 12 days BEFORE
+add-git-diff-wrap-toggle      proposed 2026-07-11    ←  1 day BEFORE
+brief-cross-review-pass-b     proposed 2026-07-12    ← the ONLY post-gate change — and it DID carry the task
+```
+
+And the one post-gate data point is **also** confounded (a gate-saturated authoring session; git cannot distinguish *loop-emitted* from *hand-added in the same commit*). **Net: n=1 either way, no clean evidence in either direction.** The case for moving the obligation onto `config.yaml` is **structural (G13)**, not empirical — state it that way.
+
+**(b) ❗ There is NO procedure for removing an over-emitted human-only task.** A fail-closed emission rule ("when in doubt, emit") is normally justified as cheap *because reversible* — *"over-emission costs one strikeable task."* **That justification is false here.** Grepping AGENTS.md, both established specs, and the scripts, **every** hit for *strike / remove the task / delete the task* is **the assertion itself**: no actor, no authority, no recorded form. The model may not **tick** the task; nothing sanctions it **deleting** the task either — and **no rule distinguishes *"strike an over-emitted task"* from *"delete an inconvenient gate task"***, which is the precise act the gate exists to prevent. Worse, under F4's latch a long-lived change reads `exit 10`, so any BLOCKER-grade enforcement would **re-raise the task the moment it is removed**. **Any future design that emits fail-closed MUST define the strike as a first-class human-only act, or drop the cheapness claim.**
+
+**(c) `add-ci-pipeline`'s obligation is *expensive*, not *impossible* — a refuted premise worth recording.** The abandoned change excluded it on the grounds that its attestation would be **unsatisfiable** (its remaining commits would restage the HEAD-dependent digest, and F1 forbids re-recording). **Refuted by the external reviewer, confirmed on disk:** its remaining work is **5.4** (a test PR) and **5.5** (*a GitHub repo **setting** — not even a commit*), and both sit **before** its tail. So *owner-steps → commit → **then** attest → **then** archive* is an ordinary available ordering with **zero** intervening commits. The 324-path / 98.5%-foreign range is a **cost**, not an impossibility. ❗ It **does** genuinely lack a `⟶ xtty-openspec-critic` task (confirmed — its tail has only `⟶ archive-ritual`), so *"place the attestation task after the critic task"* has **no anchor** until one is added.
 
 ---
 
@@ -238,6 +288,12 @@ Consequences:
 | "branch protection makes the deadlock **terminal**" | live: `gh api .../branches/main/protection` → **404 "Branch not protected"**; `rulesets` → `[]`; `add-ci-pipeline` task 5.5 is `(Optional)` and **unticked**; solo owner holds `admin:true` | ❌ |
 | "check (4) catches **zero** accidents" (Fable-5, round 1 — **retracted by Fable-5 itself**) | `gpt-5.6-sol` was **right** to insist otherwise: a metadata-only edit to `base=`/`head=`/`reviewed=` is invisible to check (2) (the digest excludes the **whole** attestation line) and refused **only** by check (4). Low value — but not zero. *(gpt's proposed check-(1) template regex does **not** recover it — measured.)* | ❌ |
 | "the honest recovery and the attack produce the **same git state**" (my own phrasing) | they differ: `adds=2/dels=1` vs `adds=1/dels=0` | ❌ → **"mechanically indistinguishable *to the gate*"** |
+| **"the normal post-propose state *is* `exit 0`"** *(this doc's own F4, before the 2026-07-13 revision)* | Measured: **all three** then-open changes read **`exit 10`**, two of them with **zero** own out-of-allowlist paths. `openspec archive` always writes the **non-allowlisted** `openspec/specs/**`, so any change open across any archive **latches to `exit 10` permanently** | ❌ **refuted** → F4 rewritten: the classifier is **non-attributive** and **monotone**, not merely retrospective |
+| **"`propose committed → exit 0`"** *(the F4 lifecycle table)* | `fix-cross-review-gate-task-emission` read **`exit 10` at 1/20 tasks, zero implementation landed** — flipped by **unrelated** work landing in its range | ❌ **refuted** |
+| **"`exit 10` ⇒ this change's implementation landed"** *(used as a validity proxy in the abandoned change's task 6.1)* | Non-attributivity: `exit 10` cannot say **whose** path triggered it. Any check using it as a "did implementation land?" test is a **false-positive test** | ❌ **refuted** — use an **attributive** test (assert the change's own implementation paths are in the range) |
+| **"over-emission costs one *strikeable* task"** *(the standard justification for a fail-closed emission rule)* | **No striking procedure exists anywhere** — every grep hit is the assertion itself. And under F4's latch, BLOCKER-grade enforcement **re-raises the task the moment it is removed** | ❌ **refuted** — fail-closed emission is **not** cheaply reversible (F8b) |
+| **"`add-ci-pipeline`'s attestation is *unsatisfiable*"** *(the abandoned change's D7)* | Its remaining work is a test PR + a GitHub **repo setting** (not a commit), both **before** its tail ⇒ *owner-steps → attest → archive* is an ordinary ordering with zero intervening commits | ❌ **refuted** — **expensive** (324 paths, 98.5% foreign), not impossible (F8c) |
+| **"both open changes violate the gate ⇒ the propose loop is broken"** | **Anachronistic**: both **predate** the obligation (by 12 and 1 days); the **only** post-gate change **did** carry the task — and *that* data point is confounded too | ❌ **refuted** → the case for `config.yaml` is **structural (G13)**, not empirical (F8a) |
 
 ---
 
@@ -252,7 +308,8 @@ All run in `mktemp -d` throwaway repos against the **real** committed scripts. *
 | **Split-commit forward forge** — edit in commit A, attest in commit B | check (4a) is null **without any history rewrite** — the decisive arm (F2) | that the *human* could not have caught it by reading the ledger (they could — that is the real defense) |
 | **Amend-bundle** — commit task text → digest → `--amend` the attestation in | **only** the confinement clause (4b) catches it ⇒ 4b is load-bearing and separable (F3) | ⚠️ **nothing, if you diff raw hunks** — you MUST normalize checkbox state first, or a *tick* is indistinguishable from a *new task line*. **My first probe was broken exactly this way and returned a false negative.** |
 | **Uncommitted-implementation bypass** — real code present, uncommitted → run the classifier | `exit 0` ⇒ the whole precondition is skipped (F5) | that the digest's dirty-tree refusal helps — **it cannot**: it *is* check (3), inside the skipped precondition |
-| **Lifecycle sweep** — run the classifier at propose-commit, then after implementation lands | the verdict moves `exit 0 → exit 10`; `exit 0` is a **false negative** (F4) | scope for *uncommitted* work — that is F5 |
+| **Lifecycle sweep** — run the classifier at propose-commit, then after implementation lands | that `exit 0` is a **false negative**, never an abstention (F4) | ⚠️ **that `exit 0` is the propose-time state at all.** In a repo with *concurrent* changes it is **not** — an intervening archive flips the verdict to `exit 10` **with no implementation landed**. This probe is only clean on an otherwise-idle repo; **run the attribution probe instead** |
+| **Attribution probe** — `scripts/cross-review-scope.sh <change>`, then `git log B..HEAD -- <each out-of-allowlist path>` | **who actually drove the `exit 10`** — the change under review, or foreign work (F4). This is the probe that exposes the latch | that the verdict is *wrong* — it is fail-closed and correct **as a range statement**; what it cannot do is attribute |
 
 **Dead instrument (record it so it is not retried).** `gpt-5.6-sol`'s sandbox **blocked `mktemp`** (`Operation not permitted`), so it **never ran a drill** in the co-research. It corroborated by **reading primary source** — and was repeatedly the *more careful reader* (it caught the metadata-corruption tripwire against Fable-5's "zero accidents" overclaim, and caught Fable grepping for an implementation string instead of reading normative prose). **So the empirical leg is single-runner (Fable-5 + Opus).** ❗ **Do not oversell "cross-model empirical consensus"** — the *analytic* consensus is genuine; the *empirical* one is not.
 
@@ -265,7 +322,7 @@ All run in `mktemp -d` throwaway repos against the **real** committed scripts. *
 Never re-read the spec to "confirm" any of this. Re-run:
 
 1. **F1/F2/F3** — build a throwaway repo, attest, then run the four probes above. Expect: every forward recovery **red**; the split-commit forge **green on all four checks**; the amend-bundle **green except confinement**.
-2. **F4** — `scripts/cross-review-scope.sh <a change whose implementation has not landed>` ⇒ **exit 0**. Then land its implementation and re-run ⇒ **exit 10**. The verdict *moved*; the change did not.
+2. **F4 (rewritten — the old step here was itself refuted).** ❌ *Do **not** re-verify by "run it on an unimplemented change ⇒ expect `exit 0`" — that only holds on an otherwise-idle repo.* ✅ Instead run the **attribution probe**: `scripts/cross-review-scope.sh <any long-lived open change>` ⇒ almost certainly **exit 10**; then, for **each** out-of-allowlist path it names, `git log B..HEAD --oneline -- <path>` and check **whose** change introduced it. Expect: the drivers are **foreign**. Then confirm the mechanism directly — `openspec archive` writes `openspec/specs/**`, and `openspec/specs/*` is **absent** from `cross-review-scope.sh`'s `allowlisted()` case statement. That is the **latch**.
 3. **F5** — leave real product code **uncommitted**, run the classifier ⇒ **exit 0**. That is the bypass.
 4. **F6** — `git diff --name-only "$B"..HEAD | wc -l` for any parked change, then make **one unrelated commit** and re-run. The number **moves**. That is the HEAD-dependence.
 
@@ -277,7 +334,13 @@ Never re-read the spec to "confirm" any of this. Re-run:
 
 - **G-GATE-1 — A mechanical check the recovering party can launder by `git reset` guarantees nothing against an adversary; and if it *also* forbids the honest recovery, it is a liveness cost you must price explicitly.** ⚠️ **But do not read this as "delete such a check"** — an earlier draft did, and that was wrong twice over: the counter turned out to be the gate's *principal accident tripwire* (a null-against-adversaries check can still be the only thing catching a *careless* actor), and deleting it would not even restore liveness (clause 4c blocks the honest recovery independently). **Price every clause against both an adversary AND an accident, and against liveness — then decide. This doc decides nothing** (F3).
 - **G-GATE-2 — Don't judge a check by a standard it never claimed.** D10 already scopes all four checks to **accident tripwires**, not adversarial guarantees. The honest question is never *"can it be forged?"* (yes — that is R3, accepted) but *"does it catch the **ordinary, non-adversarial** failure it is aimed at, without false-positiving the honest path?"* **My own error, recorded:** I judged check (4) adversarially, found it wanting, and proposed removal — then had to be corrected twice (once by the review, once by my own probe) before landing on the right question.
-- **G-GATE-3 — A retrospective classifier cannot be asked a prospective question.** One that scopes from *committed* paths returns, before implementation lands, a **confident false negative** — not an abstention. **Only its positive verdict is informative**; treat every other outcome as *"not yet knowable"*, never as *"no"*. Corollary: a check whose severity derives from such a classifier may take **blocker force only from the positive verdict**.
+- **G-GATE-3 — ⚠️ REVISED. A range-scoped classifier answers a question about the RANGE, not about the change — so it can be asked *neither* a prospective question *nor* an attributive one.** The original form of this guideline said only *"a retrospective classifier cannot be asked a prospective question"* — true, but it **understated the defect** and was refuted as a *sufficient* account (F4). Three properties, and the third is the one that bites:
+  - **Retrospective** — scoping from *committed* paths, it returns a **confident false negative** before implementation lands, not an abstention. Treat a negative as *"not yet knowable"*, **never** *"no"*.
+  - **Non-attributive** — a *positive* verdict says only that **some** path in the range is out-of-allowlist, **never whose**. So *"only the positive verdict is informative"* (the original corollary) is **too generous**: the positive verdict is informative **about the range**, and about the change **only** if the range happens to be clean.
+  - **Monotone / latching** — if the range mechanically accretes an out-of-allowlist path over time (here: **every** `openspec archive` writes the non-allowlisted `openspec/specs/**`), then **every long-lived change eventually reads positive, permanently**, and the verdict decays to a constant that carries **no information about any change at all.**
+  **Corollary (the load-bearing one):** *never* use such a verdict as a **proxy** for a property of the change — "did its implementation land?", "is it in scope?", "may this check fire?" — and **never hang BLOCKER force on it** until the range is **narrowed to the change's own paths**. Narrowing is a **prerequisite**, not an optimization. Test for the disease by **attribution**, not by the verdict: `git log B..HEAD -- <each out-of-allowlist path>` and ask *whose* it is.
+- **G-GATE-6 — A fail-closed emission rule is only cheap if the *strike* is a first-class, defined act. Define it, or drop the cheapness claim.** *"When in doubt, emit; over-emission costs one strikeable task"* is the standard justification — and it is **false unless someone specified striking**. Here nothing did: no actor, no authority, no recorded form, and **no rule distinguishing *"strike an over-emitted task"* from *"delete an inconvenient gate task"*** — the precise act the gate exists to prevent. Worse, pairing fail-closed emission with BLOCKER-grade enforcement makes the over-emission **irreversible** (the BLOCKER re-raises the task the moment it is removed), so the two halves **contradict each other**: emission is justified as cheap *because reversible*; enforcement makes it *un*-reversible (F8b).
+- **G-GATE-7 — Don't infer "the tool is broken" from artifacts that predate the tool.** An obligation shipped on date *D* cannot be evidenced-as-failing by changes proposed **before** *D* — they are a **retroactively-applied rule**, not a broken loop. Check the dates **before** claiming severity: here the two "violating" changes predated the gate by 12 days and 1 day, and the **only** post-gate change **did** carry the task (though *that* is confounded too — git cannot distinguish loop-emitted from hand-added in one commit). **n=1 either way ⇒ argue structurally, not empirically** (F8a). Corollary for **migrations**: a retroactive obligation on pre-existing work needs an explicit **grandfathering** decision — *"compare the change's proposal commit against the rule's ship commit"* is mechanical and dateable — or you hand someone an obligation they had no chance to meet.
 - **G-GATE-4 — A precondition gated on a classifier blind to uncommitted work is bypassable by simply not committing — and an *inner* dirty-tree check cannot backstop an *outer* scope skip.** Put the cleanliness refusal in the **classifier**, at the outermost gate, not only in the tool that runs after the gate has already decided to apply.
 - **G-GATE-5 — Test every clause of a check against the *same* adversary/accident model. An asymmetric standard makes a null clause look load-bearing.** This doc's own error: it judged the counter by an **adversarial** standard (null ⇒ delete) and the confinement clause by a **bundle-only** standard (catches the one attack I constructed ⇒ *"load-bearing"*) — then a one-step generalization of its *own* F2 attack defeated confinement too. Corollaries, each paid for: **(a)** enumerate *all* clauses first (check (4) had **three**; I found two). **(b)** Check whether a clause's *subject* depends on another clause (4b's *"introducing commit"* is well-defined **only** while 4a holds — they are **not** separable). **(c)** Ask what each clause catches **non-adversarially** *before* deleting it (the counter turned out to be the gate's **principal accident tripwire**). **(d)** When your prescription flips on each round, **stop prescribing** — that is the tar pit (**G-TARPIT-3**), and a forensics doc's job is to record what *is*, not to pre-decide a contested fix.
 
@@ -285,13 +348,39 @@ Never re-read the spec to "confirm" any of this. Re-run:
 
 ## 7. Evidence artifacts
 
-- The committed ledger (findings **F1–F12, G1–G11**, every dismissal with its rationale): `openspec/changes/fix-cross-review-gate-task-emission/cross-review-ledger.md`.
-- Workflows: **`wf_9af3679c-537`** (co-research: `converged:true`, 3 rounds) · **`wf_cfbf0992-20b`** (adversarial verification, 9 agents).
-- Commits: `3815113` (propose) → `eadd8d0` (round 1: the fail-open exit-arm fix) → `f1f9edc` (round 2: bound closed, sequencing escalated).
+- The committed ledger — **4 rounds**, findings **F1–F12, G1–G11, H1–H8, R4-1…R4-13**, every dismissal with its rationale: `openspec/changes/archive/2026-07-12-fix-cross-review-gate-task-emission/cross-review-ledger.md` *(the change was **abandoned** — §9 — so the ledger now lives in the archive; it is the fullest record of how these defects were found).*
+- Workflows: **`wf_9af3679c-537`** (co-research: `converged:true`, 3 rounds) · **`wf_cfbf0992-20b`** (adversarial verification, 9 agents) · **`wf_d714bb3c-772`** (the abandonment audit: 32 agents, every stranded finding adversarially verified).
+- Commits: `3815113` (propose) → `eadd8d0` (round 1) → `f1f9edc` (round 2) → `dca6b11` (round 3) → `ad91b12` / `69efa68` (round 4: the latch) → the abandonment.
 - The gate itself: `scripts/cross-review-{scope,digest}.sh`, `scripts/test-cross-review-scripts.sh`, `openspec/specs/cross-model-review/spec.md`.
 
 ## 8. Open — **not** decided here
 
-**Sequencing is escalated to the human and is NOT settled.** Both soundness passes, on **different model families** (Pass C round 1; `gpt-5.6-sol` round 2, an explicit *"no-ship"*), independently argue the **check-(4a) deletion** and the **range-pollution / dirty-tree** fixes should land **before** `fix-cross-review-gate-task-emission` — which makes gate-task enforcement *routine* while F5's bypass is open and F1's attestation model is unrecoverable. The counter-argument: the deadlock is only *reachable* once a change acquires an attestation, and today nothing prompts one. **Constraining fact:** the gate **already** applies to both open changes (`exit 10`) either way, so `fix-cross-review-gate-task-emission` does not *create* the exposure — it makes it *routine*.
+**Sequencing is escalated to the human and is NOT settled.** Both soundness passes, on **different model families**, argued across four rounds (`gpt-5.6-sol` returned **four consecutive no-ships**) that the **check-(4a) deletion** and the **range-pollution / dirty-tree** fixes should land **before** any change that makes gate-task enforcement *routine* — while F5's bypass is open and F1's attestation model is unrecoverable. ❗ **Round 4 settled the empirical half of that argument** (F4): range pollution is **not hypothetical and not an edge case** — it is **structural**, and it had already **latched** the very change under review. **That is now a reason to fix the range FIRST**, and it is the strongest single input to whatever replaces the abandoned change.
 
 ❗ **Codex's proposed remedy for F1 — "append-only, explicitly superseding attestation generations" — is DISMISSED**: it is the **refuted "recoverable attestation epoch"** (G-TARPIT-1/2). Its **sequencing** argument stands; its **remedy** does not. Neither the check-(4a) change nor the range-pollution change has been proposed yet.
+
+---
+
+## 9. ⚠️ The emission fix was ABANDONED (2026-07-13) — what that leaves, and why it is recorded here
+
+`fix-cross-review-gate-task-emission` — the change that would have wired the gate task into `openspec/config.yaml` and given the critic a blocking check — was **abandoned as won't-do at 1/20 tasks** and archived **without merging its spec deltas** (`openspec archive --skip-specs`). Its four rounds of cross-model review are the source of **F4 (revised)**, **F8**, **G-GATE-3 (revised)**, **G-GATE-6**, and **G-GATE-7** above.
+
+**Why it was abandoned** — three design-shape questions its own review could not settle, on top of a standing four-no-ship sequencing escalation:
+
+| | The question it could not answer |
+| --- | --- |
+| **Q1** | **Sequencing** — should it land *after* the range-pollution fix? Round 4 turned this from an argument into a **measurement**: the pollution had already latched the change itself (F4). |
+| **Q2** | **Should the `exit 10` arm carry BLOCKER force at all?** Under the latch, the verdict is a near-constant carrying no information about any change — so a BLOCKER hung on it would be **red by default on nearly every change**, and since nothing executable consumes a critic BLOCKER (**F7**), its only force is the reader's attention. |
+| **Q3** | **Migrate, grandfather, or exclude** the two pre-gate changes? Its exclusion premise was **refuted** (F8c) and both changes **predate the obligation** (F8a/G-GATE-7). |
+
+**The honest read: Q2 dissolves if the range is narrowed first.** The change tried to build enforcement **on top of** a classifier whose verdict cannot attribute — and every one of its hardest problems traces back to that. **The prerequisite is F4's narrowing, not this change.**
+
+**What remains BROKEN, and is now nobody's task:**
+
+1. **Emission and enforcement are still unfixed** — `openspec/config.yaml` has **0** cross-review rules; the critic's gate-task check is still **REVIEW-only, never a BLOCKER** (F8a). Nothing prompts a human to run the review; they discover the requirement only when archive refuses.
+2. **Neither open change carries the gate task the shipped spec requires** (`add-ci-pipeline`, `add-git-diff-wrap-toggle` — both `exit 10`, both **0** attestation tasks). Per **G-GATE-7** the right disposition is probably **grandfathering**, but **no decision has been made.**
+3. **`add-ci-pipeline` has no `⟶ xtty-openspec-critic` task at all**, so the *"place the attestation task after the critic task"* rule has **no anchor** for it (F8c).
+
+**What was FIXED while abandoning** (so the abandonment is not a pure loss): the **false mechanism claim** — *"a classifier over **the change's changed paths**"* — was corrected in **`openspec/specs/cross-model-review/spec.md`** and **`AGENTS.md`**, and the refuted lifecycle claim was corrected **in this document** (F4). Those three surfaces had all been asserting a mechanism the tool does not implement.
+
+**Guidance for whatever replaces it:** start from **F4's range narrowing** (`scripts/cross-review-scope.sh`), settle **grandfathering** (G-GATE-7) and the **strike** (G-GATE-6) *before* proposing enforcement, and take the check-(4) tension to an `/opsx:explore` (F3) — **do not inherit a prescription from any model-authored artifact, including this one.**
