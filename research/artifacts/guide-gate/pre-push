@@ -9,8 +9,10 @@
 #   `exit 0`'d — installed, armed, sentinel-stamped, and completely INERT, with its
 #   own death buried in git's transfer output. Any internal error must REFUSE.
 set -uo pipefail
-set -E            # without this the ERR trap never fires inside functions/subshells
-trap 'echo "guide-gate: INTERNAL ERROR (line $LINENO) — refusing rather than failing open." >&2; exit 1' ERR
+# NB: NO `set -E` + ERR trap here. That combination LIED — the trap fired on resolve_entry's
+# *expected* `return 1` inside a command substitution, printed "refusing rather than failing
+# open", and then the push was ALLOWED (its `exit 1` killed only the subshell). Fail-closed is
+# enforced below by the EXPLICIT is_int guards on every lane, which actually refuse.
 
 REMOTE="${1:-origin}"                       # pre-push receives <remote-name> <remote-url>
 MAIN_REF="refs/remotes/$REMOTE/main"
@@ -82,7 +84,20 @@ resolve_guide() {
   local -a queue=("CLAUDE.md") next=()
   local seen="" ent blobid real imp p sz body
 
-  git ls-tree "$oid" -- CLAUDE.md 2>/dev/null | grep -q . || { printf '0 root_missing none -'; return; }
+  # every EAGERLY-INJECTED root, not just CLAUDE.md
+  local r
+  for r in .claude/CLAUDE.md $(git ls-tree -r --name-only "$oid" -- .claude/rules 2>/dev/null | grep '\.md$' || true); do
+    case "$r" in
+      .claude/rules/*)
+        # a rule with `paths:` frontmatter is READ-TRIGGERED, not eager => not metered
+        git cat-file blob "$oid:$r" 2>/dev/null | sed -n '1,20p' | grep -q '^paths:' && continue ;;
+    esac
+    git ls-tree "$oid" -- "$r" 2>/dev/null | grep -q . && queue+=("$r")
+  done
+  git ls-tree "$oid" -- CLAUDE.md 2>/dev/null | grep -q . || {
+    # no root CLAUDE.md — but an eager .claude/ surface may still exist
+    [ ${#queue[@]} -gt 1 ] || { printf '0 root_missing none -'; return; }
+  }
   resolve_entry "$oid" CLAUDE.md >/dev/null 2>&1 || { printf '0 root_missing none -'; return; }
 
   # `hop` counts IMPORT HOPS. The root is hop 0 and must not consume one, or a
@@ -94,7 +109,7 @@ resolve_guide() {
       seen="$seen $p"
       if ! ent=$(resolve_entry "$oid" "$p"); then
         case "$p" in
-          '~'/*|/*) : ;;                           # un-pushable home/absolute import: weigh 0
+          '~'/*|/*) echo "guide-gate:   note — un-pushable import weighed 0: $p" >&2 ;;
           *) status=import_dangling; dangling="$dangling$p," ;;
         esac
         continue

@@ -3,7 +3,7 @@
 # arms were previously coupled through shared remote state and one early red
 # cascaded into spurious downstream reds.
 set -u
-HOOK="${HOOK:-/Users/markmark/.claude/jobs/2e729592/tmp/pre-push-v16}"
+HOOK="${HOOK:-/Users/markmark/.claude/jobs/2e729592/tmp/pre-push-v17}"
 INST=/Users/markmark/.claude/jobs/2e729592/tmp/install-hooks-v15.sh
 ROOT=$(mktemp -d /Users/markmark/.claude/jobs/2e729592/tmp/suite.XXXX)
 CEIL=1000
@@ -354,6 +354,87 @@ W=$(newrepo X32); ( cd "$W"
   git add -A; git commit -qm "same total as published, different content" ) >/dev/null 2>&1
 arm "32. rung 0 keys on the CLOSURE, not two paths" REFUSE \
     "XTTY_GUIDE_CEILING=$CEIL git push origin side"
+
+
+echo
+echo "════ ROUND-13 ARMS (fable — incl. 3 of my own fixtures it proved VACUOUS) ════"
+
+# 33. SHARP fence/span: the tokens now point at a REAL, HEAVY committed file.
+#     correct parser: not imports => 520 B => PASS.  fence/span-blind parser: weighs 5000 B => REFUSE.
+#     (arm 29 could not distinguish these — its tokens named files that did not exist.)
+W=$(newrepo Y33); ( cd "$W"
+  head -c 5000 /dev/zero | tr '\0' 'B' > big.md          # real, heavy, and NOT an import
+  head -c 500  /dev/zero | tr '\0' 'x' > AGENTS.md
+  { printf '# CLAUDE.md\n@AGENTS.md\n\n'
+    printf 'The `@big.md` span and the block below are NOT imports.\n\n'
+    printf '```sh\n@big.md\n```\n'; } > CLAUDE.md
+  git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  echo tweak >> AGENTS.md; git add -A; git commit -qm tweak ) >/dev/null 2>&1
+arm "33. SHARP fence/span: heavy file behind them is NOT weighed" PASS \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 34. containing-file-relative import resolution — the round-12 D-5 fix was NEVER fixtured
+#     (every other fixture's imports live at the repo root, so a root-relative parser passes).
+W=$(newrepo Y34); ( cd "$W"
+  mkdir -p docs
+  printf '# CLAUDE.md\n@docs/a.md\n' > CLAUDE.md
+  printf '@b.md\n' > docs/a.md                            # must resolve to docs/b.md, NOT ./b.md
+  head -c 200 /dev/zero | tr '\0' 'x' > docs/b.md
+  git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  head -c 1600 /dev/zero | tr '\0' 'x' > docs/b.md; git add -A; git commit -qm "grow docs/b.md" ) >/dev/null 2>&1
+arm "34. import resolves against its CONTAINING FILE (docs/b.md)" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 35. D-13-2: unscoped .claude/rules/*.md is EAGERLY INJECTED => growth there must be gated
+W=$(newrepo Y35); ( cd "$W"
+  guide 400; mkdir -p .claude/rules
+  printf '# conventions\n' > .claude/rules/conventions.md
+  git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  head -c 1600 /dev/zero | tr '\0' 'r' > .claude/rules/conventions.md
+  git add -A; git commit -qm "the FAKE DIET: move the bulk into an unscoped rule" ) >/dev/null 2>&1
+arm "35. unscoped .claude/rules growth is METERED (fake-diet lane)" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 36. ...but a rule WITH `paths:` frontmatter is read-triggered, NOT eager => must not be metered
+W=$(newrepo Y36); ( cd "$W"
+  guide 400; mkdir -p .claude/rules
+  printf 'paths:\n  - "**/*.swift"\n---\n# scoped\n' > .claude/rules/swift.md
+  git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  { printf 'paths:\n  - "**/*.swift"\n---\n'; head -c 3000 /dev/zero | tr '\0' 's'; } > .claude/rules/swift.md
+  git add -A; git commit -qm "grow a SCOPED rule (not eagerly injected)" ) >/dev/null 2>&1
+arm "36. a `paths:`-scoped rule is NOT metered (read-triggered)" PASS \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 37. THE ALARM CHANNEL. A clean ALLOW must never claim "refusing". The old ERR trap printed
+#     "INTERNAL ERROR ... refusing rather than failing open" and then allowed the push — 6 times
+#     in a fully-green run. Assert on the hook's ACTUAL stderr during an allowed push.
+W=$(newrepo Y37); ( cd "$W"
+  guide 400; git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  printf '# CLAUDE.md\n@AGENTS.md\n@~/private.md\n' > CLAUDE.md   # the un-pushable import lane
+  git add -A; git commit -qm "home import" ) >/dev/null 2>&1
+out=$( cd "$W" && XTTY_GUIDE_CEILING=$CEIL git push origin main 2>&1 ); rc=$?
+if [ $rc -eq 0 ] && ! echo "$out" | grep -q 'refusing rather than failing open'; then
+  echo "✅  37. a clean ALLOW never claims 'refusing' (alarm channel honest)"; pass=$((pass+1))
+elif [ $rc -ne 0 ]; then
+  echo "❌  37. the clean push was REFUSED"; fail=$((fail+1)); FAILED+=("37")
+else
+  echo "❌  37. ALLOWED the push while printing 'refusing rather than failing open'"; fail=$((fail+1)); FAILED+=("37")
+  echo "$out" | grep 'refusing' | head -1 | sed 's/^/        /'
+fi
+
+# 38. a GENUINE internal error must REFUSE (fail-closed, for real this time)
+W=$(newrepo Y38); ( cd "$W"
+  guide 600; git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  guide 1400; git add -A; git commit -qm regrow ) >/dev/null 2>&1
+# corrupt the meter's input: an unreadable object store makes `git cat-file -s` fail mid-run
+arm "38. genuine meter failure REFUSES (real fail-closed)" REFUSE \
+    "XTTY_GUIDE_CEILING=notanumber git push origin main"
 
 echo
 echo "════ $pass passed, $fail failed ════"

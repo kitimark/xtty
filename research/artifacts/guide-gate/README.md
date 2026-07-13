@@ -80,7 +80,29 @@ Also fixed in v16: an **unborn HEAD** (`git checkout --orphan`) hit an early `ex
 gate (arm 30); **rung 0** compared only `CLAUDE.md`/`AGENTS.md`, so equal totals with different
 *imported* content passed as "identical to published" — it now hashes the whole resolved closure (arm 32).
 
-### ⚠️ STILL OPEN (real, recorded, NOT fixed — they are polish, and the gate is not the bottleneck)
+### ✅ BOTH ARE NOW FIXED (38/38, one-to-one mutation kills)
+
+- **The ERR trap was LYING — deleted.** `set -E` propagated it into command substitutions, where
+  `resolve_entry`'s **expected** `return 1` fired it: the hook printed *"INTERNAL ERROR … refusing
+  rather than failing open"* and then **ALLOWED the push** (its `exit 1` killed only the subshell).
+  **Six such lines appeared in a fully-GREEN run.** A trap that cannot refuse is worse than no trap —
+  it discredits the one channel fail-closed depends on. **Fail-closed is enforced by the explicit
+  `is_int` guards, which actually refuse** (arm 38: a malformed ceiling REFUSES; arm 37: a clean
+  allow never claims "refusing").
+- **`.claude/CLAUDE.md` + unscoped `.claude/rules/*.md` are now METERED.** They are eagerly injected
+  (*"rules without `paths` frontmatter are loaded at launch with the same priority as
+  `.claude/CLAUDE.md`"*) and were invisible — an unmetered **fake-diet lane**, and the docs' own
+  remedy for an oversized guide is *"split it into `.claude/rules/`"*. A `paths:`-scoped rule is
+  **read-triggered, not eager** ⇒ correctly **not** metered (arms 35, 36).
+
+### Historical note — the three VACUOUS fixtures fable caught (all now sharp)
+
+Arm 29's fenced/prose `@tokens` named files that **did not exist**, so a fence-blind parser only
+warned-and-allowed — the same verdict, proving nothing (**arm 33** now points them at a real 5,000 B
+file). **No arm tested containing-file-relative import resolution at all** — round 12's own D-5 fix
+was unfixtured (**arm 34**). And the latch mutant survived 29/29 (**arm 31**).
+
+### The old "STILL OPEN" list (kept for the record)
 
 - **The ERR trap CRIES WOLF.** It prints *"INTERNAL ERROR … refusing rather than failing open"* and
   then **ALLOWS the push** — `set -E` propagates the trap into command substitutions, so
