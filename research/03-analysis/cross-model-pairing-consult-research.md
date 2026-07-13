@@ -202,6 +202,73 @@ Never re-read this doc to "confirm" any of it. Re-run:
 
 ---
 
+## 9b. ❗ Best practices for integrating `gpt-5.6-sol` (the operational playbook)
+
+*Earned across five runs. The strategic half answers **what a second model is for**; the operational half is a list of things that each cost a failed run to learn. Nothing here needs a human attestation — **the whole playbook carries zero authority by construction.***
+
+### The one-sentence version
+
+> **A second model is not a smarter oracle. It is an INDEPENDENT RE-MEASURER WITH AN ATTACK MANDATE.** It earns its cost by *running the checks the first model skipped* — not by knowing things the first model didn't.
+
+`gpt-5.6-sol` said this about itself, unprompted, and every measurement agrees: *"Nothing about this required a capability unavailable to one careful model. My concrete contribution was **independent remeasurement**… the useful difference is **redundancy and a fresh attack**, not a claim that a single model could not have reached the same result."*
+
+### ⚠️ The failure mode that matters most: **two approving models are not evidence — they are a warning sign**
+
+Measured **three times**, and the third is the one to remember:
+
+| Run | What "both models agreed" produced |
+| --- | --- |
+| Round 1 | Both agreed the classifier's two `exit 0` verdicts were *"correct waivers."* ❗ **One had shipped 259 LOC** (**F9**). A shared false frame, invisible to both — caught only by a **non-participant**. |
+| Round 2 | `fable-5` published a *"Converged position (joint, final)"* — `gpt-5.6-sol` **refuted it one turn later on four points**, including an unsound primitive `fable-5` had invented itself. **The convergence it declared did not exist.** |
+| **F7 consult** | `fable-5` proposed a CI audit design; `gpt-5.6-sol` independently reviewed it — *"I would ship this detector alone."* ❗ **BOTH APPROVED.** A **non-participant** then killed it with **three verified accident-class bypasses**: it was **rename-blind** (`openspec archive` **moves** the dir ⇒ git records `R`, not `A`; `--diff-filter=A` finds **ZERO** adds on **2 of 3** real archive commits) and **would have gone GREEN on the very unattested archive it existed to catch.** |
+
+⇒ ❌ **NEVER "loop until both models approve."** It has **no fixed point** (the tar pit: 4 bounded rounds, **+45%** bloat, a **regressed** guarantee), and — as the F7 consult proves — **it terminates happily on a broken design.** Approval is the cheapest thing a model produces and the least informative.
+
+### The pipeline that actually works
+
+```
+   YOU state a claim ──▶ COLD · BLIND · PARALLEL (fable-5 ‖ gpt-5.6-sol)
+                         attack mandate · falsifiers are COMMANDS TO RUN
+                                    │
+                         ONE adversarial exchange
+                         "no joint answer · never say converged ·
+                          name every concession AND ITS SOURCE"
+                                    │
+                         ▼ NON-PARTICIPANT (neither model spoke)
+                         re-runs every load-bearing number from git
+                         and TRIES TO KILL whatever survived
+                                    │
+                         ▼ YOU re-verify the load-bearing claims yourself
+```
+
+Every step that ever mattered was a **measurement**, never an opinion.
+
+### Do this
+
+| | |
+| --- | --- |
+| **Point them at CODE, not doctrine** | The biggest single lever (**G-CONSULT-8**). On a code diff the two families found **disjoint** findings; on a design question in a doctrine-heavy repo they **agreed completely — by reading your own docs back to you.** |
+| **Make falsifiers COMMANDS, not arguments** | *"Run these and report what you got."* Every finding that **survived** verification was a **check**; every one that **dissolved** was an **opinion**. |
+| **Attack mandate, never "work together"** | *"Work together"* produced co-authoring and a **false consensus**. *"Attack its load-bearing claims"* produced the kills. |
+| **A NON-PARTICIPANT merges** | A participant asked to synthesize **publishes a false consensus** (measured twice). The killer role is the highest-value seat in the whole setup. |
+| **Ask them to name each concession's SOURCE** | *"If you concede because of a **document** rather than your partner's argument, say so."* Catches a model narrating a doc-driven update as *"you persuaded me"* — measured, verbatim. |
+| **Tell them approval is a warning sign** | Put the F7 no-op story **in the brief**. A model told *"if you agree with your partner, hunt for what you BOTH missed"* behaves measurably differently. |
+| **Fire at explore + apply. Never at archive.** | Apply = highest clean yield (**G-CONSULT-10**). Archive = **zero** (already done by `openspec validate`). |
+
+### ⚙️ Operational — each of these cost a failed run
+
+- ❗ **`codex task --effort xhigh` exceeds the Bash tool's 10-minute hard cap.** A relay **subagent can never own it** — it times out (exit 143), every time. **Drive it from the MAIN LOOP with `run_in_background: true`** (detached, no cap), or have the relay `nohup` it and poll. *This killed a whole workflow.*
+- **The companion broker is SINGLE-FLIGHT.** Concurrent `codex` calls **collide**. Serialize them — one in flight at a time, ever.
+- ❌ **`--resume` is unreliable** — no thread-id pin (it targets *"the latest task job in this session"*), and it **silently cold-spawns** on `-32001`. ⇒ **Use stateless context packets in `--fresh` calls**: re-pass the transcript every turn. It works fine.
+- **Stage the brief OUT-OF-REPO** (`mktemp`) and read it into **ONE** positional (`"$(cat …)"`). Inline literals get their backticks/`$` expanded and word-split into positionals that the companion's `join(' ')` then collapses. Out-of-repo also keeps it out of the digest and the dirty-tree refusal.
+- ⚠️ **Your agents read the WORKING TREE, and `CLAUDE.md` is AUTO-INJECTED.** Uncommitted notes leak into any *"blind"* run (measured: both models read an uncommitted capture and **cited it by line number**). For blind work: **stash or stage-pin the tree**, and check whether the answer is sitting in a **tracked** artifact too.
+- **`adversarial-review` is one-shot and schema-locked; `task` is free-text and multi-turn.** Use `adversarial-review` when you want the `review-output` schema for a diff; use `task` for everything else.
+
+### What it is NOT for
+
+❌ **Values calls.** Asked directly whether attestation fatigue outweighs classifier imprecision, **both models refused** — they escaped to a third option at round 1, independently, and never adjudicated it across three rounds. **A question your repo has doctrine on will come back as your doctrine.** Route values calls to the human.
+❌ **Authority of any kind.** No verdict, no approval, no receipt, no consensus flag may gate anything. This is *why* the playbook needs **no attestation** — it certifies nothing.
+
 ## 10. Evidence artifacts
 
 - Workflows **`wf_7dc648df-c92`** (round 1) · **`wf_ad1902f2-a7e`** (round 2). Journals carry every model's verbatim answer and both measurers' structured verdicts.
