@@ -1003,6 +1003,43 @@ unchanged live file), **and** the unchanged-file **NEGATIVE** fixture must be re
 4. **The bypass list was too narrow.** Not only `--no-verify`: also **`git -c core.hooksPath=/dev/null push`**,
    removing the hook, and direct plumbing/API pushes. **All the same accepted R3 trust class** — but say so.
 
+### A5-vicies-quinquies. ROUND 7 (fable-5) — the CLAUDE.md MODE-SWAP, and the refusal protocol that no longer matches its gate
+
+**Converged with `gpt-5.6-sol` on the fresh-clone hole and the input-domain bug.** Two more, both new:
+
+1. ❗ **THE `CLAUDE.md` MODE-SWAP — a SILENT, PERMANENT re-route around the meter.** **Claude Code injects
+   `CLAUDE.md`**; today it is mode **`120000` → `AGENTS.md`**. **The gate measures `AGENTS.md`.** ⇒ **A commit
+   flipping `CLAUDE.md` to a regular file (`100644`) makes the eagerly-injected surface a file the gate never
+   weighs — forever.** ❗ *`agent-guide-parity` already forbids this — **but it is advisory-grade: the exact
+   class this proposal's own diagnosis says gets overridden.*** **Honest narrowing (measured, not assumed):**
+   BSD `sed -i` **refuses** symlinks and write-through tools land **in the `AGENTS.md` blob where the gate sees
+   them** ⇒ **the live lanes are `mv`, atomic-rename editor saves, and `git add -A` after a broken link.**
+   ✅ **Fix: the hook ASSERTS `CLAUDE.md` is still `120000 → AGENTS.md` in the pushed tree, + a mode-swap
+   fixture.**
+2. ❗ **THE REFUSAL PROTOCOL NO LONGER MATCHES ITS GATE.** §5's *"stop ONLY the `AGENTS.md` append"* was written
+   for a **write-time** gate. **The gate now refuses at PUSH — the append is already inside a committed
+   object**, so the instruction **has no meaning** and a refused session would **improvise `reset`/amend
+   surgery.** ❗ ***This is the brief's own standard — "an unanchored step gets improvised; that is how G13 was
+   born" — turned on its own gate.*** ⇒ **State the unwind procedure explicitly.**
+
+✅ **AND IT RESOLVED THE ROUND-7 COLLISION** (§A5-vicies-ter) **by re-reading §7 rather than assuming:** the
+*"RED on the live file"* is **the METER's over-ceiling reading (81,012 > ~66 KB)**, *not* a push refusal —
+while the **GATE** correctly lets the unchanged push through. **Both are true at once.**
+⇒ **Acceptance = meter RED + a committed positive mutation REFUSED + the unchanged push PASSING. All three, or
+the claim is a lie.**
+
+✅ **Cleared by measurement, no finding:** **force-push** evaluates tip-vs-baseline normally · **offline** is
+safe (the baseline is a local ref; no network) · **worktrees** share repo config and keep the gate · **a stale
+baseline cannot land growth on `main`** (non-fast-forward rejection forces a fetch first) — which, with
+**"gate `refs/heads/main` ONLY"** (*`main`'s tree is the only one injected*), **also closes `gpt-5.6-sol`'s
+stale-baseline scenario.**
+
+⚠️ **And the fresh-clone hole has an IRREDUCIBLE remainder, accepted in writing:** git **never** propagates
+hook config from cloned content (by design, for security) ⇒ ***no committed file can make a clone self-arm.***
+Install at every entry point a *building* clone must run (`make setup`, `scripts/bootstrap-swiftterm.sh`), have
+**CI verify installation** — but **a docs-only clone never runs `make`**, so **the un-configured clone is an
+accepted residual routed to the CI-detector lane.**
+
 ### A6-pre. ❗ CORRECTION (probe, 2026-07-13) — there IS a decision-time channel, and §A6 below missed it
 
 §A6's table concluded *"the refutations cannot be relocated; compression is the only lever."* **That
