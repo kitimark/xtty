@@ -898,6 +898,59 @@ token metric to the ratchet, or explicitly NARROW the ratchet's claim to a bytes
 recurring token-cost acceptance check.** *A guard whose meter is not monotone with its objective can be
 satisfied while the objective regresses.*
 
+### A5-vicies-semel. ✅ ROUND 6 CONVERGENCE — both models found the SAME two defects independently; the design is now being REFINED, not killed
+
+**Convergence ON DEFECTS (the only kind that counts):** both reviewers independently found **(a)** the
+command-string matcher is unreliable and **(b)** the checker was measuring the **wrong object**. Neither
+authored the other's finding.
+
+**fable-5 pushed (b) further than gpt did, and found the freeze:**
+
+❗ **THE RATCHET'S COMPARATOR HAD NO DEFINED BASELINE — and the obvious reading FREEZES THE REPO.**
+*"Permit only strictly-decreasing edits while over budget"* is **uncomputable from a snapshot**: *decreasing
+relative to what?* **The gate sees a PUSH, not an edit.** During the **mandated** guard-red window (81 KB file,
+66 KB ceiling), **an untouched file is not "strictly decreasing"** ⇒ **every unrelated push is refused.**
+***The CI-red disease, re-imported through the hook — and the brief's own wording invited that
+implementation.***
+
+✅ **THE CORRECT COMPARATOR:**
+> **current** = the pushed ref's blob · **baseline** = `origin/main:AGENTS.md`
+> **while OVER the ceiling: refuse iff `current > baseline`** *(a shrinking or unchanged push always passes ⇒
+> the diet is always permitted and unrelated work is never frozen)* · **once UNDER: refuse iff
+> `current > ceiling`.**
+
+**And two more:**
+- ❗ **The mutation suite had ZERO push-variant fixtures — the design FAILED ITS OWN RULE** (*"a guard never
+  demonstrated to fail is not a guard"*). ⇒ add `git -C <abs> push`, `git -c k=v push`, `cd x && git push`,
+  env-prefixed, heredoc-embedded, a **fat-commit-from-a-clean-looking-dirty-tree**, **and a NEGATIVE fixture**
+  (an unrelated push during the red window MUST pass — proving no freeze).
+- ✅ **BIAS THE MATCHER BROAD — the asymmetry is free.** An **over-match costs nothing** (the hook refuses only
+  on a *measured breach*, so a heredoc merely *mentioning* `git push` measures and passes); an **under-match is
+  fatal.** *(Also DERIVED: the Makefile/alias lanes are **closed** in this repo — `grep -n push Makefile
+  scripts/*.sh` → empty; `git config --get-regexp '^alias'` → empty — leaving `-C`/`-c` forms and wrapper
+  indirection as the live misses.)*
+- **The `Stop` backstop deadlocks** if given a bare over-ceiling test (stop-standoff until `stop_hook_active`
+  degrades it to noise) ⇒ it **must** use the same growth-vs-baseline comparator, honor `stop_hook_active`, and
+  state a remediation message. **Honest limits:** it fires **after** the response completes (a mid-session push
+  is already published) and a **killed session skips it entirely** ⇒ the CI lane.
+
+### ⚖️ A5-vicies-bis. THE SYNTHESIS NEITHER MODEL HAD
+
+**`gpt-5.6-sol`'s git `pre-push` hook DISSOLVES `fable-5`'s matcher problem — for the GATE.** Git fires
+`pre-push` **regardless** of `git -C`, `git -c`, an alias, a wrapper script, `make`, or `gh`. **The matcher
+concern survives only for the ADVISORY arm**, where over-matching is free.
+
+⇒ **The honest layering, with each layer's real job stated:**
+
+| layer | mechanism | job | escapes |
+| --- | --- | --- | --- |
+| ✅ **GATE** | tracked **`.githooks/pre-push`** + `core.hooksPath` | **refuse the push**, measuring `git show "$local_oid:AGENTS.md"` | **`--no-verify` ⇒ R3 (accepted)**; pushes that never touch local git |
+| early warning | `PreToolUse` (broad matcher) | fail fast + friendly | wrapper indirection — **accepted in writing** |
+| backstop | `Stop` hook (same comparator) | same-session remediation | mid-session pushes; killed sessions |
+| detector | CI | post-hoc truth | nothing — but it cannot block |
+
+❗ **The "immune to the tool-choice bypass" headline needed a carve-out, and now has one.**
+
 ### A6-pre. ❗ CORRECTION (probe, 2026-07-13) — there IS a decision-time channel, and §A6 below missed it
 
 §A6's table concluded *"the refutations cannot be relocated; compression is the only lever."* **That
