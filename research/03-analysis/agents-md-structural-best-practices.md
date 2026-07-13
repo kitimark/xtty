@@ -541,6 +541,71 @@ merge a blocking guard while the file is still over the line (it reds `main` and
 the retry-tolerance class); ⚠️ never ship both as one change (the diet makes the guard green on day one and
 **the guard is never observed to fail** — the F7 disease).
 
+### A5-quinquies. ROUND 3 (convergence loop) — two ACCIDENT-class defects in the surviving design, and a measurement that reshapes it
+
+**Protocol:** each reviewer was told *"you co-authored parts of this; you MUST NOT approve your own
+contributions — mark them `MINE — not independently validated`"*, and to emit a mechanical
+`VERDICT: NO OPEN ACTIONABLE | OPEN ACTIONABLE: <n>`, with **ADVERSARY-class findings explicitly NOT
+actionable** (accepted residual R3) and an explicit instruction **not to manufacture objections to appear
+rigorous**. ✅ **The self-exclusion held** — `gpt-5.6-sol` correctly disclaimed all four of its own
+contributions rather than endorsing them.
+
+**`gpt-5.6-sol` — `OPEN ACTIONABLE: 2`.** Both real, both ACCIDENT-class, both against the *loop-driver's*
+adoption of the reviewers' own ideas:
+
+1. ❗ **Merge-or-replace has NO PRESERVATION TEST — it relocates the caveat-strip rather than preventing it.**
+   The admission test interrogates only the **new** line, and human judgment is reserved only for **ceiling**
+   eviction. So *an honest merge can erase a qualification **before the ceiling ever fires***. **The harm the
+   design was built to stop simply moved from ceiling-time to admission-time.** ⇒ Fix: every **displaced**
+   prohibition / replacement / correctness-critical caveat MUST remain explicit; otherwise **append and
+   escalate at the ceiling** instead of merging.
+2. ❗ **The "guard observed RED on the live file" plan has NO SAFE EXECUTION SEAM in THIS repo.** CI runs on
+   **push**, `main` is **unprotected**, and the maintainer **pushes directly with no PR flow** — so pushing
+   the guard alone **reds `main`**, while pushing guard+diet together **only ever observes the green head**.
+   **Neither path yields the red-on-the-real-corpus evidence the design depends on.** ⇒ Fix: a **locally
+   runnable** checker whose red output is **recorded as evidence**, or an **awaited guard-only run on a
+   non-`main` branch** before stacking the diet.
+
+### A5-sexies. ❗ THE MEASUREMENT THAT RESHAPES THE DIET — fixing the tier is NOT enough
+
+**Neither reviewer nor the loop-driver had computed this. DERIVED:**
+
+| | bytes |
+| --- | --- |
+| tier now | **32,300** = 23 conforming bullets (15,598 B, **mean 678 B**) + **2 offenders (16,702 B)** |
+| tier with the 2 offenders compressed to conforming size | **16,954** (saves 15,346) |
+| **whole file after a TIER-ONLY fix** | ❗ **65,514** |
+
+⇒ **A ~50 KB ceiling requires cutting ~12 KB MORE — out of the RULES sections** (OpenSpec workflow 17,660 B ·
+How to work here 9,572 B · Building 7,656 B).
+
+⚠️ **And that is dangerous ground: the 2026-07-06 ablation proved the REFUTATIONS tier load-bearing. The RULES
+sections have NEVER been ablated.** Cutting 12 KB of them to satisfy a ceiling **is the compensating strip
+(§A5-ter) one level up — except here the DESIGN ITSELF MANDATES IT.** *A ceiling that can only be met by
+cutting un-ablated load-bearing rules is not a safe ceiling.*
+
+### A5-septies. ❓ THE ESCAPE THAT MAY BEAT THE DIET — G13's premise is refuted, so procedures may be LAZY
+
+**9,174 B** of the file is the **cross-model design-review procedure**. It is in `AGENTS.md` **only because
+G13 holds that a rule must live in this file to reach the loop** (`⟶ archive-ritual` anchors to *"the
+hand-authored committed procedure in this file"*).
+
+❗ **But §A5-bis REFUTED G13's premise.** The leanness rule **did** reach the loop — from a **SHALL-grade
+spec** and from **`xtty-capture-research/SKILL.md` at the point of action**. It was **overridden, not
+unheard.** And **skill bodies are LAZY** (frontmatter at startup; body on invocation).
+
+⇒ ❓ **Could the 9,174 B procedure live in a committed hand-authored `xtty-*` skill** — tracked, under our
+control (which was the *original* objection to anchoring on the CLI-**generated** archive skill: `openspec
+update` can rewrite it — a hand-authored `xtty-*` skill cannot be) — **with the `⟶` marker anchoring to it**,
+removing **9 KB from the eager index with no loss of reach**? The marker stays either way; **only the ANCHOR
+moves.**
+
+**If it holds, this is a BIGGER LEVER THAN THE DIET** and it reframes the change from *"compress prose"* to
+*"move procedures to the lazy tier; keep only decision-time content eager."* ⚠️ **NOT ADOPTED — under review.**
+The open question is whether skill-body invocation is **reliable at the point a `⟶` marker is ticked** (a
+marker is an *explicit* pointer, so invocation may be deterministic rather than the heuristic model-invocation
+the docs decline to quantify).
+
 ### A6-pre. ❗ CORRECTION (probe, 2026-07-13) — there IS a decision-time channel, and §A6 below missed it
 
 §A6's table concluded *"the refutations cannot be relocated; compression is the only lever."* **That
