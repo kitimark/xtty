@@ -264,6 +264,52 @@ Every step that ever mattered was a **measurement**, never an opinion.
 - ⚠️ **Your agents read the WORKING TREE, and `CLAUDE.md` is AUTO-INJECTED.** Uncommitted notes leak into any *"blind"* run (measured: both models read an uncommitted capture and **cited it by line number**). For blind work: **stash or stage-pin the tree**, and check whether the answer is sitting in a **tracked** artifact too.
 - **`adversarial-review` is one-shot and schema-locked; `task` is free-text and multi-turn.** Use `adversarial-review` when you want the `review-output` schema for a diff; use `task` for everything else.
 
+### ❗ G-CONSULT-12 — A model's finding becomes durable by being **PROMOTED INTO THE REGRESSION SUITE**, never by being **approved**. That is the only way model output legitimately crosses into authority: **by ceasing to be model output.**
+
+*(Settled 2026-07-13 by the consult on "can attestation toil be cut without model self-certification?" — `wf_8028b3c3-911`. The proposal under test: models never approve; they emit **executable falsifiers**; CI runs them; the gate keys on the **machine's exit code**. It **DIED for green, survived for red**, and the escape it revealed is the finding.)*
+
+**Why the falsifier scheme dies as a gate.** A falsifier has three parts — **(a) the CHOICE of what to test · (b) the COMMAND · (c) the ORACLE.** ❗ **The machine guarantees only (b).** (a) and (c) stay model-authored. So *"all falsifiers passed"* is a **deterministic function of a model-authored artifact**, and *laundering authorship through a machine does not change the authorship*:
+
+> **`exit 0` over a model-chosen test set means exactly *"the tests I chose to write, passed."* That is an approval with a hash on it.**
+
+- ✅ **You can automate *refutation*. You cannot automate *confirmation*.** The scheme mechanizes **modus tollens**, not **hypothesis selection**.
+- ❗ **GREEN IS TESTIMONY. RED IS EVIDENCE.** A model **cannot fake a red** (anyone re-runs the command; a dismissal must become a *fix* or a *demonstrated mis-aim*, both auditable). It can **trivially manufacture a green**.
+- ❗❗ **A BLIND SPOT DOES NOT EMIT A FALSIFIER AGAINST ITSELF.** The killing falsifier for the rename-blind detector is precisely the one **the two approving models did not write — because they could not see the rename.** A falsifier-emitting version of them would not have written it either.
+- ⚠️ **The false-green is reachable with NO forbidden act — measured, and it is the subtlest thing in this whole document.** The **same predicate** answers **oppositely** on an invocation detail:
+  ```
+  git show --diff-filter=A --name-only --format='' c47a5c1                              → 0
+  git show --diff-filter=A --name-only --format='' c47a5c1 -- openspec/changes/archive/ → 6
+  ```
+  A **pathspec suppresses rename pairing**, so destinations degrade to `A`. An **honest** model writing a falsifier to *validate* the detector's premise reaches for the **pathspec'd** form — *because that is how you would naturally look* — gets **GREEN**, and certifies a detector that is **blind**. **Correct oracle · correct command · false green · zero adversarial intent.** ⇒ **ACCIDENT-class, therefore fatal** (this repo's checks claim only to be accident tripwires).
+- And the border cannot be policed: an **honest** careless weak-falsifier set and a **deliberately** weak one are **the same git observation**. Intent is not machine-decidable ⇒ **independently sufficient reason green can never gate.**
+
+**⇒ The rule:** if you ever wire falsifiers to anything, **RED may carry force; GREEN may carry NONE.**
+
+**The escape — and it is the whole point.** Both consulted models argued about **EXECUTION** (what the machine does with the result) when the bottleneck is **SELECTION** (what gets tested at all). Neither asked the question that rescues it: ***can the falsifier set be authored by anyone but the reviewed party?***
+
+> ✅ **YES — by PROMOTING the durable checks into the repo's own committed regression suite.** At that moment they **stop being model artifacts**: human-reviewed, repo-owned, and **running on every future change regardless of who proposed them**. It is **not a review-time mechanism** — it is how a finding becomes **permanent**.
+
+**So the shape of a healthy integration is a one-way ratchet:**
+
+```
+  model ATTACKS ──▶ emits a falsifier ──▶ a HUMAN reads it and judges it worth keeping
+                                                        │
+                                                        ▼
+                                       COMMITTED to the regression suite
+                                       (now repo-owned; no model authority;
+                                        runs forever, on everyone's changes)
+```
+
+**Honest toil accounting — three layers (do not let anyone sell you layer (b) as layer (a)):**
+
+| Layer | Removable? | |
+| --- | --- | --- |
+| **(a) The mechanical checks** — re-typing four prose checks, running the digest by hand | ✅ **YES — fully, with ZERO model trust.** ❗ **The largest available cut, and it has NOTHING to do with falsifiers.** The checks are deterministic, committed, and read no model artifact — and **`exempt_by_act()` (check 4) ALREADY EXISTS as working code** (`scripts/test-cross-review-scripts.sh:84`), **living in a test harness, wired to nothing.** *This is **F7**.* |
+| **(b) The ledger read** | ⚠️ **Improved, not shortened.** On one measured ledger, **8/14 findings (57%) were CHECK-class** and all 8 survived verification — presenting those as an *executed results table* rather than an *argument to referee* is a real cognitive win. **But findings ≠ minutes** (the **OPINION** ones are the *hard* ones and they all stay), and a **NEW** cost appears: **auditing the falsifiers themselves** for coverage, fixture-vs-history, and invocation mismatch. **Net: better fifteen minutes, probably not fewer.** |
+| **(c) Judge sufficiency · Attest** | ❌ **0% removable, forever, for a git-only gate.** The falsifier set is a **positive enumeration** — what you need to know is what is **ABSENT** from it, and absence has no machine-readable form. And recursively: **classifying a finding as CHECK vs OPINION is itself a soundness judgment.** *Human review is an event in the world, not a property encoded in git.* |
+
+❌ **"Loop until both models approve, and let that be the attestation" — 0% achievable, and the falsifier reframe does NOT resurrect it.** Two models approved the rename-blind detector; their agreement was worth **nothing** against a bug **three commands** expose. **You cannot remove the human. You can only make the human's fifteen minutes count.**
+
 ### What it is NOT for
 
 ❌ **Values calls.** Asked directly whether attestation fatigue outweighs classifier imprecision, **both models refused** — they escaped to a third option at round 1, independently, and never adjudicated it across three rounds. **A question your repo has doctrine on will come back as your doctrine.** Route values calls to the human.
