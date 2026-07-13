@@ -441,23 +441,141 @@ Three further accident-class failures it constructed:
 
 > *"These are not adversarial evasions; they are **predictable responses to a locally failing lint rule**."*
 
-### A5. ✅ The invariant that survives — ATOMICITY of the eager index
+### A5. ❌ RETRACTED — "ATOMICITY is the invariant that survives" was WRONG (killed by cross-review, same day)
 
-> **One entry = one rejected action + its replacement + one evidence pointer.**
-> No chronology, no experiment transcript, no numbered sub-findings, no proof inline.
+> ⚠️ **The text below was committed in `fb6121e` and is REFUTED. It is preserved, struck, because a fates
+> table that hides its own dead claims is worthless.** The refutation came from a **cross-attack review**
+> (§A5-bis) in which each model reviewed only the half of the design it did **not** author.
 
-- **It catches 100% of the observed bloat and touches nothing that works** (A3: only 2 of 25 entries violate
-  it; a length rule would have forced edits to 14 healthy bullets while leaving the mechanism intact).
-- It is **mechanically checkable** (grep an entry for inline `**(N)` sub-findings / embedded transcript).
-- It **cannot be satisfied by bullet-splitting alone** — pair it with a **whole-TIER budget** (never a
-  per-bullet cap: only a tier budget bounds the total).
-- Word count MAY remain a **warning**; it must never be the governing invariant.
-- ⚠️ **Residual, unsolved and correctly so:** a tier budget eventually forces evicting an old rule to admit a
-  new one. Atomicity **defers** this (atomic entries run ~40–60 words ⇒ 25 entries ≈ 10 KB; the tier holds
-  50+ before pressure bites) but does not solve it. *Which lesson is still load-bearing* is a **human**
-  judgment and must not be automated.
+~~*"One entry = one rejected action + its replacement + one evidence pointer. It catches 100% of the observed
+bloat and touches nothing that works (only 2 of 25 entries violate it). It is mechanically checkable (grep for
+inline `**(N)`). Atomicity defers eviction — atomic entries run ~40–60 words ⇒ 25 entries ≈ 10 KB; the tier
+holds 50+ before pressure bites."*~~
+
+**Three independent kills:**
+
+1. ❌ **"Only 2 of 25 are non-atomic" is CIRCULAR.** It is true *only because* "non-atomic" was **defined as
+   "contains `**(N)` markers."** Measured: the **tar-pit bullet has ZERO numbered markers** and embeds a
+   **six-step chronology plus two rejected actions**; the Local-Network bullet packs **four** refuted
+   mechanisms. Under the **semantic** definition, **≥6** entries are non-atomic. **The grep measures a
+   STYLISTIC ACCIDENT, not a property.**
+2. ❌ **Atomicity is NOT mechanically decidable past that one regex.** *"No embedded chronology/transcript"*
+   has no test. It degrades into the **semantic judgment call** class — and this repo has **already measured
+   that class failing**: `xtty-openspec-critic.md:39` says so **in its own text** (*"never a BLOCKER, since
+   distinguishing a category summary from a narrative append is a semantic judgment call"*) and it **held its
+   row while the file doubled**.
+3. ❌ **The "defers eviction" escape is quantitatively FALSE.** The file's **own conforming (marker-free)
+   bullets** measure **83.8 words / 632 bytes** — *not* 40–60 words. So **25 entries ≈ 15.4 KB** and
+   **50 entries ≈ 30.9 KB ≈ today's entire bloated tier (32.3 KB)** — i.e. **a budget large enough to "hold
+   50+" would be GREEN on the very disaster that motivated it.** Any budget that *would have fired* leaves
+   ~5 entries of headroom, and **one investigation-day produced 12 sub-findings.** ⇒ **Eviction is the
+   guard's normal operating regime, in week one — not a deferred residual.**
+
+❗ **And the mutation suite proposed alongside it could not have caught any of this:** all three mutations
+(split-into-N · overflow-to-prose · inline markers) are **net-byte-positive**, so the *byte meter* catches all
+three. **No mutation was atomicity-only-detectable ⇒ the guard could have shipped with the atomicity check
+entirely broken and its own acceptance suite would still have passed.**
+
+### A5-bis. ❗ THE REAL DIAGNOSIS — the rule is NOT missing, and it DOES reach the loop. The disease is ADMISSION.
+
+❌ **RETRACTED — the F7 framing in §A2/§A10 ("nothing enforces it; the rule doesn't reach the loop") is FALSE.**
+The original grep covered `.github/`, `scripts/`, `Makefile`, `openspec/config.yaml`, and the critic. **It never
+grepped `openspec/specs/` or `.claude/skills/`.** The bound exists at **three** surfaces, all predating both
+regrowth episodes:
+
+| surface | what it says | since |
+| --- | --- | --- |
+| **`openspec/specs/research-capture/spec.md:48`** | a **SHALL-grade established-spec requirement** — *"Reconciling a completed change **SHALL NOT** grow the guide's status surface beyond a bounded entry; narrative content moves to the history log"* (it even defines the **category-keyed** bound) | **2026-07-06** |
+| **`.claude/skills/xtty-capture-research/SKILL.md:31-33`** | at the **point of action** — ***"Narrative paragraphs never go here"*** · *"add a one-liner (with its conclusion)"* | with the skill |
+| **`.claude/agents/xtty-openspec-critic.md:39`** | the category-keyed status-surface bound (REVIEW) | `ea8bfe1` |
+
+⇒ ❗ **The rule reached the loop at SPEC grade, at the POINT OF ACTION, and at REVIEW time — and was overridden
+every single time.** **The disease is not REACH. It is FORCE — and beneath that, ADMISSION.**
+
+**Reached independently by BOTH reviewers** (neither authored the framing they were attacking, so this is a
+genuine cross-model agreement rather than an echo):
+- `gpt-5.6-sol`: *"**The WRITE RULE is the growth engine.** 'Missing enforcement caused regrowth' is false."*
+  With the ledger: **100% of the +37,345 B was INSTRUCTED writing** (archive / capture / reconcile commits) —
+  **zero rogue appends.** The rule *orders* the append; **nothing controls ADMISSION to the eager tier.**
+- fable-5: *"The disease is not REACH, it is **FORCE and FORM** — every surface asks the writer to judge its
+  own append."*
+
+### A5-ter. ⚠️ THE FATAL BYPASS — a naked ceiling CAUSES the damage it exists to prevent
+
+**The compensating strip (ACCIDENT-class ⇒ fatal).** An honest session, mid-capture, holding a **real** new
+refutation, hits a red ceiling. **Nothing tells it to stop.** Every incentive says *make CI green*. So it
+compresses old entries — and **the cheapest compression is stripping the qualifications** (*"HEDGED (n=1)"*,
+*"stated defeasibly"*) — **which is exactly where a rule's CORRECTNESS lives.** **Every meter goes GREENER as
+it strips.**
+
+> The design named caveat-stripping as the accident that killed the word cap (§A4) — **and then shipped the
+> identical failure mode one level up.** *A guard that forces the model to resolve an eviction dilemma will get
+> the dilemma resolved the cheapest way.*
+
+### A5-quater. ✅ THE SURVIVING DESIGN — admission control · a dumb meter · a human stop
+
+1. **Fix the WRITE RULE — control ADMISSION, not size** *(the real fix; nothing else addresses the driver)*.
+   Amend the **instructing** surfaces (`xtty-capture-research/SKILL.md`, `research-capture/spec.md`):
+   **`HISTORY.md`/the research doc is the DEFAULT destination**; appending to the eager tier is the
+   **exception**. Admission needs an explicit decision-time test (*"absent this line, would a future session
+   re-propose the refuted thing?"*) **and a MERGE-OR-REPLACE step** — which makes the tier a **fixed-size
+   cache, not an append log.** *(Both reviewers reached the merge-or-replace requirement independently.)*
+2. **A BLOCKING whole-file CONTENT ceiling** — **bytes AND words, independently recomputed** (G-TARPIT-5),
+   **whole-file, not per-surface** (a surface-scoped guard *displaces* growth — §A2). ~15 lines of CI. **Dumb
+   on purpose.** Not atomicity (§A5), not a per-entry cap (§A4).
+3. ❗ **A ceiling red is HUMAN-ONLY — the session STOPS.** It **MUST NOT** delete, compress, or strip to go
+   green. *This single rule is what makes (2) safe instead of harmful (§A5-ter).* It reuses the repo's existing
+   human-attestation pattern: **eviction from the eager index is a human judgment about which lesson is still
+   load-bearing, and must never be automated.**
+
+**Ceiling value: ~50 KB** (floor ≈ 46 KB + headroom) — ❗ and it **MUST be set AFTER the compressed draft
+exists.** ❌ **The 33,400 B target was FICTION** — a sum of undrafted estimates, **10 KB below the last diet
+that actually shipped (43,667 B) while carrying MORE content** (*"everything else" has itself grown +14,685 B
+since the revamp, incl. 9,189 B of cross-model procedure that **G13 obliges the file to carry***).
+*A ceiling derived from an undrafted estimate is how this change ships red on day one and stays red.*
+
+**Sequencing (both reviewers converged):** **two stacked changes.** The **guard is implemented FIRST and
+observed RED on the live 81,012 B file** — that red is the acceptance evidence, and it is obtainable **only**
+if the guard precedes the diet. The diet then turns it green, and **only the green head merges.** ⚠️ Never
+merge a blocking guard while the file is still over the line (it reds `main` and *normalizes tolerated red* —
+the retry-tolerance class); ⚠️ never ship both as one change (the diet makes the guard green on day one and
+**the guard is never observed to fail** — the F7 disease).
+
+### A6-pre. ❗ CORRECTION (probe, 2026-07-13) — there IS a decision-time channel, and §A6 below missed it
+
+§A6's table concluded *"the refutations cannot be relocated; compression is the only lever."* **That
+conclusion is now PARTIALLY REFUTED** — and §A6's rejection of `.claude/rules/` was resting on an **untested
+assumption** that has now been **probed against the official docs**.
+
+| claim | status after the probe |
+| --- | --- |
+| path-scoped `.claude/rules/` cannot carry decision-time guidance | ✅ **CONFIRMED, and now docs-sourced** — *"Path-scoped rules trigger when Claude **READS** files matching the pattern, not on every tool use."* They load **after** the decision to write. *(It was rejected on an assumption; it is now settled.)* |
+| nested `CLAUDE.md` | ✅ confirmed read-triggered — same timing failure |
+| `@path` imports | ✅ confirmed **eager** — save nothing |
+| **"no lazy tier can deliver decision-time rules"** | ❌ **REFUTED — the `UserPromptSubmit` HOOK** |
+
+❗ **`UserPromptSubmit` fires BEFORE the model reasons**, and its `additionalContext` output **injects text into
+context at prompt time** — a **deterministic, documented, decision-time channel** that costs **zero at startup**.
+
+⚠️ **But it is a LANE, not a fix — and it must be probed before anyone proposes it:**
+- **Cost may INVERT.** The eager guide is loaded **once and cached**; a hook injects **per prompt**. An
+  unconditional hook that emits the whole tier every turn could cost **more** than the thing it replaces.
+- ⇒ it only pays if **conditional** — and a condition is a **keyword heuristic**, which fails in exactly the
+  case the tier exists for: ❗ **a session about to re-propose the Metal renderer may never type "Metal."**
+  *A decision-time rule that fires on keywords misses the decision that does not name itself.*
+- **Subagent coverage is UNKNOWN** (subagents inherit `CLAUDE.md`; whether a `UserPromptSubmit` hook fires for
+  them is undocumented). The eager tier's whole value multiplies across subagents.
+- Model-invoked **skills** are the other candidate and are **heuristic, with no published reliability
+  metrics** — the docs say Claude *"decides when to apply"*, and quantify nothing.
+
+**Re-verify by effect (NOT YET RUN — do not adopt this lane from a doc):** write a trivial `UserPromptSubmit`
+hook emitting a unique marker string; then (1) `/context` before/after to price it, (2) spawn a subagent and
+have it quote the marker **without tools** (the same presence probe that proved `CLAUDE.md` subagent
+inheritance) to settle coverage.
 
 ### A6. Lazy tiers — the standard's one real mechanism, and why it CANNOT hold the refutations
+*(⚠️ superseded in part by §A6-pre: the "compression is the only lever" conclusion is refuted; the
+read-triggered rejections below are confirmed.)*
 
 The published `agents.md` convention specifies **no required fields, no structure, no length guidance**
 (*"just standard Markdown — use any headings you like"*). xtty already conforms; **"conform to the standard"
