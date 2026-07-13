@@ -1153,6 +1153,107 @@ run where it matters.***
   **PASSES** (the meter follows the injection point). ⇒ the fixture must assert **the meter FOLLOWS the swap**
   and that **mode-swap + growth is REFUSED**, *not* bare refusal.
 
+### A5-tricies-ter. ❗❗ ROUND 10 — the CONVERGENCE TEST. Two kills, ZERO overlap, and the loop's real shape finally visible
+
+**The round was framed as a test, not a hunt:** *"Is any remaining defect a DESIGN defect that must be fixed
+BEFORE the code is written — or are they now IMPLEMENTATION details belonging in the hook + its fixtures?
+If the design is sound enough to implement, say `NO OPEN ACTIONABLE`."*
+
+**Both models answered it directly, and for the first time both drew an explicit implementation/design line.**
+`gpt-5.6-sol`: **4 open** + a parked bucket (*"resolver parsing, cycle/depth handling, ref aggregation, exit
+codes… require code precision, not further policy design"*). `fable-5`: **1 open**, and *"had A-1's arm not been
+stated normatively, this round's answer would have been `NO OPEN ACTIONABLE`."*
+
+❗ **The five findings had ZERO overlap** — a third independent confirmation of **G-CONSULT-11** (point two
+families at material with no shared answer key and they buy **defect coverage**, not agreement).
+
+#### The two real kills (both MEASURED, not argued)
+
+**KILL 1 — `core.hooksPath=.githooks` IS DISARMED BY `git checkout` (gpt).** `core.hooksPath` resolves
+**relative to the top of the working tree**, and **git silently skips a hook file that isn't on disk.**
+Re-run independently in a throwaway repo — *the gate exits 1, and:*
+
+```
+git checkout legacy && git push origin main   ->  * [new branch]  main -> main     # NO gate output at all
+```
+
+⇒ ***the very ref the gate protects, published ungated, by an honest `git checkout``*** — **ACCIDENT-class**, and
+**this repo has three such pre-hook branches today.** ✅ **Fix (measured green on four arms — `main`, the hookless
+legacy branch, a **detached HEAD**, and a **linked worktree**): the tracked `.githooks/pre-push` is the reviewable
+SOURCE; `make hooks` installs a COPY into the GIT DIR, which `checkout` cannot reach.** Phony + order-only ⇒
+re-copies every run ⇒ **staleness is structurally impossible.**
+
+**KILL 2 — the round-9 first-push baseline INVERTS the moment the diet succeeds (fable — refuting its OWN
+round-9 fix).** *"A new ref inherits REMOTE MAIN's guide as its baseline"* is fine while main is fat. **Post-diet,
+main is thin** ⇒ a new ref anchored in **pre-diet history** (a bisect branch, a repro spike, a hotfix off a release
+tag) carries a **fat historical guide**, is compared against thin main, and is ***REFUSED for growth it did not
+cause, of objects already on the remote*** (a tag push of an old commit transmits **zero** new blobs). Only
+recovery: **`--no-verify`** — the design's own named worst harm. **And the refused slice grows as the ratchet tightens.**
+
+**Third-party re-derivation** (`git cat-file -s <rev>:AGENTS.md`, one sample per day, 17 days):
+
+| ceiling | days of this repo's own history whose guide EXCEEDS it |
+|---|---|
+| initial **65,666 B** | **3 / 17** |
+| **57 KB** waypoint | **8 / 17** |
+| **50 KB** waypoint | **10 / 17** |
+
+**`v0.0.1` = 52,626 B and IS an ancestor of `main`** ⇒ at the 50 KB waypoint **a hotfix branch cut from the release
+tag cannot be first-pushed at all.**
+
+✅ **Fix — the BASELINE LADDER:** `$remote_oid` (if it resolves locally) → the local tracking ref → **first push ⇒
+the FORK POINT, `git merge-base $local_oid refs/remotes/origin/main`** → else remote main's guide, else **ALLOW**.
+*(A ref pinned at an old commit forks **at itself** ⇒ baseline == current ⇒ **no growth ⇒ PASS**. A real feature
+branch forks at main's tip ⇒ **growth still caught**. Subsumes the tag lane; offline-safe.)*
+
+#### ❗ KILL 3 — found by NEITHER model. The destination is not `.git/hooks`.
+
+**`git rev-parse --git-path hooks` FOLLOWS `core.hooksPath`.** If a user already has one set (husky, any hook
+manager), **git ignores `.git/hooks` entirely** and a copy installed there **never fires** — measured: the push
+sailed straight through with the gate sitting on disk. ⇒ **install into `$(git rev-parse --git-path hooks)`**
+(resolves to `.git/hooks` when unset, follows the config when set — measured both ways). ⚠️ **If the resolved dir
+is INSIDE the worktree (husky's `.husky` is), the checkout-disarm is BACK** ⇒ warn; and never clobber a foreign
+`pre-push`. **This is G-GATE-8 earning its keep for the second time: only third-party re-measurement found it.**
+
+#### ✅ The ladder, PROVEN BY MUTATION — not by review
+
+A real hook implementing the ladder, run against a synthetic history shaped like xtty's (fat era → diet):
+**8 arms, 8 green** — historical branch passes · growth on the historical branch still refused · tag at a fat
+commit passes · clean feature branch passes · feature-branch regrowth refused · main regrowth refused · guide
+deleted on a **feature** branch refused · branch deletion passes.
+
+**Then the mutation test — revert rung 3 to the round-9 rule:** arms **A** (historical branch) and **C** (tag) go
+**RED**. ***The fixture fails on the design we almost shipped and passes on the one we're shipping*** — which is the
+only thing that makes it a fixture rather than decoration.
+
+⚠️ **And running it exposed a defect in the FIXTURE DESIGN itself:** arm **H** also went red under the mutant —
+**but the gate never ran.** Arm A's refusal meant the branch was never created on the remote, so the deletion push
+failed with *"remote ref does not exist"* and the harness scored a **plain git error as a gate refusal.**
+⇒ ❗ **the arms are COUPLED through shared remote state; one early red CASCADES into spurious downstream reds and
+misattributes causes. The shipped suite MUST isolate each arm (fresh remote per arm).** *(Found only by building
+and running it — **G-TARPIT-4**.)*
+
+#### ⚠️ SECOND INSTANCE — the conclusion was right and the arithmetic was decorative
+
+**fable's size table did not reproduce.** It reported 07-04 = **66,318 B** / 07-05 = **71,486 B**; re-derivation
+gives **62,383** / **67,149** (different commits sampled within each day). **Its conclusion held; its cells did
+not.** ⇒ **G-CONSULT-2 restated with force: re-derive every load-bearing number. A model's argument and a model's
+arithmetic are separate artifacts, and only one of them is reliable.**
+
+#### ❗ THE LOOP'S REAL SHAPE — the ENGINE stabilized; the PLUMBING kept killing us
+
+| rounds | the ENGINE (pre-push · committed blob · growth-vs-baseline · resolve-imports) | the INSTALLER + BASELINE plumbing |
+|---|---|---|
+| 6 | ✅ chosen after three engines died | — |
+| 7–9 | ✅ **untouched** | ❌ installer reaches no pre-existing clone · ❌ first-push base undefined · ❌ delete/restore inverted |
+| **10** | ✅ **untouched (4th round)** | ❌ **disarmed by `git checkout`** · ❌ **baseline inverts post-diet** · ❌ **wrong install destination** |
+
+⇒ ***The load-bearing novelty stabilized fast. The boring plumbing — where does the hook LIVE, what is it compared
+AGAINST — killed us three rounds running.*** **Design review's value did not concentrate where the design was
+interesting.** And every round-10 kill was settled **by running a git command in a throwaway repo in under a
+minute** — which is *exactly what the mutation-fixture suite is.* ⇒ **further review rounds are strictly dominated
+by writing the hook + its fixtures (G-TARPIT-4). That is the cliff, and this is where the loop stops.**
+
 ### ⚙️ A5-tricies-bis. The `--wait` driver, proven in use
 
 `task --background` → job id → `status <id> --wait --json` → **`status=completed, waitTimedOut=false` on the
