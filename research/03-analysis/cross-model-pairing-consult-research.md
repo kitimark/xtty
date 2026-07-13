@@ -328,3 +328,173 @@ Every step that ever mattered was a **measurement**, never an opinion.
 - ❓ **Attestation fatigue is STILL unmeasured — and both models REFUSED to answer it.** It is the pivot for the gate's `exit 0` question (**F9**). Given the question directly, **both models escaped to a third option at round 1, independently, and never adjudicated it across three rounds.** ❗ Their one convergent substantive claim was that **no mechanism keeps vigilance sharp — the gate's premise is *self-limiting*, and human rubber-stamping (R5) is an accepted residual, not a property to engineer away.** Nothing in git can settle this. **It belongs to the human, not to a model.**
 - ❓ **Pairing has never been tested under NEUTRAL framing.** Round 1 **forbade** accommodation; round 2 **instructed** it. A third run would need: neutral framing · a **clean tree** (nothing uncommitted) · a question the repo has **no** recorded opinion on · and the knowledge that the **project guide is auto-injected**. ⚠️ **Cheaper alternative, per G-TARPIT-4: stop measuring and go build it** — the two rounds already cost ~1.4M tokens and the decisive findings both came from **third-party measurement**, not from the models.
 - ❗ **ACTIONABLE, and currently nobody's task:** §5d records a **real, still-open coverage hole in shipped product code** (the classic non-precise wheel path lost its cap; **every** test passes `precise: true`). That is a change proposal, not a research question.
+
+---
+
+## 12. Round 3 (2026-07-13) — the consult KILLED THE LOOP-DRIVER'S OWN DESIGN, and G-CONSULT-8 needed sharpening, not refuting
+
+**Provenance:** an `/opsx:explore` fan-out on a *real* open question (how to stop `AGENTS.md` regrowing),
+run as a **three-arm** consult with **disjoint mandates** and a **non-participant re-measurer**. Unlike rounds
+1–2 this was **not an experiment about consulting** — it was a consult doing real work, and the findings are
+a by-product. That makes it the cleanest evidence in this doc (**G-TARPIT-4**: build it and use it).
+Captured findings → [`agents-md-structural-best-practices.md`](agents-md-structural-best-practices.md) §A.
+
+### 12a. The arms, and why they were disjoint
+
+| arm | mandate | why |
+| --- | --- | --- |
+| **fable-5** (in-repo) | **measure**: per-item disposition audit of every rule/bullet — bytes, duplication target, reachability, staleness. *"Measure. Table. Number."* | its edge is in-repo derivation with ground truth on disk |
+| **`gpt-5.6-sol`** (external) | **attack**: falsify the loop-driver's stated thesis; construct ACCIDENT-class bypasses of its proposed guard | no loyalty to repo doctrine |
+| **Claude Code docs agent** | **source**: what does the loading model *actually* do (eager vs. lazy)? | the decisive constraint was **undocumented in-repo** |
+| **Opus (non-participant)** | **re-derive every load-bearing number from ground truth** (G-CONSULT-2) | the only thing that caught the shared false frame in round 2 |
+
+⚠️ **The contamination hazard was maximal and was faced explicitly:** the artifact under review
+(`AGENTS.md`) is **auto-injected into both models' context** (G-CONSULT-11), and it *contains a refutations
+list that already states a hypothesis close to the loop-driver's*. Counter-measures: state the thesis
+**explicitly as the target to attack** (*you cannot crib a hypothesis you are ordered to kill*), demand
+**DERIVED vs REFLECTED** labels per claim, and give each arm a mandate whose answer is **on disk**, not in
+doctrine.
+
+### 12b. ❗ FIRM — the second model killed a design the loop-driver had already committed to in writing
+
+The loop-driver proposed a **per-unit word cap** on refutation entries and argued it was *compression-proof*
+(*"you cannot cram 1,400 words of mechanism into 60 words — you are forced to move it to the research doc"*).
+`gpt-5.6-sol` killed it in one line:
+
+> *"Split one 1,400-word entry into **twenty-four ≤60-word bullets**. It passes per-bullet lint, preserves
+> nearly all the cost, and destroys atomic scanability."*
+> *"These are not adversarial evasions; they are **predictable responses to a locally failing lint rule**."*
+
+The cap bounded the **unit** and left the **tier** unbounded. Because **bullet-splitting is what an HONEST
+session does** when told "keep bullets short," this is **ACCIDENT-class ⇒ fatal** under the repo's own
+standard (G-GATE-2) — not an R3 residual to be waved through. It also named three more accident-class
+failures the loop-driver had not seen, including the deepest one: at a ceiling, *"sacrifice older
+load-bearing rules to admit the newest incident — **the guard guarantees size, not retention value**."*
+
+**This is the first time in this repo's five cross-model docs that a consult killed a design the loop-driver
+was already writing down.** Prior wins were *finding a defect in existing artifacts*; this one **stopped a
+bad mechanism from reaching a proposal**.
+
+### 12c. ✅ G-CONSULT-8 is SHARPENED, not refuted — the discriminator is the ANSWER KEY, not code-vs-doctrine
+
+**The loop-driver predicted this arm would add little**, citing G-CONSULT-8 (*"point the second family at the
+CODE, not the DOCTRINE"* — and `AGENTS.md` restructuring is **pure doctrine**). It produced the single most
+important finding of the session. **But that does not refute G-CONSULT-8 — it locates it more precisely:**
+
+- The arm was **not reviewing doctrine.** It was attacking a **design invented twenty minutes earlier**, which
+  exists in **no document either model had read**.
+- G-CONSULT-8's real mechanism was always *"agreement concentrates where there is a **shared answer key**."*
+  **Code** is merely the most common place where no answer key exists. **A fresh design is another.**
+
+⇒ **G-CONSULT-13 (below).** The operational rule changes: *don't ask "is this code or doctrine?" — ask
+**"does the repo already contain the answer?"*** A novel design is the ideal consult target **even on a
+doctrine topic**, and a settled doctrine question is a waste **even about code**.
+
+### 12d. ✅ The non-participant adjudicated the two models — and found the winner's own claim UNDERSTATED
+
+The two arms **disagreed on the fix** (fable: compress 14 long bullets — a **one-time diet**; gpt: an
+**atomicity invariant** — a standing rule). Third-party re-measurement settled it, and **strengthened gpt's
+case beyond what gpt itself claimed**:
+
+- gpt claimed the top two entries were *"demonstrably non-atomic"* (**20** numbered subclaims).
+- Re-derived: **only 2 of the 25 entries are non-atomic at all**, and those 2 carry **23 of the tier's 23**
+  inline numbered sub-findings — while holding **54.5%** of the tier. **The other 23 entries are already in
+  the correct one-liner form.**
+
+⇒ The atomicity rule catches **100% of the observed bloat and touches nothing that works**; the length-based
+approach would have forced edits to **14 healthy bullets** and left the actual mechanism intact. **Neither
+model computed this.** Consistent with **G-CONSULT-2**: the third party is not a formality.
+
+### 12e. ⚙️ Codex operational forensics — the run cost three dead jobs, and the failure mode was invisible
+
+❌ **REFUTED (the loop-driver's own theory): "the packet was too big / `xhigh` was too much."** Three
+`codex task` jobs produced **zero output** and hung. Diagnosis by log forensics, and it is **not** packet size —
+the small F7 packets died identically:
+
+| | `Turn completed` | `thread not found` on cancel |
+| --- | --- | --- |
+| the **3 that died** (2 × F7 packet, 1 × the 5 KB AGENTS.md packet) | **0** | **yes** |
+| the **3 that completed** | **1** | **no** |
+
+**The mechanism: the codex thread dies silently and the companion never observes it.** The job then sits in
+`status: running` **forever** — 1h49m and 1h59m before being cancelled, with the last real log line ~1h40m
+earlier. Cancelling prints the tell: `Codex turn interrupt failed: thread not found: <thread-id>`.
+
+- ❗ **`status: running` is NOT a liveness signal. Only LOG-FILE GROWTH is.** (`stat`/`wc -c` the job's
+  `logFile`; a live job writes every few seconds.) Discriminator for a completed run: `grep -c 'Turn completed'`.
+- **All 3 deaths overlapped another running job; all 3 successes ran alone.** ⇒ the **single-flight broker
+  collision** (already **G-CONSULT-7**) — *this run failed by not applying the repo's own recorded finding.*
+  **Serialize codex calls. Check the queue is empty before launching.**
+- The companion's `task` is **detached**: driving it under the harness's `run_in_background` returns **exit 0
+  immediately**, and *"finished"* and *"still running"* look identical. Poll `status --json`, **and** the log.
+- `result <id>` resolves **only finished** jobs — it errors with *"No job found"* for a running one, which
+  reads like a crash and is not.
+- ⚠️ **`codex task --help` RUNS A TASK.** There is no help flag on the subcommand; the string is taken as the
+  prompt. It burned a 12 s job and a runtime slot.
+
+**Cost of the lesson:** ~3h of wall-clock across three zombie jobs. The relaunched lean packet, run **alone**,
+completed in **~4 minutes**.
+
+### 12f. Fates table (round 3)
+
+| Claim | Fate | Killed / confirmed by |
+| --- | --- | --- |
+| "A per-unit word cap is compression-proof" (loop-driver) | ❌ **REFUTED, ACCIDENT-class** | `gpt-5.6-sol`: split into 24 short bullets |
+| "This is doctrine ⇒ the second model will add little" (loop-driver, citing G-CONSULT-8) | ❌ **REFUTED as stated** → ✅ **sharpened** into G-CONSULT-13 | the arm attacked a **fresh design**, not doctrine — no answer key existed |
+| "The codex jobs hung because the packet was too big / `xhigh`" (loop-driver) | ❌ **REFUTED** | the **small** packets died identically; the discriminator is **thread death**, and all deaths overlapped another job |
+| "`status: running` means the job is alive" | ❌ **REFUTED** | 3 zombies held `running` for up to 1h59m with a dead thread |
+| "The two models will agree (both read the same auto-injected file)" | ✅ **agreed on the DIAGNOSIS, disagreed on the FIX** — and the fix is where the value was | third-party re-measurement adjudicated |
+| gpt's own claim: "the top two entries are non-atomic" | ✅ **CONFIRMED and UNDERSTATED** | **2 of 25** non-atomic, holding **54.5%** and **23/23** subclaims |
+
+### 12g. Reusable guidelines (extend §9)
+
+- **G-CONSULT-13 — ❗ Point the second model where THE REPO HAS NO ANSWER, not merely at "code."** This
+  supersedes the operational reading of **G-CONSULT-8** (*"code, not doctrine"*), whose **mechanism** was always
+  *"agreement concentrates where there is a shared answer key."* Code is only the **most common** place with no
+  answer key. **A design you invented ten minutes ago is another** — and it is an **ideal** consult target even
+  on a pure-doctrine topic, because neither model can retrieve the answer, so both must reason. Conversely a
+  settled doctrine question is a waste **even when it is about code**. ⇒ **The test before spending a consult
+  is not *"is this code?"* but *"could either model retrieve this answer from something it has read?"*** If yes,
+  do not pay — you will be handed your own file back. **Corollary: the highest-value consult target is the
+  design the loop-driver has NOT yet written down** — that is also the last moment a bad mechanism is cheap
+  to kill (12b: it was killed **before** it reached a proposal).
+- **G-CONSULT-14 — Verify a background model's LIVENESS by output growth, never by its status field.** Three
+  `codex task` jobs reported `status: running` for **up to 1h59m** with a **dead** underlying thread (`thread
+  not found` on cancel; `Turn completed` = 0). A status field reports *what the supervisor believes*; a growing
+  log reports *what is happening*. ⚠️ And **serialize** — every death overlapped another job (the single-flight
+  collision of **G-CONSULT-7**, which this run **had recorded and still walked into**). *A finding you have
+  written down but do not check before acting is not yet a finding.*
+- **G-CONSULT-15 — State your thesis to the adversary EXPLICITLY, as the target.** The contamination hazard was
+  maximal here (the artifact under review is **auto-injected**, and it already contains a hypothesis close to
+  the loop-driver's). Naming the thesis and ordering the model to **falsify it** converts the leak into a
+  **constraint**: *you cannot crib a hypothesis you have been ordered to kill*. Pair with **DERIVED vs
+  REFLECTED** labels per claim — *"REFLECTED claims are worthless here"* — which makes doc-regurgitation
+  (**G-CONSULT-3**) visible instead of invisible.
+
+### 12h. Re-verify by effect
+
+- **The kill:** re-run gpt's own falsifier, offered unprompted and reproducing exactly —
+  ```sh
+  awk '/^\*\*Learned refutations/{p=1;next} p&&/^## /{exit} p&&/^- /{print}' AGENTS.md |
+  perl -ne '@w=/\S+/g; print scalar(@w),"\n"' | sort -nr |
+  awk 'NR<=2{t+=$1}{a+=$1;n++}END{printf "entries=%d top2=%.1f%% mean=%.1f\n",n,100*t/a,a/n}'
+  # 2026-07-13: entries=25 top2=54.5% mean=177.7
+  ```
+- **The atomicity census** (the number neither model computed):
+  ```sh
+  awk '/^\*\*Learned refutations/{p=1;next} p&&/^## /{exit} p&&/^- /{print}' AGENTS.md |
+  awk '{n=gsub(/\*\*\([0-9]+[a-z]?\)/,""); if(n>0){c++; tot+=n}} END{printf "%d non-atomic, %d subclaims\n",c,tot}'
+  # 2026-07-13: 2 non-atomic, 23 subclaims
+  ```
+- **The zombie discriminator:** `grep -c 'Turn completed' <job>.log` → **1** = a real completion; **0** plus
+  `thread not found` on cancel = a zombie that reported `running` the whole time.
+
+### 12i. Evidence artifacts
+
+- Codex job logs (all 22): `~/.claude/plugins/data/codex-openai-codex/state/xtty-*/jobs/*.log`. The three
+  zombies: `task-mrj88vi5-csv0lh`, `task-mrj8lwrk-67hwez`, `task-mrjbowxo-ukliuh`. The successful lean
+  relaunch: `task-mrjcnovf-eufx0j` (~4 min, run alone).
+- The decision packets (out-of-repo by design, §2): the 5 KB packet that ran into three zombie jobs, and the
+  ~600-word lean packet that completed.
+- The captured findings: [`agents-md-structural-best-practices.md`](agents-md-structural-best-practices.md) §A
+  (addendum 2026-07-13).

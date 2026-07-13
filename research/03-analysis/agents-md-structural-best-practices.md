@@ -355,3 +355,182 @@ is the test of whether it actually held the line, not whether it merely exists.
 **This research has saturated.** Two independent fan-outs, source-verified across a spec-page pass and a
 large-OSS-clone pass, converged on the same structural diagnosis and the same open enforcement question.
 The honest next step is an OpenSpec proposal for the actual fix, not a further research pass.
+
+---
+
+## Addendum (2026-07-13): the diet regrew a THIRD time — and the enforcement question this doc left open was the WRONG QUESTION
+
+**Provenance:** 2026-07-13, during an `/opsx:explore` fan-out (fable-5 disposition audit · `gpt-5.6-sol`
+adversarial pass · a Claude Code docs agent · Opus non-participant re-measurement of every load-bearing
+number). All figures measured against disk; none estimated.
+
+### A1. The prediction in §5 rec 9 came true, on schedule
+
+This doc's rec 9 said, in writing, on 2026-07-10:
+
+> *"The fix is discipline (and maybe a coherence-critic check for row/section length), not a new mechanism —
+> **a second diet without that guard will regrow just as fast.**"*
+
+`revamp-agents-md` shipped the next day (80,107 → **43,667** bytes, −45.5%). Measured **48 hours later**:
+
+| date | bytes | event |
+| --- | --- | --- |
+| 2026-07-06 | 80,609 | pre-split peak |
+| 2026-07-06 | **28,100** | `slim-agents-context` (−21,548 startup tokens; adherence **improved** 1/3 → 3/3) |
+| 2026-07-11 | 80,107 | regrown to pre-split size — **5 days** |
+| 2026-07-11 | **43,667** | `revamp-agents-md` (−45.5%) |
+| **2026-07-13** | **81,012** | **regrown to pre-diet size — 48 HOURS** |
+
+Startup cost today (`claude -p` instrument, §4 probe 1): **57,569 input tokens** for a session that does
+nothing; AGENTS.md is ~32.9k of it @ the measured 2.46 B/token — i.e. **exactly the pre-split 32.8k**.
+**The entire 21,548-token saving has been given back, twice.**
+
+### A2. ❗ The guard SHIPPED, the guard HELD, and the file doubled anyway — the finding that matters
+
+This doc closed by leaving enforcement as an open tradeoff: *"a critic heuristic vs. a non-blocking byte
+gate."* `revamp-agents-md` chose the **critic heuristic** (`xtty-openspec-critic.md:39` — the REVIEW-severity
+**category-keyed status-surface bound**) and recorded that *"sufficiency is tracked, not assumed."*
+
+**It is now measured. The heuristic worked — and it did not matter.**
+
+- The surface it guards **held**: the Tooling row is **1,934 bytes** today (23,097 → 1,374 at the revamp).
+- **AGENTS.md still went 43,667 → 81,012.**
+
+⇒ **The growth did not stop; it MOVED.** The forensic narratives that used to accumulate in the Tooling row
+now accumulate in the **Learned-refutations** bullets — a surface the heuristic does not cover.
+
+❌ **RETIRED — "critic heuristic vs. byte gate" was the wrong question.** *Both* options are **surface-scoped**,
+and **a guard scoped to one surface displaces growth to the next unguarded surface.** Whack-a-mole is not an
+implementation detail of the fix; it is a property of every surface-scoped guard. The invariant must govern
+**what KIND of content may enter the eager index at all**, not **how big any particular surface is**.
+
+Independently reached by `gpt-5.6-sol`, which named the mechanism without being told the Tooling-row history:
+> *"The recurrence mechanism is **uncontrolled admission of forensic narratives into an eager index**."*
+
+### A3. Where the bytes actually are — and why this is NOT a distribution problem
+
+- File: **241 lines / 10,828 words / 81,012 bytes** (Claude Code's own docs recommend a root guide **< 200 lines**).
+- **Learned refutations: 32,300 B / 4,471 words = 41% of the file.** 25 bullets, **mean 178 words**, against
+  the tier's own written spec — *"add a **one-liner** (with its conclusion)"*.
+- Concentration: **top 2 bullets = 54.5% of the tier**; top 5 = 69.8%.
+- ❗ **Atomicity census — the decisive measurement: only 2 of the 25 bullets are non-atomic**, and those 2 carry
+  **23 of the tier's 23 inline numbered sub-findings** (12 + 11). **The other 23 bullets are already in the
+  correct one-liner form.** Both offenders were written within the preceding 48 hours.
+
+⇒ The bloat is **not** a slow, distributed drift that a length rule would catch. It is **two entries that
+swallowed a research doc each.**
+
+### A4. ❌ RETIRED at birth — the per-unit WORD CAP (killed by cross-model review, ACCIDENT-class)
+
+Proposed during this explore, and killed the same session by `gpt-5.6-sol` before it reached a proposal:
+
+> *"Split one 1,400-word entry into **twenty-four ≤60-word bullets**. It passes per-bullet lint, preserves
+> nearly all the cost, and destroys atomic scanability."*
+
+A word cap bounds the **unit** and leaves the **tier** unbounded — and **bullet-splitting is what an HONEST
+session does** when told "keep bullets short" ⇒ **ACCIDENT-class ⇒ fatal** by this repo's own standard.
+Three further accident-class failures it constructed:
+
+1. **Delete the qualifications/counterexamples** to fit the cap → *"lint improves while rule correctness
+   falls"* — these refutations are half caveats (F10 is mostly caveats); a cap rewards stripping them into
+   dangerously **absolute** prohibitions.
+2. **Move rationale into ordinary prose or extra table rows** → escapes the meter unless every Markdown
+   continuation is counted.
+3. At a ceiling, **evict an older load-bearing rule to admit the newest incident** → ***"the guard guarantees
+   size, not retention value."***
+
+> *"These are not adversarial evasions; they are **predictable responses to a locally failing lint rule**."*
+
+### A5. ✅ The invariant that survives — ATOMICITY of the eager index
+
+> **One entry = one rejected action + its replacement + one evidence pointer.**
+> No chronology, no experiment transcript, no numbered sub-findings, no proof inline.
+
+- **It catches 100% of the observed bloat and touches nothing that works** (A3: only 2 of 25 entries violate
+  it; a length rule would have forced edits to 14 healthy bullets while leaving the mechanism intact).
+- It is **mechanically checkable** (grep an entry for inline `**(N)` sub-findings / embedded transcript).
+- It **cannot be satisfied by bullet-splitting alone** — pair it with a **whole-TIER budget** (never a
+  per-bullet cap: only a tier budget bounds the total).
+- Word count MAY remain a **warning**; it must never be the governing invariant.
+- ⚠️ **Residual, unsolved and correctly so:** a tier budget eventually forces evicting an old rule to admit a
+  new one. Atomicity **defers** this (atomic entries run ~40–60 words ⇒ 25 entries ≈ 10 KB; the tier holds
+  50+ before pressure bites) but does not solve it. *Which lesson is still load-bearing* is a **human**
+  judgment and must not be automated.
+
+### A6. Lazy tiers — the standard's one real mechanism, and why it CANNOT hold the refutations
+
+The published `agents.md` convention specifies **no required fields, no structure, no length guidance**
+(*"just standard Markdown — use any headings you like"*). xtty already conforms; **"conform to the standard"
+is vacuous as an optimization target.** Its one real mechanism is nesting. Verified against Claude Code's
+own docs:
+
+| mechanism | startup cost | verdict for xtty |
+| --- | --- | --- |
+| root `CLAUDE.md` (symlink → `AGENTS.md`) | **eager, in full**; inherited by every subagent | the problem |
+| `@path` imports | ❌ **EAGER** — *"expanded and loaded into context at launch"* | **saves nothing** |
+| nested `CLAUDE.md` | ✅ **lazy** — *"included when Claude reads files in those subdirectories"* | ❌ rejected (rec 6 stands): must be named **`CLAUDE.md`** — a nested **`AGENTS.md` is silently ignored**; measured candidate `packer/` = **743 B** |
+| `.claude/rules/*.md` + `paths:` | ✅ lazy (fires on reading a matching file) | ❌ **structurally wrong for refutations** — see below. (Also gitignored today, but that is a 2-line negation, not the real objection.) |
+| Skills | frontmatter eager, body lazy | ✅ already used; right for **procedures**, not for decision-time rules |
+
+❗ **The load-bearing argument, and it kills the most attractive option:** **refutations are DECISION-time, not
+file-read-time.** *"Don't re-propose the Metal renderer"* must be in context when you are **proposing** — which
+happens **before any file is read**. A path-scoped rule fires on a file read that never comes.
+⇒ **The refutations tier cannot be lazily loaded, by construction. Its only lever is compression.**
+(This also **corrects §3's framing**: `.claude/rules/` is not a dead end because of gitignore — it is a dead
+end for *this tier* because of **when** it fires.)
+
+### A7. Correctness defects found en route (independent of any diet)
+
+1. ⚠️ **`openspec/config.yaml:11` still asserts *"Renderer: custom Metal view (MTKView/CAMetalLayer), …
+   dedicated render thread"*** — flatly contradicting the settled Metal refutation and the closed P7b gate,
+   and it is **injected into the AI on every artifact creation**. Live defect; two-line fix.
+2. The **F10 retirement is carried twice** (AGENTS.md L15 + L66); the classifier's latch/non-attributive
+   mechanism **three times** (L15, L66, L217).
+3. The pairing-consult bullet numbers **two different findings "(11)"**.
+4. `grep -c 'G-CONSULT' HISTORY.md` → **0** — the file's **second-largest bullet** (7,048 B) never received the
+   HISTORY narrative that the *"Keep progress current"* rule requires. **The anti-bloat rule was violated by
+   the very session writing the bullet about rules that don't hold** — which is the mechanism, not an irony:
+   nothing was watching.
+
+### A8. Fates table (this addendum)
+
+| Claim | Fate | Killed / confirmed by |
+| --- | --- | --- |
+| "A second diet without a guard will regrow just as fast" (rec 9) | ✅ **CONFIRMED** | 43,667 → 81,012 in 48 h |
+| "Enforcement = critic heuristic **vs.** byte gate" (this doc's open question) | ❌ **RETIRED — wrong question** | the heuristic **shipped and held** (Tooling row 1,934 B) and the file **doubled anyway**: surface-scoped guards **displace** growth |
+| "A per-unit word cap is compression-proof" | ❌ **REFUTED (ACCIDENT-class)** | `gpt-5.6-sol`: split the entry into 24 short bullets — passes lint, keeps the cost |
+| "The bloat is distributed drift; cap the length" | ❌ **REFUTED** | atomicity census: **2 of 25** entries hold **54.5%** of the tier; the other 23 are already correct |
+| "`.claude/rules/` is a dead end because it's gitignored" (§3) | ⚠️ **CORRECTED** | gitignore is a 2-line fix; the **real** blocker is that refutations fire at **decision** time, not file-read time |
+| "Conform to the AGENTS.md standard" (the framing that started this) | ❌ **VACUOUS** | the standard specifies no fields, no structure, no length |
+| "The refutations tier can be moved out of the eager index" | ❌ **REFUTED** | decision-time ⇒ no lazy tier can deliver it |
+
+### A9. Re-verify by effect
+
+The change this addendum feeds **does not succeed by shrinking the file** — that has been achieved twice and
+proved nothing. ***"Size-only green is insufficient."*** Re-verify:
+
+1. **MUTATION-TEST THE GUARD** (the F7 lesson applied to itself): feed it (a) a fat entry **split into N short
+   bullets**, (b) rationale **overflowed into adjacent prose / extra rows**, (c) an entry with **inline numbered
+   sub-findings**. **It must go RED on all three.** *A guard never demonstrated to fail on a real bypass is not
+   a guard.*
+2. **Blinded long-vs-short A/B**, all 25 conclusions + pointers held constant, against the committed
+   pre-registered rubric. **Fails if the compact, guard-green version scores WORSE on the trap/adherence
+   probes.** ❗ Note this tests the axis the 2026-07-06 ablation **never** did — that one tested
+   **presence vs. absence**, never **long vs. short**, so *nothing measured supports the long form either*.
+3. `claude -p` startup-token instrument: the drop must appear (baseline today: **57,569**).
+4. **One week after the change lands, re-run the §1b growth loop.** If the growth rate is still ≥8.8 KB/day,
+   the guard is cosmetic and the change **failed** — regardless of how small the file looked on merge day.
+
+### A10. Reusable guideline (extends §7)
+
+6. **A surface-scoped guard displaces growth to the next unguarded surface.** Measured here: the shipped
+   category-keyed critic bound **held its row** while the file **doubled** into a different tier. Guard the
+   **admission rule** (what kind of content may enter), not the **size of a surface** — otherwise every fix
+   buys one surface and one release cycle.
+7. **Length is the wrong invariant for a curated index; ATOMICITY is the right one.** A length cap is
+   satisfiable by splitting (accident-class), by deleting the caveats that make a rule *correct*, and by
+   evicting old load-bearing entries. *"One entry = one rejected action + replacement + pointer"* is
+   satisfiable **only** by moving the mechanism to where it belongs.
+8. **Before proposing a fix for a recurring problem, `grep research/` for the prior fix.** This file had been
+   dieted **twice** and studied **twice**; the session that opened this addendum did not know the 2026-07-10
+   study existed until a subagent cited it. **The prescription was already written, and ignored.**
