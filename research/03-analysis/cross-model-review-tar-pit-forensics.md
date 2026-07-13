@@ -156,3 +156,60 @@ So the §11 edit was a **mechanical hardening of a git-provenance gate against t
 | §11's check-(4) hardening closes the post-attestation-rewrite gap | three forgeries pass all four checks; the split-commit forward forge needs **no** history rewrite | ❌ |
 | A net-smaller, two-model-agreed, floor-compliant edit is therefore *sound* | it was all three, and still wrong — the floor bounds bloat, not correctness | ❌ |
 | **G-TARPIT-4** (a dev tool is validated by building + using it, not by reviewing its spec) | the defect was invisible across ~16 spec-review rounds and appeared on **first use** | ✅ (strongly) |
+
+---
+
+## §13. ❗❗ NEGATIVE returns past the cliff — measured on an 11-round loop (2026-07-13)
+
+**Provenance:** 2026-07-13. A `/loop`-driven cross-attack review (`fable-5` ‖ `gpt-5.6-sol`, each attacking only what
+it did *not* author; Opus as non-participant re-measurer) on the `bound-the-agents-md-guide` design brief. **11 rounds.**
+This section records what happened **past** the G-TARPIT-4 cliff, because the existing guidelines say the returns
+*diminish* — and that turns out to be **too kind.**
+
+### The measurement
+
+| round | open-actionable | note |
+|---|---|---|
+| 3–9 | 2–5 per model | engine kills early; edge findings later |
+| 10 | **5** (gpt 4 · fable 1) | ✅ all 5 fixed — two were genuine kills |
+| **11** | **11** (gpt 6 · fable 5) | ❗ **the count MORE THAN DOUBLED, after every finding was fixed** |
+
+***≥4 of the 11 were defects introduced BY the round-10 fixes.*** Two were verified by third-party re-measurement,
+and **both were worse than what they replaced:**
+
+- **The installer fix blocked the user's UNRELATED repositories.** *"Install into `$(git rev-parse --git-path hooks)`"*
+  was measured green on four arms — but **all four were inside the repo.** Under a **global** `core.hooksPath`, that
+  path is the user's **global** hooks dir; the gate installs there and **fires on every other repo they push.**
+  Original defect: *"the gate sometimes fails to fire."* Fix's defect: *"the gate blocks unrelated work."*
+- **The dangling-import fix RE-OPENED the guide-vaporize hole it had closed two rounds earlier.** Two rules, accepted
+  the same round from two different models — *"guide absent at tip ⇒ REFUSE"* and *"a dangling `@`-import ⇒ weigh 0"* —
+  **collide** on a regular-file-root guide shape (which three refs in the repo carry today): deleting the imported
+  guide leaves the root present, the import dangling, weighed **0** ⇒ a "shrink" ⇒ **PASS.** Measured: `baseline=2022
+  current=22 → ALLOW`. **99% of the guide vaporized, waved through by the gate built to prevent it.**
+
+### The guidelines
+
+- **G-TARPIT-6 — Past the cliff, review yields NEGATIVE returns: the fixes introduce defects faster than the review
+  removes them, and at higher severity.** A patch written to close a review finding is **unreviewed, freshly-written
+  normative text**, authored under exactly the confidence the finding just punctured — and it is written *without* the
+  adversarial pass that found the original. Diminishing returns understates the risk: **a post-cliff fix can be
+  strictly more harmful than the bug it fixes** (here: a gate that blocks the user's other repositories). ⇒ Once past
+  the cliff, **do not patch-and-re-review. Freeze the design, implement, and let the fixtures adjudicate.** Corollary:
+  **count the self-collisions** — two independently-correct fixes cancelling or contradicting each other happened **4×**
+  in this loop (a growth comparator that made its own red-evidence green; a TODO masquerading as a fix; an
+  ownership rule vs a re-copy rule; a deletion rule vs a dangling-import rule). **A rising self-collision rate is the
+  cliff's signature**, and it is visible *before* the finding count turns.
+- **G-TARPIT-7 — When your reviewers start reaching for `mktemp -d && git init`, the review is over.** Every round-11
+  finding was **DERIVED** — both models built **throwaway repos and ran commands**. They were **hand-simulating a
+  mutation-fixture suite, in English, at 6–16 minutes per finding.** That is the signal that the remaining questions are
+  **executable**, and the instrument that answers them is **`bash`, not another model consult.** The findings are not
+  wasted — ***they ARE the fixture backlog***; route each one to `tasks.md` as a mutation the suite must kill, and stop.
+
+### What the loop DID buy (so this is not read as "review is worthless")
+
+Rounds 1–10 killed **three enforcement engines** by measurement (CI can't gate — **0 merge commits, ever**; an
+Edit/Write hook can't — **the bloat arrived through Bash**; a `git push` matcher can't — `git -C` slips past), **two
+diagnoses** (the leanness rule was **overridden, not unheard** — it exists at 3 surfaces), and **four undrafted ceiling
+numbers**. It also produced the loop's single most valuable finding: **a model refuting its OWN accepted fix from the
+previous round.** ⇒ **The value was real and it was front-loaded.** The error was not running the loop; it was **not
+stopping it at the cliff.**

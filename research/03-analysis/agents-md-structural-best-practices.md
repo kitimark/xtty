@@ -1254,6 +1254,103 @@ interesting.** And every round-10 kill was settled **by running a git command in
 minute** — which is *exactly what the mutation-fixture suite is.* ⇒ **further review rounds are strictly dominated
 by writing the hook + its fixtures (G-TARPIT-4). That is the cliff, and this is where the loop stops.**
 
+### A5-tricies-quater. ❗❗❗ ROUND 11 — THE LOOP IS STOPPED. **The fixes became MORE DANGEROUS than the bugs.**
+
+**This is the round that settles the method question, and it settles it against the method.**
+
+| round | findings | what happened |
+|---|---|---|
+| 10 | **5** (gpt 4 · fable 1) | all 5 fixed |
+| **11** | **11** (gpt 6 · fable 5) | ⇒ **the count MORE THAN DOUBLED — after every round-10 finding was fixed** |
+
+❗ ***At least 4 of the 11 are defects INTRODUCED BY THE ROUND-10 FIXES.*** Two were verified by third-party
+re-measurement, and **both are worse than what they replaced:**
+
+#### ❌ THE FIX HARMED THE USER'S OTHER REPOSITORIES (fable A-2 — verified)
+
+The round-10 installer (*"install into `$(git rev-parse --git-path hooks)`"*) was **measured green on four arms** —
+`main`, a hookless branch, a detached HEAD, a linked worktree. **Every arm was inside the repo.** Under a **global**
+`core.hooksPath` (an ordinary user setup), that path resolves to the user's **global hooks dir**, and `make hooks`
+installs xtty's gate there. Measured, in a scratch tree:
+
+```
+pushing the user's UNRELATED project (no CLAUDE.md, nothing to do with xtty):
+    XTTY GUIDE GATE FIRED in: …/other-project
+    error: failed to push some refs
+  ❌ THE USER'S UNRELATED REPO WAS BLOCKED BY XTTY'S GATE
+```
+
+⇒ ***The original defect was "the gate sometimes fails to fire." The fix's defect is "the gate fires in repositories
+it has no business touching and blocks the user's unrelated work."*** **The fix is strictly more harmful than the bug.**
+✅ **Correct rule: install ONLY into the repo's own git dir; if `core.hooksPath` is set at all, WARN and STOP —
+never write into a hooks dir we do not own — and give the hook a repo-identity guard.**
+
+#### ❌ THE FIX RE-OPENED A HOLE CLOSED TWO ROUNDS EARLIER (fable A-1 — verified)
+
+Round 10 accepted **two** rules from **two different models**:
+- *(gpt)* **"guide present at baseline + absent at tip ⇒ REFUSE"** — closing the guide-vaporize hole;
+- *(fable, §8b)* **"a dangling `@`-import ⇒ weigh 0 + warn"** — a never-refuse-innocent-input rule.
+
+**On the regular-file-`CLAUDE.md` + `@AGENTS.md` shape — which THREE refs in this repo carry TODAY — they collide.**
+Deleting `AGENTS.md` (the design's *own named accident*: a botched `mv`, a `git add -A`) leaves the **root present**
+and the **import dangling** ⇒ weighed **0** ⇒ the meter reads the 537-byte stub ⇒ a **massive shrink** ⇒ **PASS.** Measured:
+
+```
+gate: baseline=2022  current=22
+gate: ALLOW (shrink or unchanged)
+❌ PUSHED. The guide is VAPORIZED on the remote — gate said ALLOW.
+```
+
+⇒ **99% of the injected guide, deleted, waved through by the gate built to prevent exactly that.** The refusal only
+fires when the **root** dangles (main's symlink shape) — never on the **import** lane. ✅ **Correct rule: SPLIT the
+word "dangling" — *resolvable at baseline, dangling at tip* = a DELETION EVENT ⇒ **REFUSE**; *never-resolvable /
+un-pushable* (`@~/…`) ⇒ weigh 0 + warn.**
+
+#### The other confirmed round-11 findings (each is now a FIXTURE, not a debate)
+
+- **Rung 4 refuses `refs/notes` and orphan refs** (both models, independently): borrowing main's guide as an orphan
+  ref's baseline makes the guide-deletion rule fire on a ref that never had a guide. ⇒ **no merge-base ⇒ ALLOW. Delete rung 4.**
+- **Rung 2 outranks the all-zero OID** (gpt): a deleted-then-recreated branch with a **stale tracking ref** uses it as
+  baseline. ⇒ **first-push detection must come FIRST.**
+- **No ownership discriminator** (both): *"re-copy every run"* + *"never clobber a foreign hook"* are **jointly
+  unimplementable** — after the first install a `pre-push` always pre-exists, and byte-identity classifies every
+  *outdated own copy* as foreign. ⇒ **a sentinel marker line.** *(The 3rd self-collision.)*
+- **The inversion SURVIVES on rung 1** (fable A-4): `git push origin main:<branch>` — a **fast-forward transmitting
+  ZERO new objects** — is **REFUSED**, because the branch's old tip is the baseline. ⚠️ **This one is ENGINE-level**:
+  the right invariant is *"does this push introduce guide bytes the remote does not already have?"*, not *"is the tip
+  fatter than where this ref used to be?"* **It falsifies the brief's own "(Checked, no finding: force-push evaluates
+  tip-vs-baseline normally)". LEFT OPEN — it is a design decision, and this session has just proven it should not be
+  made by another in-model patch.**
+- **Recovery is source- but not REF-parameterized** (gpt): `restore`/`amend` act on the **current checkout**, so a
+  refusal on another ref repairs the **wrong branch**; tags unhandled.
+
+#### ❗❗ THE FINDING THAT MATTERS — this is not diminishing returns. It is **NEGATIVE** returns.
+
+The repo's **G-TARPIT-1** already says *"adversarial review never returns zero, so 'until both models agree' has no
+fixed point,"* and **G-TARPIT-4** says *"~2–3 useful rounds, then bloat/regression."* **Round 11 shows something
+strictly worse and worth adding:**
+
+> ***Past the cliff, the FIXES introduce defects faster than the review removes them — and at HIGHER severity.***
+> A patch written to close a review finding is **unreviewed, freshly-written normative text**, authored under
+> exactly the confidence that just got punctured. Round 10's two fixes produced: **a gate that blocks the user's
+> unrelated repositories**, and **a re-opened guide-vaporize hole**. ⇒ **G-TARPIT-6.**
+
+**And the tell was visible in HOW the models worked:** every round-11 finding was **DERIVED** — both models built
+**throwaway git repos and ran commands**. ⇒ ***They were hand-simulating the mutation-fixture suite, in English, one
+finding per 6–16 minutes.*** The loop had become **an expensive, serialized, natural-language substitute for a test
+suite that does not exist yet.** ⇒ **G-TARPIT-7: when your reviewers start reaching for `mktemp -d && git init`, the
+review is done — the remaining questions are EXECUTABLE, and the instrument that answers them is `bash`, not another model.**
+
+#### ✅ Nothing is lost — the 11 findings ARE the fixture backlog
+
+Each finding names a mutation the suite must kill: *checkout-disarm · foreign `core.hooksPath` (**and a push from a
+SECOND, UNRELATED repo**) · hook-source upgrade in an armed clone · post-diet historical ref · tag at a fat commit ·
+growth on a historical ref · guide deleted on a feature branch · **guide deleted behind a regular-file root (the
+import lane)** · `refs/notes`/orphan push · recreated branch with a stale tracking ref · **fast-forward absorbing an
+already-published guide** · multi-ref with `main` not first.* **The design goes to `/opsx:propose`; these go to
+`tasks.md`.** ⚠️ **And the arms MUST be isolated (fresh remote per arm)** — measured: they are coupled through shared
+remote state, and one early red **cascades** into spurious downstream reds (a plain git error scored as a gate refusal).
+
 ### ⚙️ A5-tricies-bis. The `--wait` driver, proven in use
 
 `task --background` → job id → `status <id> --wait --json` → **`status=completed, waitTimedOut=false` on the
