@@ -3,9 +3,14 @@
 # arms were previously coupled through shared remote state and one early red
 # cascaded into spurious downstream reds.
 set -u
-HOOK="${HOOK:-/Users/markmark/.claude/jobs/2e729592/tmp/pre-push-v17}"
+HOOK="${HOOK:-/Users/markmark/.claude/jobs/2e729592/tmp/pre-push-v19}"
 INST=/Users/markmark/.claude/jobs/2e729592/tmp/install-hooks-v15.sh
-ROOT=$(mktemp -d /Users/markmark/.claude/jobs/2e729592/tmp/suite.XXXX)
+ROOT=$(mktemp -d /Users/markmark/.claude/jobs/2e729592/tmp/suite.XXXX) || {
+  echo "FATAL: cannot create the scratch root — the suite cannot run. (A previous version reported" >&2
+  echo "       21 'passes' in a sandbox where mktemp failed. A green suite that never ran is a lie.)" >&2
+  exit 2; }
+[ -d "$ROOT" ] && [ -w "$ROOT" ] || { echo "FATAL: scratch root not writable: $ROOT" >&2; exit 2; }
+command -v git >/dev/null || { echo "FATAL: no git" >&2; exit 2; }
 CEIL=1000
 pass=0; fail=0; FAILED=()
 
@@ -17,9 +22,11 @@ guide_regular() { # regular-file root + @import (the shape 3 xtty refs carry)
   head -c "$1" /dev/zero | tr '\0' 'x' > AGENTS.md
   printf '# CLAUDE.md\n@AGENTS.md\n' > CLAUDE.md
 }
-newrepo() { # $1 = name -> echoes workdir
+newrepo() { # $1 = name -> echoes workdir  (setup failure is FATAL, never a silent pass)
   local d="$ROOT/$1"
-  mkdir -p "$d"; git init -q --bare "$d/remote.git"; git init -q "$d/work"
+  mkdir -p "$d" || { echo "FATAL: mkdir $d failed" >&2; exit 2; }
+  git init -q --bare "$d/remote.git" || { echo "FATAL: git init failed in $d" >&2; exit 2; }
+  git init -q "$d/work" || { echo "FATAL: git init failed in $d/work" >&2; exit 2; }
   ( cd "$d/work"
     git config user.email t@t; git config user.name t
     git symbolic-ref HEAD refs/heads/main
@@ -401,10 +408,10 @@ arm "35. unscoped .claude/rules growth is METERED (fake-diet lane)" REFUSE \
 # 36. ...but a rule WITH `paths:` frontmatter is read-triggered, NOT eager => must not be metered
 W=$(newrepo Y36); ( cd "$W"
   guide 400; mkdir -p .claude/rules
-  printf 'paths:\n  - "**/*.swift"\n---\n# scoped\n' > .claude/rules/swift.md
+  printf -- '---\npaths:\n  - "**/*.swift"\n---\n# scoped\n' > .claude/rules/swift.md
   git add -A; git commit -qm base; git push -q origin main
   bash "$INST" "$HOOK"
-  { printf 'paths:\n  - "**/*.swift"\n---\n'; head -c 3000 /dev/zero | tr '\0' 's'; } > .claude/rules/swift.md
+  { printf -- '---\npaths:\n  - "**/*.swift"\n---\n'; head -c 3000 /dev/zero | tr '\0' 's'; } > .claude/rules/swift.md
   git add -A; git commit -qm "grow a SCOPED rule (not eagerly injected)" ) >/dev/null 2>&1
 arm "36. a `paths:`-scoped rule is NOT metered (read-triggered)" PASS \
     "XTTY_GUIDE_CEILING=$CEIL git push origin main"
@@ -433,8 +440,99 @@ W=$(newrepo Y38); ( cd "$W"
   bash "$INST" "$HOOK"
   guide 1400; git add -A; git commit -qm regrow ) >/dev/null 2>&1
 # corrupt the meter's input: an unreadable object store makes `git cat-file -s` fail mid-run
-arm "38. genuine meter failure REFUSES (real fail-closed)" REFUSE \
-    "XTTY_GUIDE_CEILING=notanumber git push origin main"
+arm "38. malformed FLOOR refuses (the ceiling/floor parse lane)" REFUSE \
+    "XTTY_GUIDE_FLOOR=lots git push origin main"
+
+
+echo
+echo "════ ROUND-14 ARMS (gpt — the metering surface I got wrong) ════"
+
+# 39. a rule whose BODY starts a line with "paths:" is NOT frontmatter => still EAGER => metered.
+#     (the old `grep '^paths:'` in the first 20 lines falsely exempted it — a fake-diet lane
+#      hiding inside the metering code itself.)
+W=$(newrepo Z39); ( cd "$W"
+  guide 400; mkdir -p .claude/rules
+  printf '# rules\nWe document paths:\npaths: are written like this.\n' > .claude/rules/style.md
+  git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  { printf '# rules\nWe document paths:\npaths: are written like this.\n'
+    head -c 1600 /dev/zero | tr '\0' 'p'; } > .claude/rules/style.md
+  git add -A; git commit -qm "grow a rule whose BODY says paths:" ) >/dev/null 2>&1
+arm "39. body-text 'paths:' is NOT frontmatter => still metered" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 40. a rule FILENAME WITH SPACES must not be word-split out of the meter
+W=$(newrepo Z40); ( cd "$W"
+  guide 400; mkdir -p .claude/rules
+  printf '# style\n' > ".claude/rules/code style.md"
+  git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  head -c 1600 /dev/zero | tr '\0' 'c' > ".claude/rules/code style.md"
+  git add -A; git commit -qm "grow a rule with a SPACE in its filename" ) >/dev/null 2>&1
+arm "40. rule filename WITH SPACES is still metered" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 41. a TRACKED CLAUDE.local.md is eagerly loaded ("loads alongside CLAUDE.md, treated the same way")
+W=$(newrepo Z41); ( cd "$W"
+  guide 400; printf '# local\n' > CLAUDE.local.md
+  git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  head -c 1600 /dev/zero | tr '\0' 'l' > CLAUDE.local.md
+  git add -A; git commit -qm "grow a tracked CLAUDE.local.md" ) >/dev/null 2>&1
+arm "41. tracked CLAUDE.local.md is metered (eager root)" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 42. a DANGLING SYMLINK import at the BASELINE must not latch a permanent FALSE REFUSAL.
+#     (baseline EXISTENCE via ls-tree != baseline RESOLVABILITY: the symlink is in the tree but
+#      resolves to nothing, so it was read as "was fine, now broken" and refused forever.)
+W=$(newrepo Z42); ( cd "$W"
+  printf '# CLAUDE.md\n@AGENTS.md\n@broken-link.md\n' > CLAUDE.md
+  head -c 400 /dev/zero | tr '\0' 'x' > AGENTS.md
+  ln -s nowhere.md broken-link.md                  # a symlink that EXISTS but resolves to nothing
+  git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  echo "an unrelated change" >> AGENTS.md; git add -A; git commit -qm "unrelated work" ) >/dev/null 2>&1
+arm "42. dangling SYMLINK import at baseline: no false-refusal latch" PASS \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+
+echo
+echo "════ ROUND-14 ARMS (fable) ════"
+
+# 43. A-14-1: a typo'd ceiling in the user's SHELL PROFILE must not make this gate refuse a
+#     STRANGER's repo. The identity guard has to run BEFORE the ceiling parse.
+W=$(newrepo Z43); SH2="$ROOT/sharedhooks2"; mkdir -p "$SH2"
+install -m755 "$HOOK" "$SH2/pre-push"
+V=$(newrepo Z43other)                                   # someone else's project — never stamped
+( cd "$V"; guide 300; echo x > f.txt; git add -A; git commit -qm work ) >/dev/null 2>&1
+out=$( cd "$V" && XTTY_GUIDE_CEILING=64K git -c core.hooksPath="$SH2" push origin main 2>&1 ); rc=$?
+if [ $rc -eq 0 ]; then
+  echo "✅  43. typo'd ceiling does NOT refuse a stranger's repo"; pass=$((pass+1))
+else
+  echo "❌  43. THE GATE REFUSED A STRANGER'S REPO over our own env var"; fail=$((fail+1)); FAILED+=("43")
+  echo "$out" | grep -i 'guide-gate' | head -1 | sed 's/^/        /'
+fi
+
+# 44. A-14-3: a guide that lives ONLY in .claude/CLAUDE.md (no root CLAUDE.md) must be METERED.
+#     v18 returned "root_missing" regardless of the queue => never metered, and it printed
+#     "no guide => allow" over an eager guide many times the ceiling.
+W=$(newrepo Z44); ( cd "$W"
+  mkdir -p .claude; printf '# project\n' > .claude/CLAUDE.md   # NO root CLAUDE.md at all
+  echo code > src.txt; git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  head -c 1600 /dev/zero | tr '\0' 'C' > .claude/CLAUDE.md
+  git add -A; git commit -qm "grow a .claude-only guide" ) >/dev/null 2>&1
+arm "44. a .claude/CLAUDE.md-ONLY guide is metered" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 45. ...and deleting the ROOT while .claude/ roots remain is still a root deletion
+W=$(newrepo Z45); ( cd "$W"
+  guide 3000; mkdir -p .claude; printf '# extra\n' > .claude/CLAUDE.md
+  git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  git rm -q AGENTS.md CLAUDE.md; git commit -qm "drop the root guide" ) >/dev/null 2>&1
+arm "45. root guide deleted while .claude/ roots remain => REFUSE" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
 
 echo
 echo "════ $pass passed, $fail failed ════"

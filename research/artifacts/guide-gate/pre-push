@@ -16,15 +16,6 @@ set -uo pipefail
 
 REMOTE="${1:-origin}"                       # pre-push receives <remote-name> <remote-url>
 MAIN_REF="refs/remotes/$REMOTE/main"
-CEILING="${XTTY_GUIDE_CEILING:-65666}"
-MAXDEPTH=4
-FLOOR="${XTTY_GUIDE_FLOOR:-2000}"     # below this, a "shrink" is a VAPORIZE, not a diet
-is_int() { case "${1:-}" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac; }
-# A malformed ceiling made `[ "$bas" -gt "$CEILING" ]` error and the push ALLOW. Fail closed.
-if ! is_int "$CEILING" || ! is_int "$FLOOR"; then
-  echo "guide-gate: REFUSE — malformed ceiling/floor (CEILING='$CEILING' FLOOR='$FLOOR')." >&2
-  exit 1
-fi
 
 # --- repo-identity guard (A-2): only ever act on THIS project. -------------
 # A hooks dir can be shared (global core.hooksPath). Never gate a repo that is not ours.
@@ -35,6 +26,19 @@ fi
 #    gate a stranger's project with THIS project's ceiling. The installer stamps the repo it arms;
 #    the hook only ever acts on a repo bearing that stamp.
 [ "$(git config --get xtty.guide-gate 2>/dev/null || true)" = "true" ] || exit 0
+
+# (the ceiling parse lives AFTER the identity guard: a typo'd XTTY_GUIDE_CEILING in a shell
+#  profile must never make this gate REFUSE a stranger's repository — cross-repo harm, A-14-1.)
+CEILING="${XTTY_GUIDE_CEILING:-65666}"
+MAXDEPTH=4
+FLOOR="${XTTY_GUIDE_FLOOR:-2000}"     # below this, a "shrink" is a VAPORIZE, not a diet
+is_int() { case "${1:-}" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac; }
+# A malformed ceiling made `[ "$bas" -gt "$CEILING" ]` error and the push ALLOW. Fail closed.
+if ! is_int "$CEILING" || ! is_int "$FLOOR"; then
+  echo "guide-gate: REFUSE — malformed ceiling/floor (CEILING='$CEILING' FLOOR='$FLOOR')." >&2
+  exit 1
+fi
+
 
 # resolve_guide <tree-ish> -> "<total_bytes> <status>"
 #   status: ok | root_missing | import_dangling
@@ -79,26 +83,53 @@ resolve_entry() {  # $1=oid $2=path -> echoes "<blob-oid> <real-path>"; 1 = unre
 #    the dangling PATH LIST is returned so the caller can compare baseline-vs-tip PER PATH:
 #    an import that DISAPPEARED is a deletion (refuse); one that was NEVER there is new-and-broken
 #    (warn, weigh 0) — an aggregate flag conflates them and mis-fires both ways.
+has_paths_frontmatter() {   # $1=oid $2=path
+  # NB: in awk, `exit 0` inside a rule STILL RUNS THE END BLOCK — an `END { exit 1 }` there
+  # silently overrides it. Set a flag; exit exactly once, in END.
+  git cat-file blob "$1:$2" 2>/dev/null | awk '
+    NR == 1 { if ($0 != "---") done = 1; next }        # no opening `---` => NOT frontmatter
+    done { next }
+    /^---[[:space:]]*$/ { done = 1; next }             # frontmatter closed without a `paths` key
+    /^paths:/ { ok = 1; done = 1 }
+    END { exit (ok ? 0 : 1) }'
+}
+
 resolve_guide() {
-  local oid="$1" total=0 hop=0 status=ok dangling="" closure=""
+  local oid="$1" total=0 hop=0 status=ok dangling="" closure="" root_gone=no
   local -a queue=("CLAUDE.md") next=()
   local seen="" ent blobid real imp p sz body
 
-  # every EAGERLY-INJECTED root, not just CLAUDE.md
+  # every EAGERLY-INJECTED root, not just CLAUDE.md.
   local r
-  for r in .claude/CLAUDE.md $(git ls-tree -r --name-only "$oid" -- .claude/rules 2>/dev/null | grep '\.md$' || true); do
+  # NUL-delimited: a rule filename may contain spaces (`$(…)` word-splitting dropped them).
+  while IFS= read -r -d '' r; do
+    [ -z "$r" ] && continue
     case "$r" in
-      .claude/rules/*)
-        # a rule with `paths:` frontmatter is READ-TRIGGERED, not eager => not metered
-        git cat-file blob "$oid:$r" 2>/dev/null | sed -n '1,20p' | grep -q '^paths:' && continue ;;
+      *.md) ;;
+      *) continue ;;
     esac
-    git ls-tree "$oid" -- "$r" 2>/dev/null | grep -q . && queue+=("$r")
-  done
-  git ls-tree "$oid" -- CLAUDE.md 2>/dev/null | grep -q . || {
-    # no root CLAUDE.md — but an eager .claude/ surface may still exist
-    [ ${#queue[@]} -gt 1 ] || { printf '0 root_missing none -'; return; }
-  }
-  resolve_entry "$oid" CLAUDE.md >/dev/null 2>&1 || { printf '0 root_missing none -'; return; }
+    # A rule is READ-TRIGGERED (not eager) ONLY if it has real YAML frontmatter carrying `paths`.
+    # DOCS: the frontmatter is delimited by `---` lines. A grep for `^paths:` anywhere in the head
+    # both (a) misses the delimiters and (b) falsely exempts a rule whose BODY happens to start a
+    # line with "paths:" — an unmetered fake-diet lane in the metering code itself.
+    if [ "${r#.claude/rules/}" != "$r" ] && has_paths_frontmatter "$oid" "$r"; then continue; fi
+    queue+=("$r")
+  done < <(
+    git ls-tree -r -z --name-only "$oid" -- .claude/rules 2>/dev/null || true
+    for r in .claude/CLAUDE.md CLAUDE.local.md; do
+      git ls-tree "$oid" -- "$r" 2>/dev/null | grep -q . && printf '%s\0' "$r"
+    done
+  )
+  # the root CLAUDE.md is just ONE eager root. Keep it only if it actually resolves;
+  # "no guide" means the eager-root SET is empty — not merely that the root is absent.
+  if ! resolve_entry "$oid" CLAUDE.md >/dev/null 2>&1; then
+    queue=(${queue[@]+"${queue[@]}"})
+    local -a keep=()
+    for p in ${queue[@]+"${queue[@]}"}; do [ "$p" = "CLAUDE.md" ] || keep+=("$p"); done
+    queue=(${keep[@]+"${keep[@]}"})
+    root_gone=yes
+  fi
+  [ ${#queue[@]} -gt 0 ] || { printf '0 root_missing none -'; return; }
 
   # `hop` counts IMPORT HOPS. The root is hop 0 and must not consume one, or a
   # declared "max depth 4" only ever follows 3 (measured off-by-one).
@@ -153,6 +184,7 @@ resolve_guide() {
     queue=(${next[@]+"${next[@]}"})
     hop=$(( hop + 1 ))
   done
+  [ "$root_gone" = yes ] && [ "$status" = ok ] && status=root_deleted
   printf '%s %s %s %s' "$total" "$status" "${dangling:-none}" "$(printf '%s' "$closure" | git hash-object --stdin)"
 }
 
@@ -224,7 +256,7 @@ while read -r local_ref local_oid remote_ref remote_oid; do
 
   # --- guide DELETED (any ref) --------------------------------------------
   # A-1: the ROOT vanishing and an IMPORT vanishing are the SAME accident.
-  if [ "$bas_status" = ok ] && [ "$cur_status" = root_missing ]; then
+  if [ "$bas_status" = ok ] && { [ "$cur_status" = root_missing ] || [ "$cur_status" = root_deleted ]; }; then
     echo "guide-gate: REFUSE $local_ref — the guide ROOT (CLAUDE.md) was DELETED (baseline had one)" >&2
     status=1; continue
   fi
@@ -236,7 +268,9 @@ while read -r local_ref local_oid remote_ref remote_oid; do
     IFS=, read -ra _dangs <<<"${cur_dangling%,}"
     for _d in ${_dangs[@]+"${_dangs[@]}"}; do
       [ -z "$_d" ] || [ "$_d" = none ] && continue
-      if git ls-tree "$base" -- "$_d" 2>/dev/null | grep -q .; then vaporized="$vaporized $_d"; fi
+      # RESOLVABLE at the baseline (not merely present): a dangling symlink import EXISTS in the
+      # tree yet resolves to nothing, and treating it as "was fine, now broken" latches a false refusal.
+      if resolve_entry "$base" "$_d" >/dev/null 2>&1; then vaporized="$vaporized $_d"; fi
     done
     if [ -n "$vaporized" ]; then
       echo "guide-gate: REFUSE $local_ref — guide IMPORT(S) resolved at the baseline and DANGLE at the tip:$vaporized" >&2
