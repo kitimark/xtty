@@ -1040,6 +1040,54 @@ Install at every entry point a *building* clone must run (`make setup`, `scripts
 **CI verify installation** — but **a docs-only clone never runs `make`**, so **the un-configured clone is an
 accepted residual routed to the CI-detector lane.**
 
+### A5-vicies-sexies. ROUND 8 — the mode-swap ALREADY EXISTS in this repo, and "gate main only" is refuted
+
+`gpt-5.6-sol`, **`OPEN ACTIONABLE: 4`** — all ACCIDENT-class, all verified:
+
+1. ❗ **`make setup` INSTALLS THE HOOK ONLY IF THE PREREQS PASS.** DERIVED: `setup: doctor …` (`Makefile:71`)
+   — **`doctor` runs FIRST and exits 1 on missing prereqs**, so **a clone without Xcode/XcodeGen never reaches
+   the hook install.** ⇒ **the installer must be a standalone, unconditional `make hooks` that CANNOT FAIL,
+   invoked BEFORE any fallible prerequisite.**
+2. ❗❗ **"`main`'s tree is the only one injected" is FALSE — and the repo ALREADY CONTAINS the mode-swap.**
+   A **checked-out branch** supplies the injected `CLAUDE.md`/`AGENTS.md` while you work on it. DERIVED —
+   **three real branches carry `CLAUDE.md` as a REGULAR FILE (mode `100644`, not `120000`):**
+   `retire-metal-renderer` · `silence-bash-deprecation` · `spike/menu-clobber-diagnostics` (they predate the
+   symlink change). ⇒ **`fable-5`'s "gate `refs/heads/main` only" is REFUTED with repo evidence — GATE EVERY
+   PUSHED REF.** *(A session on one of those branches has a regular-file `CLAUDE.md` injected while a main-only
+   gate sees nothing at all.)*
+   ✅ **And the FIX for the mode-swap improves too: MEASURE WHAT IS ACTUALLY INJECTED — do not assert a mode.**
+   The hook **resolves `CLAUDE.md` in the pushed tree and weighs the bytes that get injected.** *Strictly
+   better: it needs no exception for the three legacy branches, and cannot be defeated by a mode the assertion
+   didn't anticipate.*
+3. ❗ **"State the unwind procedure" was A TODO MASQUERADING AS A FIX.** The round-7 defect **survived
+   round 7's own fix** because the brief said *"state it"* instead of stating it. ⇒ now executable:
+   `git restore --source=@{upstream} --staged --worktree -- AGENTS.md` → `git commit --amend --no-edit` →
+   record the pending admission on its named surface → re-push. **Nothing is lost: the finding is already
+   committed in the unmetered surfaces; only the eager append is withheld.**
+4. ❗ **THE FIXTURES MISS THE `pre-push` INPUT STREAM'S SHAPE.** **Git supplies ONE STDIN LINE PER PUSHED REF.**
+   A hook that `read`s **once** — not in a `while read local_ref local_oid remote_ref remote_oid` loop — **sees
+   only the FIRST ref** ⇒ ***`main` in a multi-ref push is silently skipped.*** ⇒ add a **multi-ref push with
+   `main` NOT first**, and an **ordinary non-`main` ref MUST pass**.
+
+### ⚙️ A5-vicies-septies. Codex driver — `--wait` is the supported poller (and it does NOT replace the zombie detector)
+
+**Measured live against a running job:** `node codex-companion.mjs status <job-id> --wait --json` **blocks and
+polls every 2 s** until a terminal state, returning `{job:{status,phase}, waitTimedOut, timeoutMs}` —
+**returned `completed`/`done`/`waitTimedOut:false` in 73 s.** Default timeout **240,000 ms**; `--wait`
+**requires a job id**. `task --background` uses `spawnDetachedTaskWorker` (a real detach — survives the
+caller's death).
+
+✅ **The correct driver:** `task --background` → capture the job id → `status <id> --wait --json`, re-issued
+while `waitTimedOut`.
+
+❗ **BUT `--wait` DOES NOT DETECT ZOMBIES — and this is the trap.** It returns on a **terminal** state, and
+**a zombie never reaches one** (§12e-bis: 4 zombies in 10 runs; two sat at `running` for **1h49m / 1h59m**
+with dead threads). It would simply return `waitTimedOut:true` forever. ⇒ **`waitTimedOut:true` is AMBIGUOUS —
+"still working" OR "dead and lying about it" — and only the LOG tells you which.** **Compose all three:**
+`--wait` = the poller · **log-file growth** = the liveness check (≥5 min of zero growth ⇒ dead ⇒ reap) ·
+`grep -c 'Turn completed'` = the completion discriminator (**1** = real; **0** + `thread not found` on cancel
+= zombie).
+
 ### A6-pre. ❗ CORRECTION (probe, 2026-07-13) — there IS a decision-time channel, and §A6 below missed it
 
 §A6's table concluded *"the refutations cannot be relocated; compression is the only lever."* **That
