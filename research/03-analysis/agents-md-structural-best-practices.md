@@ -1088,6 +1088,78 @@ with dead threads). It would simply return `waitTimedOut:true` forever. ⇒ **`w
 `grep -c 'Turn completed'` = the completion discriminator (**1** = real; **0** + `thread not found` on cancel
 = zombie).
 
+### A5-vicies-octies. ROUND 9 — a 537-BYTE FILE DEFEATS THE METER, and it ALREADY EXISTS on three branches
+
+❗❗ **THE BIGGEST REMAINING HOLE, and it breaks the round-8 fix.** The round-8 fix was *"resolve `CLAUDE.md` in
+the pushed tree and weigh the bytes."* **DERIVED — that measures 537 bytes of a 60 KB surface:**
+
+| branch | `CLAUDE.md` | contains | imported guide |
+| --- | --- | --- | --- |
+| `retire-metal-renderer` | **568 B** | `@AGENTS.md` | up to **60,439 B** |
+| `silence-bash-deprecation` | **537 B** | `@AGENTS.md` | … |
+| `spike/menu-clobber-diagnostics` | **537 B** | `@AGENTS.md` | … |
+
+❗ **`@`-imports are EAGER** — *"expanded and loaded into context at launch"* (established in **round 1**, from
+the Claude Code docs). ⇒ ***a 537-byte file with one import line defeats the meter completely — and that file
+already exists on three real branches.***
+
+✅ **THE METER IS: resolve `CLAUDE.md` in the pushed tree → follow `@`-imports TRANSITIVELY (max depth 4) →
+weigh the TOTAL EAGERLY-INJECTED BYTES.** Every domain arm keys on that. **+ a legacy-import fixture.**
+
+### ⚖️ A5-vicies-nonies. THE REVIEWERS CONTRADICTED — and both were right about different objects
+
+`gpt-5.6-sol`: **`$remote_oid` is ADVERTISED and its object NEED NOT EXIST LOCALLY** ⇒ `git show
+"$remote_oid:…"` is **NOT offline-safe.**
+`fable-5` (round 7): *"offline is safe — the baseline is a **local** remote-tracking ref."*
+
+⚖️ **Adjudication: both correct, about different objects.** ⇒ **Try `$remote_oid`; fall back to the local
+remote-tracking ref; if NEITHER resolves, ALLOW.** *Refusing an innocent offline push is precisely the disease
+that trains `--no-verify` — the R3 bypass the design depends on nobody reaching for.*
+
+### ✅ A5-tricies. BOTH MODELS INDEPENDENTLY FOUND THE INSTALLER HOLE — the gate would never have armed the machine that matters
+
+**Convergence on a defect (the only kind that counts).** DERIVED:
+`build`/`test`/`test-core`/`run`/`install` depend on **`$(SWIFTTERM_SENTINEL)`**, which **already exists** in
+any bootstrapped clone; **`SWIFTTERM_INPUTS` is the pin + patch — NOT `bootstrap-swiftterm.sh`** ⇒ **pulling
+the guard change never re-triggers bootstrap**; **`make setup` is first-time-only**; `make -n build` /
+`make -n test-core` **go straight to their build commands.**
+
+⇒ ❗❗ ***Nothing routine would ever invoke `make hooks`. The maintainer's own machine — which produces
+essentially EVERY push in this repo — would stay UNARMED. The gate would ship, look installed, and never once
+run where it matters.***
+
+✅ **Fix (one line): `hooks` is an UNCONDITIONAL, CANNOT-FAIL, ORDER-ONLY prerequisite of `build`, `test`,
+`test-core`, `run`, `install`, and `setup`.**
+⚠️ **RELABEL:** *"CI verifies the hook is installed"* verifies **CI's own ephemeral clone** ⇒ it is an
+**INSTALLER REGRESSION TEST, not a detector of unarmed dev clones.**
+
+### A5-tricies-semel. Round 9's other ACCIDENT-class defects
+
+- ❗ **DELETE ALLOWED, RESTORE REFUSED — exactly backwards.** A push **deleting** `AGENTS.md` from `main` hit
+  *"a ref with no `AGENTS.md` ⇒ skip"* and **PASSED — vaporizing the injected guide** (0 bytes < any ceiling);
+  the **RESTORE** push then failed baseline-resolve at a **VALID** OID (`git show <valid-oid>:MISSING` →
+  **exit 128**) → the crash arm → **fail-closed REFUSAL.** ⇒ **On `main`, a missing/dangling guide is a
+  REFUSAL**; and **baseline-resolve-failure-at-a-valid-OID is NOT the crash arm** — define it.
+- ❗ **The FIRST-PUSH base was a TODO masquerading as a fix** (*"define the base explicitly"*) — **and
+  gate-every-ref made the arm HOT**: every `git push -u origin <feature>` hits it. ⇒ **a new non-`main` ref
+  takes REMOTE MAIN's resolved guide as its baseline** (it inherits and passes, rather than being innocently
+  refused). **+ a COMPOSED fixture: new branch × inherited over-ceiling guide × red window MUST PASS.**
+- ❗ **The unwind was FILE-granular while its comment promised HUNK granularity** — `git restore -- AGENTS.md`
+  reverts the **mandated** bounded row/snapshot updates too ⇒ **a session following it verbatim ships a
+  TRACKER-STALE `main`.** *(Also: `@{upstream}` is unset on three existing local branches and on a rejected
+  first `push -u`, and it names the **current** branch, not each **destination** in a multi-ref push; `--amend`
+  can absorb unrelated staged changes and, for multi-commit growth, rewrites the tip.)*
+- ⚠️ **The mode-swap FIXTURE is now incoherent under resolve-and-measure** — an **equal-bytes** swap correctly
+  **PASSES** (the meter follows the injection point). ⇒ the fixture must assert **the meter FOLLOWS the swap**
+  and that **mode-swap + growth is REFUSED**, *not* bare refusal.
+
+### ⚙️ A5-tricies-bis. The `--wait` driver, proven in use
+
+`task --background` → job id → `status <id> --wait --json` → **`status=completed, waitTimedOut=false` on the
+first wait.** Clean, structured, 2 s polling. ✅ **Adopted.** ⚠️ **Still composed with the log-growth liveness
+check** — `--wait` returns on a **terminal** state and **a zombie never reaches one**, so `waitTimedOut:true`
+is **ambiguous** ("still working" vs "dead and lying") and **only the log disambiguates.**
+
 ### A6-pre. ❗ CORRECTION (probe, 2026-07-13) — there IS a decision-time channel, and §A6 below missed it
 
 §A6's table concluded *"the refutations cannot be relocated; compression is the only lever."* **That
