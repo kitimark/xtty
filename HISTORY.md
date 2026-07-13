@@ -29,6 +29,29 @@ bounded table-row update. Not loaded at session start.
 
 ## Change log, later era (formerly embedded in AGENTS.md → OpenSpec workflow)
 
+### 2026-07-13 — fix-cross-review-gate-task-emission — ⚠️ **ABANDONED (won't-do)**, archived `--skip-specs` at 1/20 tasks
+
+**What it would have been.** The cross-review archive gate shipped 2026-07-12 with a **blocking human-attestation task** as its eligibility mechanism — but **nothing emits that task** (`openspec/config.yaml`, the only surface `/opsx:propose` reads, has **0** cross-review rules) and **nothing blocks on its absence** (the critic's check is `heuristic → REVIEW`, *"never a BLOCKER"*). This change would have added a fifth `rules.tasks` entry (emission) and made the critic's check classifier-driven with BLOCKER force (enforcement).
+
+**Why it was abandoned — its own review refuted the ground it stood on.** Four rounds of cross-model review (Opus critic ‖ Codex `gpt-5.6-sol` ‖ inline Opus). Rounds 1–3 fixed a fail-open exit-arm model, an over-promoted decision, and a wrong prescription. **Round 4 — a new human-launched run after `brief-cross-review-pass-b` archived *inside this change's reviewed range* — broke it:**
+
+- **The scope classifier is NON-ATTRIBUTIVE and it LATCHES.** It scopes `git diff --name-only parent(proposal.md)..HEAD` — **repo-wide**. An `exit 10` says only that *some* path in the range is out-of-allowlist, **never whose**. And `openspec archive` **always** writes `openspec/specs/**`, which is **not** in the allowlist — so **any change left open across any other change's archive latches to `exit 10` permanently.** **Measured:** the change itself read **`exit 10` at 1/20 tasks with ZERO implementation landed**, driven **100% by foreign paths**; `add-git-diff-wrap-toggle` (0/20) likewise. Their own paths were 100% allowlisted. This **killed** design D1's lifecycle table and turned task 6.1's validity precondition into a **false-positive test**.
+- **The spec delta was about to freeze a FALSE mechanism claim into `openspec/specs/`** — *"a classifier over **the change's changed paths**"*. Caught by two passes independently, **outside** the brief.
+- **Codex refuted the migration's exclusion premise:** `add-ci-pipeline`'s attestation is **expensive** (324-path, 98.5%-foreign range), **not unsatisfiable** — its remaining work (a test PR, a GitHub repo *setting*) sits **before** its tail.
+- **The severity claim was anachronistic** (Pass C, *refuting the brief that briefed it*): both "violating" changes **predate the obligation** by 12 days and 1 day; the only post-gate change **did** carry the task. **n=1 either way.**
+- **The "strikeable task" escape hatch does not exist** — no striking procedure anywhere, and the new BLOCKER would **re-raise** the task the moment it was removed. Emission was justified as cheap *because reversible*; enforcement made it **irreversible**.
+
+**The verdict.** It tried to build BLOCKER-grade enforcement **on top of** a classifier whose verdict cannot attribute — and every one of its hardest problems traced back to that. Three design-shape questions were escalated to the human (sequencing; should the `exit 10` arm carry BLOCKER force at all; migrate/grandfather/exclude), and Codex returned a **fourth consecutive no-ship**. **The prerequisite is narrowing the range, not this change.** Abandoned.
+
+**Abandoned ≠ wasted — what was banked.** A 32-agent audit (`wf_d714bb3c-772`) adversarially verified every finding that was **about the shipped system rather than the change**, and captured them before archiving:
+
+- **The false mechanism claim was CORRECTED on all three surfaces that carried it** — `openspec/specs/cross-model-review/spec.md`, `AGENTS.md`, and the forensics doc itself (which had been asserting the refuted *"the normal post-propose state is `exit 0`"*). Hand-correcting the spec is sanctioned by AGENTS.md's own *specs record what is true* rule; **human-approved**.
+- **`cross-review-gate-defect-forensics.md`** gains **§9** (the abandonment record), a rewritten **F4** (the latch, with the fates table), **F8** (emission/enforcement defects + the no-strike gap + the refuted unsatisfiability premise), and **G-GATE-3 (revised) / G-GATE-6 / G-GATE-7**.
+
+⚠️ **What remains broken, and is now nobody's task:** emission and enforcement are **unfixed**; **neither** open change carries the gate task the shipped spec requires; and `add-ci-pipeline` has **no `⟶ xtty-openspec-critic` task** to anchor one against. Whatever replaces this must **start from the range narrowing**.
+
+*(Clean instance of **G-TARPIT-4** — the defect was found by **using** the gate, not by reviewing its spec; and of the tar-pit's own lesson: when four rounds cannot settle a design's foundation, the answer is to **stop**, not to iterate.)*
+
 ### 2026-07-13 — brief-cross-review-pass-b (P-tooling / dev-workflow tooling) — implemented 12/12, coherence COHERENT, self-dogfooded through the full human-attestation gate, archived (`cross-model-review` spec +1 requirement)
 
 **Why.** `/xtty:cross-review`'s external soundness pass (Pass B, Codex `gpt-5.6-sol` via the `codex-plugin-cc` companion's `adversarial-review`) had been shipping **blind** — fed an auto-collected diff with **empty focus text**, because the command mis-framed focus as *"does not scope the review"*. Across three prior rounds it under-performed, once **endorsing a claim two other reviewers refuted by drill**, for want of context. The discriminating datum (`cross-review-gate-defect-forensics.md`): once finally handed a brief + drill results, a **read-only** Codex found this project's two biggest gate defects *by reading*. The bottleneck was **under-briefing, not the read-only sandbox** — which is why the fix does not reach for a write-capable reviewer.

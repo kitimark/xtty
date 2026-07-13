@@ -10,8 +10,9 @@
 
 - Co-research Workflow **`wf_9af3679c-537`** — Fable-5 ‖ `gpt-5.6-sol` ‖ Opus adjudicator, 3 bounded rounds, **converged**, ~886k tokens.
 - Adversarial verification Workflow **`wf_cfbf0992-20b`** — 9 agents, ~676k tokens.
-- The live tri-pass cross-review of `fix-cross-review-gate-task-emission` (2 bounded rounds): committed ledger at `openspec/changes/fix-cross-review-gate-task-emission/cross-review-ledger.md` (findings **F1–F12, G1–G11**).
-- Commits `3815113` → `eadd8d0` → `f1f9edc`.
+- The tri-pass cross-review of `fix-cross-review-gate-task-emission` (**4 bounded rounds**): committed ledger at `openspec/changes/archive/2026-07-13-fix-cross-review-gate-task-emission/cross-review-ledger.md` (findings **F1–F12, G1–G11, H1–H8, R4-1…R4-13**). ⚠️ **That change was ABANDONED** (2026-07-13, archived `--skip-specs`, 1/20 tasks) — see **§9**; its round-4 findings are the source of **F4 (revised)**, **F8**, and **G-GATE-3 (revised) / 6 / 7**.
+- Abandonment audit Workflow **`wf_d714bb3c-772`** — 32 agents, every stranded finding adversarially verified before capture.
+- Commits `3815113` → `eadd8d0` → `f1f9edc` → `dca6b11` → `ad91b12` / `69efa68` (round 4).
 - The shipped gate: `openspec/specs/cross-model-review/spec.md`; AGENTS.md → *Cross-model design review + the human-attestation archive gate*; `scripts/cross-review-{scope,digest}.sh`; `scripts/test-cross-review-scripts.sh`.
 
 ---
@@ -348,7 +349,7 @@ Never re-read the spec to "confirm" any of this. Re-run:
 
 ## 7. Evidence artifacts
 
-- The committed ledger — **4 rounds**, findings **F1–F12, G1–G11, H1–H8, R4-1…R4-13**, every dismissal with its rationale: `openspec/changes/archive/2026-07-12-fix-cross-review-gate-task-emission/cross-review-ledger.md` *(the change was **abandoned** — §9 — so the ledger now lives in the archive; it is the fullest record of how these defects were found).*
+- The committed ledger — **4 rounds**, findings **F1–F12, G1–G11, H1–H8, R4-1…R4-13**, every dismissal with its rationale: `openspec/changes/archive/2026-07-13-fix-cross-review-gate-task-emission/cross-review-ledger.md` *(the change was **abandoned** — §9 — so the ledger now lives in the archive; it is the fullest record of how these defects were found).*
 - Workflows: **`wf_9af3679c-537`** (co-research: `converged:true`, 3 rounds) · **`wf_cfbf0992-20b`** (adversarial verification, 9 agents) · **`wf_d714bb3c-772`** (the abandonment audit: 32 agents, every stranded finding adversarially verified).
 - Commits: `3815113` (propose) → `eadd8d0` (round 1) → `f1f9edc` (round 2) → `dca6b11` (round 3) → `ad91b12` / `69efa68` (round 4: the latch) → the abandonment.
 - The gate itself: `scripts/cross-review-{scope,digest}.sh`, `scripts/test-cross-review-scripts.sh`, `openspec/specs/cross-model-review/spec.md`.
