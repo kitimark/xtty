@@ -66,3 +66,39 @@ symlink. The version that survived 11 rounds of review would have read **9**.
 The ceiling is a **ratchet**, and its first notch needs the **compressed draft of `AGENTS.md`** —
 which no review round can produce. `XTTY_GUIDE_CEILING` is env-overridable so the fixtures can run
 at a scaled-down ceiling.
+
+## Round 13 — and the point at which this stopped being the goal
+
+**Both families independently found the SAME defect** (the first time in 13 rounds that happened by
+measurement rather than shared framing): **the `import_dangling` LATCH.** Once a guide with one
+unresolvable relative `@token` was *published*, `bas_status` and `cur_status` were both non-`ok`, the
+"no guide either side ⇒ skip" branch fired, and **every subsequent push was unenforced — ceiling,
+ratchet, deletion rule and vaporize floor all bypassed, forever.** Worse: **fixture 22's own end-state
+was the latch seed.** Fixed in v16 (skip only when *neither* side has a guide); **arm 31** pins it.
+
+Also fixed in v16: an **unborn HEAD** (`git checkout --orphan`) hit an early `exit 0` and skipped the
+gate (arm 30); **rung 0** compared only `CLAUDE.md`/`AGENTS.md`, so equal totals with different
+*imported* content passed as "identical to published" — it now hashes the whole resolved closure (arm 32).
+
+### ⚠️ STILL OPEN (real, recorded, NOT fixed — they are polish, and the gate is not the bottleneck)
+
+- **The ERR trap CRIES WOLF.** It prints *"INTERNAL ERROR … refusing rather than failing open"* and
+  then **ALLOWS the push** — `set -E` propagates the trap into command substitutions, so
+  `resolve_entry`'s *expected* `return 1` fires it and the `exit 1` kills only the subshell. **6 such
+  lines appear in a fully-green run.** The one channel the fail-closed design depends on is lying on
+  routine content. *(Fail-closed is still enforced — by the explicit `is_int` guards, not by the trap.)*
+- **`.claude/rules/*.md` (unscoped) and `.claude/CLAUDE.md` are EAGERLY INJECTED but INVISIBLE to the
+  meter** — an unmetered "fake diet" lane, and the docs' own recommended remedy for an oversized guide
+  is *"split it into `.claude/rules/`"*. Not tracked in this repo today ⇒ a **live mechanism, not an
+  observed breakage** (G-GATE-7).
+- **Three more of my fixtures were VACUOUS** (fable, by mutation): arm 29's fence/span tokens point at
+  files that don't exist, so mis-parsing them yields warn+allow either way; and **no arm tests
+  containing-file-relative import resolution at all** — the round-12 D-5 fix is unfixtured.
+
+### ❗ THE REAL FINDING OF ROUND 13 IS ABOUT SCOPE, NOT THE GATE
+
+**`AGENTS.md` is still 81,012 B. The diet — the actual goal — has had zero bytes of work.** The gate is
+**downstream** of it: the ceiling is a *ratchet*, and the ratchet's first notch is a number that only a
+**compressed draft** can supply. No review round and no fixture can produce that number.
+
+⇒ **The gate is sufficient. The diet is the bottleneck. Stop grooming the mechanism.**
