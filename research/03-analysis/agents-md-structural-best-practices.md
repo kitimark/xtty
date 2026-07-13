@@ -701,6 +701,65 @@ stops the lever from becoming "move everything and hollow out the guide."*
   improvisation is what failure looks like.** ⇒ **Dogfood ONE real archive with the relocated anchor and verify
   BY EFFECT before deleting the eager text** (G-TARPIT-4).
 
+### A5-undecies. ✅ THE CEILING IS A RATCHET, NOT A NUMBER — and the loop-driver double-counted
+
+**Every fixed ceiling proposed in this investigation has been fiction, INCLUDING the corrected ones.** v1 said
+33.4 KB. v2/v3 said *"~46 KB floor / ~50 KB ceiling"* — which requires *"everything else"* compressed to
+**~31 KB, BELOW the revamp's measured 34,027 B while carrying +14,685 B MORE rule obligations, with no
+compressed draft.** ❗ ***That is verbatim the crime the brief convicts v1 of, committed again at a new
+number.*** *(Arithmetic also corrected: the tier-fix floor is **65,666 B** — the earlier 65,514 lost **152 B**
+to section-boundary slop; conforming entries are **678 B**, not 632, so 25 entries ≈ **16.6 KB**; the procedure
+is **9,174 B**, not 9,189.)*
+
+> ✅ **THE FIX — the ceiling STARTS at what is MEASURED TODAY and only tightens as each cut is MEASURED to
+> land. It is never an aspiration.**
+
+| step | ceiling | requires |
+| --- | --- | --- |
+| **initial — adoptable TODAY** | **≈ 66 KB** | tier fix only. **ZERO un-ablated cuts.** |
+| after the relocation lever validates | ≈ **57–58 KB** | one dogfooded archive proving the marker→skill hop |
+| after the snapshot bound is enforced | ≈ **55–56 KB** | ✅ **enforcing the EXISTING SHALL — cutting nothing new** |
+| **≤ 50 KB** | ⛔ **GATED** | a **RULES ablation** (extend the 2026-07-06 methodology) **or a recorded human acceptance** of un-ablated cuts |
+
+**Why this is the right shape:** the guard can ship **today** — **red on the live file, green after the tier
+fix, with ZERO risk to un-ablated rules** — and every further notch is **earned by a measurement**, never
+asserted. *A ratchet cannot ship broken; a number can.*
+
+### ⚠️ A5-duodecies. CORRECTION — the "12 KB of un-ablated RULES cuts" DANGER was OVERSTATED (double-counting)
+
+1. ❗ **§A5-sexies' "~12 KB from the RULES sections" OVERLAPS the 9,174 B relocation candidate** — the
+   cross-model procedure sits **INSIDE** the OpenSpec-workflow section's 17,660 B. **They were presented as
+   independent quantities. They are not.**
+2. ❗ **And it omitted the 3,393 B snapshot block.** Its *"Latest change:"* paragraph (~2.5 KB) is **per-change
+   narrative in the status surface — which the ALREADY-COMMITTED write rule bounds** (`research-capture`'s SHALL
+   + `SKILL.md`'s *"Narrative paragraphs never go here"*). **Compressing it ENFORCES AN EXISTING SHALL; it does
+   not cut an un-ablated rule.**
+
+⇒ **The residual un-ablated RULES cut needed to reach ~50 KB is ~4–6 KB, NOT 12 — and the 66 / 57 / 55 KB
+waypoints need ZERO.** The compensating-strip danger is real **only below ~55 KB**, and the ratchet never goes
+there without an explicit human decision.
+
+### A5-terdecies. ❗ THE RELOCATION BOOKS GROSS AS NET — one clause has PROPOSE-TIME reach a skill cannot replace
+
+**"9,174 B out with no loss of reach" is FALSE.** The obligation *"an in-scope change's `tasks.md` tail carries
+exactly one blocking human-attestation cross-review task"* exists at **exactly ONE line in the eager surface**
+(`AGENTS.md:221`) — **inside the block being moved** — and `openspec/config.yaml` carries **no** cross-review
+rule. ❗ **A skill invoked at the ARCHIVE tick fires AFTER propose — far too late to EMIT the task.** *(Emission
+is already this system's known-broken link — the abandoned `fix-cross-review-gate-task-emission`.)*
+⇒ **A one-line eager stub MUST stay** (better: a `config.yaml` `rules.tasks` seed — that block already exists).
+**Net saving ≈ 7.5–8.5 KB, not 9,174 B.**
+
+**Three blockers before the diet math may BOOK it:** (1) **split by trigger** — worker detail → the
+`/xtty:cross-review` command (❗ **a 13,943 B lazy near-twin ALREADY EXISTS there; the eager block partially
+duplicates it today**), STOP text → the attestation task itself, archive checks → a committed
+`xtty-archive-ritual` skill; (2) **dogfood ONE real archive through the relocated anchor** (the marker→skill hop
+is **unproven**; the measured marker evidence is for *agent-delegation* markers, and if the hop fails **nothing
+else routes there**) — ⚠️ **and the anchor must move WHOLE**, since `⟶ archive-ritual` today resolves to a
+**composite spread across two `AGENTS.md` locations plus step-0**, and a split anchor re-opens the `fix-osc7`
+improvisation class; (3) **probe skill-body STALENESS** — the adjacent measured hazard is same-session
+**definition caching** (the agent-definition-lag refutation), **never tested for skill bodies**; a stale body is
+a silently wrong procedure.
+
 ### A6-pre. ❗ CORRECTION (probe, 2026-07-13) — there IS a decision-time channel, and §A6 below missed it
 
 §A6's table concluded *"the refutations cannot be relocated; compression is the only lever."* **That
