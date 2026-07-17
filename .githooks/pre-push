@@ -129,7 +129,7 @@ resolve_guide() {
     queue=(${keep[@]+"${keep[@]}"})
     root_gone=yes
   fi
-  [ ${#queue[@]} -gt 0 ] || { printf '0 root_missing none -'; return; }
+  [ ${#queue[@]} -gt 0 ] || { printf '0 root_missing none - yes'; return; }
 
   # `hop` counts IMPORT HOPS. The root is hop 0 and must not consume one, or a
   # declared "max depth 4" only ever follows 3 (measured off-by-one).
@@ -184,21 +184,22 @@ resolve_guide() {
     queue=(${next[@]+"${next[@]}"})
     hop=$(( hop + 1 ))
   done
-  # A-15-2 (2026-07-18, Codex-caught): root deletion must be reported even when SOME OTHER
-  # eager root's import is also dangling. The old guard required status=ok before promoting
-  # to root_deleted, so a root deletion sitting alongside an unrelated dangling import (e.g. a
-  # newly-broken @import in .claude/CLAUDE.md) left status at import_dangling forever -- the
-  # caller's root-deletion refuse branch never fired, and if the surviving root's bytes alone
-  # stayed >= FLOOR, the collapse check missed it too. Root deletion is the more severe finding
-  # and must win regardless of what else is dangling.
-  [ "$root_gone" = yes ] && status=root_deleted
-  printf '%s %s %s %s' "$total" "$status" "${dangling:-none}" "$(printf '%s' "$closure" | git hash-object --stdin)"
+  # A-15-2/A-15-2b (2026-07-18, Codex-caught, two rounds): root deletion must be reported even
+  # when SOME OTHER eager root's import is dangling -- on EITHER side. round 1 tried promoting
+  # the aggregate `status` to root_deleted, but the caller also required the BASELINE's
+  # aggregate status to be "ok", so a PRE-EXISTING published dangling import elsewhere in the
+  # closure masked a real deletion just the same (round 1's fix only helped when the dangling
+  # import was newly introduced in the SAME commit as the deletion). The durable fix decouples
+  # this from the aggregate status entirely: expose root-gone as its OWN dedicated field so the
+  # caller can check "did the ROOT resolve" independently of dangling-import status on either
+  # side. root_missing (queue empty) also implies no root -- report "yes" there too.
+  printf '%s %s %s %s %s' "$total" "$status" "${dangling:-none}" "$(printf '%s' "$closure" | git hash-object --stdin)" "$root_gone"
 }
 
 canonical=$(git rev-parse -q --verify "$MAIN_REF" 2>/dev/null || true)
 canon_bytes=""
 canon_digest=""
-if [ -n "$canonical" ]; then read -r canon_bytes _ _ canon_digest <<<"$(resolve_guide "$canonical")"; fi
+if [ -n "$canonical" ]; then read -r canon_bytes _ _ canon_digest _ <<<"$(resolve_guide "$canonical")"; fi
 
 status=0
 zero='0000000000000000000000000000000000000000'
@@ -207,7 +208,7 @@ while read -r local_ref local_oid remote_ref remote_oid; do
   [ -z "${local_ref:-}" ] && continue
   [ "$local_oid" = "$zero" ] && continue                    # deletion push => allow
 
-  read -r cur cur_status cur_dangling cur_digest <<<"$(resolve_guide "$local_oid")"
+  read -r cur cur_status cur_dangling cur_digest cur_root_gone <<<"$(resolve_guide "$local_oid")"
 
   # --- THE LADDER (order matters) -----------------------------------------
   base=""
@@ -260,7 +261,7 @@ while read -r local_ref local_oid remote_ref remote_oid; do
     fi
   fi
 
-  read -r bas bas_status bas_dangling bas_digest <<<"$(resolve_guide "$base")"
+  read -r bas bas_status bas_dangling bas_digest bas_root_gone <<<"$(resolve_guide "$base")"
   if ! is_int "${cur:-}" || ! is_int "${bas:-}"; then
     echo "guide-gate: REFUSE $local_ref — the meter failed to produce a measurement (fail-closed)." >&2
     status=1; continue
@@ -268,7 +269,11 @@ while read -r local_ref local_oid remote_ref remote_oid; do
 
   # --- guide DELETED (any ref) --------------------------------------------
   # A-1: the ROOT vanishing and an IMPORT vanishing are the SAME accident.
-  if [ "$bas_status" = ok ] && { [ "$cur_status" = root_missing ] || [ "$cur_status" = root_deleted ]; }; then
+  # A-15-2b: use the DEDICATED root_gone fields, not the aggregate status -- the aggregate
+  # conflates "root gone" with "some unrelated import is dangling" on EITHER side (baseline or
+  # tip), and requiring bas_status=ok masked a real deletion when the baseline ITSELF already
+  # had a published, pre-existing dangling import elsewhere in the closure.
+  if [ "$bas_root_gone" = no ] && [ "$cur_root_gone" = yes ]; then
     echo "guide-gate: REFUSE $local_ref — the guide ROOT (CLAUDE.md) was DELETED (baseline had one)" >&2
     status=1; continue
   fi
@@ -310,7 +315,20 @@ while read -r local_ref local_oid remote_ref remote_oid; do
   # --- rung 0 (A-4): already-published canonical guide ---------------------
   # Mirroring origin/main's CURRENT guide introduces no bytes the remote lacks
   # (a fast-forward branch sync / `main:<branch>` repoint transmits zero new objects).
-  if [ -n "${canon_digest:-}" ] && [ "$cur_digest" = "$canon_digest" ] && [ "$cur" -ne "$bas" ]; then
+  # A-15-1b (2026-07-18, Codex-caught, round 2): `canonical` is resolved from OUR OWN local
+  # tracking ref for origin/main (line ~198) -- exactly the kind of STALE signal A-15-1 already
+  # refused to trust as a baseline elsewhere in this hook. A clone that hasn't fetched a diet
+  # landed on the real remote main can still have a local_oid whose CONTENT digest matches that
+  # stale fat canonical (e.g. an old feature branch never rebased past the diet) -- letting a
+  # content-only digest match authorize an over-ceiling push regardless of commit identity would
+  # reopen exactly the hole A-15-1 closed, just via rung 0 instead of the unfetched-baseline lane.
+  # Require EITHER a proven zero-transfer repoint (local_oid IS canonical, the exact same commit
+  # object -- true for a real `main:<branch>` mirror, e.g. arm 14) OR that the result is itself
+  # safely under the ceiling regardless of staleness (trivially safe either way). A content-only
+  # match on a DIFFERENT, over-ceiling commit no longer gets the fast path -- it falls through to
+  # the ordinary comparator below, which judges it on its own (non-stale) baseline correctly.
+  if [ -n "${canon_digest:-}" ] && [ "$cur_digest" = "$canon_digest" ] && [ "$cur" -ne "$bas" ] \
+     && { [ "$local_oid" = "${canonical:-}" ] || [ "$cur" -le "$CEILING" ]; }; then
     echo "guide-gate: $local_ref — guide closure IDENTICAL to $REMOTE/main's published guide => allow" >&2
     continue
   fi

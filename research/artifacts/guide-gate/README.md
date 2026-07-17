@@ -172,9 +172,64 @@ silent no-op against it), and its foreign-hook recovery path told the user to me
 set the `xtty.guide-gate` stamp themselves — and warned them, incorrectly, that simply re-running
 `make hooks` afterward was safe. Both messages now state the correct, actionable recovery.
 
-**Re-verify by effect:** `bash suite.sh` (or `make test-guide-gate`) → `47 passed, 0 failed`;
-`bash mutants.sh` → 20 rows, none reading `NONE <-- VACUOUS FIXTURE` or `!!`. To confirm A-15-1/A-15-2
-are real defects in *this* file (not artifacts of the port), point `HOOK` at this directory's own
-`pre-push` when running the ported suite from `scripts/test-guide-gate.sh` — arms 46 and 47 both read
-`got=PASS` (the bug) against this unmodified prototype, and `got=REFUSE` against the fixed
-`.githooks/pre-push`.
+**Re-verify by effect (superseded by round 15.1 below — see the current counts there):** `bash suite.sh`
+(or `make test-guide-gate`) → `47 passed, 0 failed`; `bash mutants.sh` → 20 rows, none reading
+`NONE <-- VACUOUS FIXTURE` or `!!`. To confirm A-15-1/A-15-2 are real defects in *this* file (not
+artifacts of the port), point `HOOK` at this directory's own `pre-push` when running the ported suite
+from `scripts/test-guide-gate.sh` — arms 46 and 47 both read `got=PASS` (the bug) against this
+unmodified prototype, and `got=REFUSE` against the fixed `.githooks/pre-push`.
+
+## Round 15.1 (2026-07-18, same day) — the stop-time review gate caught two round-15 fixes half-closed
+
+The session's Codex **stop-gate review** (a fresh adversarial pass triggered automatically at end-of-turn,
+distinct from the on-demand `/codex:review` used for round 15 above) read the just-committed round-15
+fixes and found both gate-logic fixes had a narrower blind spot than first closed, plus the round-15 P2
+recovery-message fix for `install-hooks.sh` didn't actually terminate — three more real findings, all
+fixed the same session. Suite now **50/50** (45 ported + 5 net new), mutation matrix **21/21** (18 ported
++ 3 net new — see the A-15-2 retirement note below), 0 vacuous, 0 failed.
+
+- **A-15-2b — root deletion was STILL masked, on the baseline side this time.** A-15-2 (round 15)
+  promoted the aggregate `status` to `root_deleted` when the root vanished, fixing the case where a
+  dangling import was introduced *in the same commit* as the deletion. But the caller's refuse check also
+  required the **baseline's** aggregate status to be `ok` — so a root deletion sitting behind a
+  **pre-existing, already-published** dangling import elsewhere in the closure (present at the baseline
+  too, not newly introduced) still slipped through, because `bas_status` was `import_dangling`, never
+  `ok`. Fixed by decoupling entirely: `resolve_guide()` now returns a **dedicated 5th field**
+  (`root_gone`, yes/no) independent of the aggregate dangling-import status, and the caller checks
+  `bas_root_gone=no && cur_root_gone=yes` directly. This **structurally retired A-15-2's own fix and
+  mutant** — once the caller stopped reading the aggregate status for this check at all, reverting the
+  `status=root_deleted` promotion had no observable effect on any arm (a genuinely vacuous mutant, caught
+  by the matrix itself). The dead promotion and its mutant were removed rather than kept as decoration;
+  A-15-2's fixture (arm 47) and comment now credit both rounds. Fixture: arm 48 (a pre-existing dangling
+  import published at baseline, root deleted in a later commit); mutant: `deletion: root check uses
+  aggregate status again (A-15-2/A-15-2b)`.
+- **A-15-1b — rung 0 trusted the same kind of stale signal A-15-1 had just closed elsewhere.** A-15-1
+  (round 15) stopped trusting a stale local tracking ref as a *baseline* in the unfetched-OID lane. But
+  "rung 0" (the already-published-canonical fast path) independently resolves `canonical` from that exact
+  same kind of local tracking ref (`refs/remotes/$REMOTE/main`), and only checked **content-digest**
+  equality — so a clone that never fetched a diet landed on the real remote main could push a *different*,
+  unrelated commit whose guide content happens to content-match the stale fat canonical, and rung 0 would
+  wave through real over-ceiling regrowth on a thin-baselined ref. Fixed by requiring EITHER a proven
+  zero-transfer repoint (`local_oid` is literally the *same commit object* as `canonical` — true for a
+  real `main:<branch>` mirror) OR that the result is itself safely under the ceiling regardless of
+  staleness. A content-only match on a **different, over-ceiling** commit no longer gets the fast path.
+  Fixture: arm 49 (content-digest match via a different commit, over ceiling, expect REFUSE); arm 50
+  re-verifies the original legitimate same-commit-repoint case (arm 14's scenario) still gets the fast
+  path unregressed; mutant: `ladder: rung-0 trusts a stale digest match regardless of commit (A-15-1b)`.
+- **A-15-7 — the round-15 `core.hooksPath` recovery advice was a reproducible infinite loop.** Round 15
+  fixed the global-vs-local scope *detection* but the suggested fix (add a repo-local override pointing
+  at the default hooks dir) re-entered the exact same refusal branch on the next run, because the guard
+  only checked *whether* `core.hooksPath` was set, never *what it resolved to*. Fixed: resolve the
+  configured value the same way git itself does when it actually runs a hook (`git rev-parse --git-path
+  hooks`, which follows local-over-global-over-system precedence) and compare it to our own install
+  destination — if a local override already neutralizes the foreign/global setting for this repo, proceed
+  with installation instead of refusing again. No new fixture (installer-recovery behavior isn't currently
+  exercised by the git-push-based suite); verified by reasoning through the resolved-path comparison and
+  by the unchanged installer arms (1–5, 23) staying green.
+
+**Re-verify by effect:** `bash suite.sh` (or `make test-guide-gate`) → `50 passed, 0 failed`;
+`bash mutants.sh` → `All mutants caught cleanly (0 vacuous, 0 failed)`, exit 0. Confirm arms 48/49 are
+real defects in *this* file (not port artifacts) the same way as round 15: point `HOOK` at this
+directory's own unmodified `pre-push` — both read `got=PASS` (the bug) there, and `got=REFUSE` against
+the fixed `.githooks/pre-push`; arm 50 reads `got=PASS` against both (confirming no regression of the
+original legitimate rung-0 case).

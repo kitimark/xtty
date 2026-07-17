@@ -56,7 +56,8 @@ mut "latch: import_dangling counts as 'no guide'"     "s=s.replace('  if [ \"\$b
 mut "fail-closed: drop the CEILING is_int guard"      "s=s.replace('if ! is_int \"\$CEILING\" || ! is_int \"\$FLOOR\"; then','if false; then',1)"
 mut "alarm: restore the LYING ERR trap"               "s=s.replace('set -uo pipefail','set -uo pipefail\nset -E\ntrap \\'echo \\\"guide-gate: INTERNAL ERROR — refusing rather than failing open.\\\" >&2; exit 1\\' ERR',1)"
 mut "ladder: trust a stale local tracking ref (A-15-1)" "s=s.replace('trust_stale_tracking_ref=no','trust_stale_tracking_ref=yes',1)"
-mut "deletion: root_deleted needs status=ok again (A-15-2)" "s=s.replace('[ \"\$root_gone\" = yes ] && status=root_deleted','[ \"\$root_gone\" = yes ] && [ \"\$status\" = ok ] && status=root_deleted',1)"
+mut "deletion: root check uses aggregate status again (A-15-2/A-15-2b)" "s=s.replace('if [ \"\$bas_root_gone\" = no ] && [ \"\$cur_root_gone\" = yes ]; then','if [ \"\$bas_status\" = ok ] && { [ \"\$cur_status\" = root_missing ] || [ \"\$cur_status\" = root_deleted ]; }; then',1)"
+mut "ladder: rung-0 trusts a stale digest match regardless of commit (A-15-1b)" "s=s.replace('{ [ \"\$local_oid\" = \"\${canonical:-}\" ] || [ \"\$cur\" -le \"\$CEILING\" ]; }','{ true; }',1)"
 
 if [ "$bad" -eq 0 ]; then
   echo

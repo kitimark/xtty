@@ -580,6 +580,52 @@ W=$(newrepo BB47); ( cd "$W"
 arm "47. root deletion not masked by another root's newly-dangling import" REFUSE \
     "XTTY_GUIDE_CEILING=$CEIL git push origin main"
 
+
+echo
+echo "════ ROUND-15.1 ARMS (Codex, stop-gate review — 2026-07-18) ════"
+
+# 48. A-15-2b: root deletion must not be masked when the BASELINE ITSELF already had a
+#     PUBLISHED, pre-existing dangling import in another eager root (not newly introduced at
+#     the tip, unlike arm 47) -- bas_status becomes import_dangling too, so the old
+#     "[bas_status=ok]" guard masked this even after A-15-2's tip-side fix. Surviving root
+#     stays >= FLOOR unchanged across both commits.
+W=$(newrepo EE48); ( cd "$W"
+  guide 500
+  mkdir -p .claude
+  { head -c 2500 /dev/zero | tr '\0' 'e'; printf '\n@nowhere.md\n'; } > .claude/CLAUDE.md   # dangling import PUBLISHED at baseline
+  git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  git rm -q AGENTS.md CLAUDE.md
+  git commit -qm "drop the root guide behind an ALREADY-dangling 2nd root" ) >/dev/null 2>&1
+arm "48. root deletion not masked by a PRE-EXISTING dangling import at baseline" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 49. A-15-1b: rung-0's "identical to published canonical" exemption must not trust a STALE
+#     canonical digest match from a DIFFERENT commit to authorize real regrowth past the
+#     ceiling. Canonical (main) is fat and published; a SEPARATE thin-baselined ref is grown to
+#     CONTENT-MATCH that fat canonical via its OWN, different commit -- not a real repoint, not
+#     zero new objects. Must still be refused (falls through to the ordinary comparator).
+W=$(newrepo FF49); ( cd "$W"
+  guide 1500; git add -A; git commit -qm "fat era"; git push -q origin main
+  bash "$INST" "$HOOK"
+  git checkout -q -b thinref
+  guide 400; git add -A; git commit -qm "thin baseline"; XTTY_GUIDE_CEILING=$CEIL git push -q origin thinref
+  guide 1500; git add -A; git commit -qm "grow thinref to CONTENT-MATCH fat canonical, different commit" ) >/dev/null 2>&1
+arm "49. rung-0 content match via a DIFFERENT commit, over ceiling => REFUSE" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin thinref"
+
+# 50. ...but a REAL zero-transfer repoint (same commit object as canonical, not just matching
+#     content) must still get the rung-0 fast path even while canonical is over ceiling --
+#     A-15-1b must not regress arm 14's original legitimate case.
+W=$(newrepo GG50); ( cd "$W"
+  guide 400;  git add -A; git commit -qm "thin era"; THIN=$(git rev-parse HEAD)
+  git branch old "$THIN"; git push -q origin old
+  guide 1500; git add -A; git commit -qm "main is FAT (red window)"
+  git push -q origin main
+  bash "$INST" "$HOOK" ) >/dev/null 2>&1
+arm "50. rung-0 STILL fires for a real same-commit repoint (0 new objs)" PASS \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main:old"
+
 echo
 echo "════ $pass passed, $fail failed ════"
 [ $fail -gt 0 ] && printf 'FAILED: %s\n' "${FAILED[*]}"
