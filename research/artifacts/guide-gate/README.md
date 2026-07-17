@@ -124,3 +124,57 @@ was unfixtured (**arm 34**). And the latch mutant survived 29/29 (**arm 31**).
 **compressed draft** can supply. No review round and no fixture can produce that number.
 
 ⇒ **The gate is sufficient. The diet is the bottleneck. Stop grooming the mechanism.**
+
+## Round 15 (2026-07-18) — landing found two more, both in the ported logic, both fixed + fixtured
+
+`bound-the-agents-md-guide`'s `/opsx:apply` session ran a Codex review over the freshly-landed tracked
+sources (`.githooks/pre-push`, `scripts/install-hooks.sh`, `scripts/test-guide-gate*.sh`) — the first time
+this exact code was read by a model *after* it left this scratch directory. It found two more real gaps
+that 14 rounds and 45 fixtures never exercised, plus a real hole in the fixture harness itself. All three
+fixed; the suite is now **47/47** (45 ported + 2 new) with a **20-mutant** matrix (18 ported + 2 new),
+every mutant caught at exactly its own arm — including proof, by running both new fixtures against
+*this unmodified prototype file*, that both defects are real here too, not just in the port.
+
+- **A-15-1 — a STALE local tracking ref was trusted as a baseline.** When the advertised remote tip is
+  unresolvable locally (a second pusher moved the ref; we never fetched), the old code fell back to
+  `git rev-parse refs/remotes/$REMOTE/<branch>` and used it as `base` if it resolved — but that tracking
+  ref, by construction, can only be *stale* relative to the real unfetched tip. Measured: a remote diets
+  1500→600 B; a clone that never fetched the diet still believes the remote is 1500 and force-pushes
+  1400 B — the old code compared 1400 against the stale 1500 "baseline" and **ALLOWED** a real
+  over-ceiling regrowth against the true 600 B remote. Fixed by never trusting it: an unresolvable
+  advertised tip now always falls through to the absolute-ceiling check, exactly like the true
+  no-baseline case. Fixture: arm 46 (`test-guide-gate.sh`); mutant: `ladder: trust a stale local tracking
+  ref (A-15-1)`.
+- **A-15-2 — root deletion was masked when another eager root's import was ALSO dangling.** The
+  `root_gone → root_deleted` promotion required `status = ok` first, so a root deletion sitting alongside
+  an unrelated newly-broken `@import` in a *different* eager root (e.g. `.claude/CLAUDE.md`) left the
+  reported status at `import_dangling` forever — the caller's root-deletion refusal never fired, and if
+  the surviving root's own bytes stayed ≥ `FLOOR`, the collapse check missed it too. Root deletion is the
+  more severe finding and must win regardless of what else is dangling. Fixed: `root_gone` now promotes
+  unconditionally. Fixture: arm 47; mutant: `deletion: root_deleted needs status=ok again (A-15-2)`.
+- **A-15-3 — the mutation matrix itself had no exit-code contract.** `mut()`'s three degradation arms
+  (`!! mutation failed`, `!! parse error`, `NONE <-- VACUOUS FIXTURE`) all print-and-return 0, and the
+  script's last command was `rm -f _m.tmp` — so `make test-guide-gate`/CI stayed green even if every
+  mutant went vacuous. A hook refactor that renamed any mutation anchor would have silently defeated the
+  entire matrix with no red anywhere. Fixed: a `bad` counter accumulates every degraded mutant; the
+  script now exits non-zero if any exist. (Independently caught by both the Codex pass and a parallel
+  Fable 5 review — the same defect, found two different ways.)
+- **A-15-4 (fixture-harness hygiene, found while building arm 46) — `arm()` classified ANY nonzero
+  `git push` exit as a genuine gate refusal**, including a plain git error (a missing local `main` branch
+  in a freshly-checked-out clone, in this case) that never reached the hook's own logic at all. A REFUSE-
+  expected arm could pass for entirely the wrong reason, proving nothing. Fixed: `arm()` now requires the
+  gate's own `^guide-gate: REFUSE` marker in the captured output; a nonzero exit without it is classified
+  `ERROR` and cannot match either expectation.
+
+Two smaller P2 recovery-path gaps (also Codex-caught) were fixed alongside these: `install-hooks.sh`'s
+`core.hooksPath` recovery advice didn't account for a globally-inherited value (a local `--unset` is a
+silent no-op against it), and its foreign-hook recovery path told the user to merge by hand but never to
+set the `xtty.guide-gate` stamp themselves — and warned them, incorrectly, that simply re-running
+`make hooks` afterward was safe. Both messages now state the correct, actionable recovery.
+
+**Re-verify by effect:** `bash suite.sh` (or `make test-guide-gate`) → `47 passed, 0 failed`;
+`bash mutants.sh` → 20 rows, none reading `NONE <-- VACUOUS FIXTURE` or `!!`. To confirm A-15-1/A-15-2
+are real defects in *this* file (not artifacts of the port), point `HOOK` at this directory's own
+`pre-push` when running the ported suite from `scripts/test-guide-gate.sh` — arms 46 and 47 both read
+`got=PASS` (the bug) against this unmodified prototype, and `got=REFUSE` against the fixed
+`.githooks/pre-push`.

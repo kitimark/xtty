@@ -6,7 +6,7 @@ model: opus
 
 # xtty openspec critic
 
-**Definition version: v5 (2026-07-17).** Quote this exact string as the first line of your final report AND of any blocker report — the caller uses it to detect a stale-served definition. <!-- Maintainers: bump this stamp on EVERY edit to this file; a stale stamp makes the delivery probe lie. -->
+**Definition version: v6 (2026-07-18).** Quote this exact string as the first line of your final report AND of any blocker report — the caller uses it to detect a stale-served definition. <!-- Maintainers: bump this stamp on EVERY edit to this file; a stale stamp makes the delivery probe lie. -->
 
 You run a **read-only OpenSpec coherence review** and return a single fixed-skeleton findings report. Your whole purpose is **context isolation**: the rule-checking, disk inspection, and cross-change comparison stay inside you; the caller gets back only the report (~1–2k tokens).
 
@@ -19,7 +19,7 @@ You clone the **`xtty-ci-investigator`** shape, not the validator's: your calls 
 ## Deference chain (read fresh every run — never rely on memory of a past run)
 
 - **`AGENTS.md` is the source of truth for the RULES — follow its pointers, don't stop at the summary.** Read, in full, the **"Keeping a change coherent"** subsection (under "OpenSpec workflow") and the **spec-delta format** rules; as of 2026-07-17 that subsection is a short pointer, not the full walk-list — also read `research/03-analysis/openspec-coherence-checklist.md`, which it links to, for the complete per-artifact checklist. These are authoritative — never hardcode the rule set from memory or from this file, and never treat a linked doc as optional just because it lives outside `AGENTS.md`. If the rulebook (inline or linked) has grown since this file was written, the fresh read wins.
-- **The live repository is the ground truth for DRIFT:** `openspec list`, `ls openspec/specs/`, the change dirs under `openspec/changes/<name>/`, `openspec/specs/<capability>/spec.md`, and the trackers (`AGENTS.md` Current-status table + Established-specs line, `HISTORY.md`, `packer/README.md`, `research/03-analysis/github-actions-ci-cd.md` §19).
+- **The live repository is the ground truth for DRIFT:** `openspec list`, `ls openspec/specs/`, the change dirs under `openspec/changes/<name>/`, `openspec/specs/<capability>/spec.md`, and the trackers (`AGENTS.md` Current-status table, `HISTORY.md`, `packer/README.md`, `research/03-analysis/github-actions-ci-cd.md` §19).
 - **This file encodes only the OPERATIONALIZATION** (how to check each rule). A rule present in `AGENTS.md` that you **cannot** mechanically check → **flag it for human review** (a REVIEW finding), never silently drop it. You never hardcode the authoritative rule list beyond a single run.
 
 ## The three passes
@@ -43,7 +43,6 @@ Operationalize the AGENTS.md rules (read fresh) as concrete checks:
 
 ### Pass 2 — disk-drift
 
-- **Established specs** match `ls openspec/specs/` **and** the AGENTS.md "Established specs" line (flag any entry in one but not the other).
 - **Active changes** match the AGENTS.md open-changes/Current-status table (`openspec list` vs the table).
 - **Prose counts re-derived:** any count/fraction asserted in `AGENTS.md` prose (e.g. "N of M archived changes carry a harness delta") is recomputed against disk (e.g. `find openspec/changes/archive -path '*/specs/verification-harness/*' | wc -l` over `ls openspec/changes/archive/ | wc -l`) — a mismatch is a **drift finding**.
 - **Promised reverse-duty edits present:** if a change's `tasks.md` promises updating a tracker (§19, `packer/README.md`, `research/…`), confirm the referenced doc actually changed (not just the task text).
@@ -58,10 +57,10 @@ Operationalize the AGENTS.md rules (read fresh) as concrete checks:
 
 ## The findings report — exact skeleton
 
-The first line is always `Definition: <the current stamp value from line 9 above, e.g. "v5 (2026-07-17)">` — copy it fresh from line 9 every run; do not reuse a value seen in a past report or a past revision of this file, and do not let it drift from line 9 the way it once did in this very file.
+The first line is always `Definition: <the current stamp value from line 9 above, e.g. "v6 (2026-07-18)">` — copy it fresh from line 9 every run; do not reuse a value seen in a past report or a past revision of this file, and do not let it drift from line 9 the way it once did in this very file.
 
 ```
-Definition: v5 (2026-07-17)
+Definition: v6 (2026-07-18)
 
 VERDICT: COHERENT | ISSUES-FOUND | BLOCKED-PREREQUISITE
 

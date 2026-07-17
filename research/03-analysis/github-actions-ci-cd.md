@@ -489,6 +489,7 @@ This section is the **classification target** for CI-failure investigation: give
 | --- | --- | --- |
 | `test-core` (`ci.yml`) | **Required gate** | **Stop.** The fast view-free `XttyCore` unit suite is deterministic — a red is a real regression by default, regardless of any bucket. |
 | `build-and-test` (`ci.yml`) | **Non-blocking** | Classify each red against §19b; all-benign ⇒ expected, proceed. |
+| `guide-gate` (`ci.yml`) | **Non-blocking** | An **installer regression test over CI's own clone** (`bound-the-agents-md-guide`) — asserts `make hooks` reproduces `.githooks/pre-push` byte-identically, then runs the 45-arm fixture suite + 18-mutant matrix. It is **not** a detector of unarmed developer clones (see §20). A red here means the hook source or installer drifted, or a fixture/mutant regressed — always a real defect, never a benign residual. |
 | `pr-lint` (`pr-lint.yml`) | **Non-blocking** (PRs only) | A Conventional-Commit **PR-title** violation — a title fix, not a code failure. |
 
 ### 19b. Known-benign residual buckets (hosted `macos-26` runner)
@@ -508,6 +509,14 @@ This section is the **classification target** for CI-failure investigation: give
 ### 19c. Reverse duty
 
 Any change that **adds or removes a test, fixes a known-benign residual, or changes a job's required-gate status** MUST update this matrix (and the §19a job map) **in the same session** — otherwise the agent's runtime read just relocates the staleness. Mirrors the `packer/README.md` reverse duty for the VM matrix.
+
+## 20. Addendum (2026-07-18) — `guide-gate` CI job added: describing the check honestly (`bound-the-agents-md-guide`)
+
+`bound-the-agents-md-guide` lands a git `pre-push` hook that refuses a push growing the eagerly-injected `AGENTS.md`/`CLAUDE.md` guide past a measured ratchet ceiling (mechanism: `research/03-analysis/agents-md-structural-best-practices.md`; design: `openspec/changes/bound-the-agents-md-guide/design.md`). Its CI step (spec `build-workflow`, requirement "Continuous integration verifies the hook installer") is scoped narrowly and stated honestly here per that requirement:
+
+- **What it checks:** `make hooks` (which runs `scripts/install-hooks.sh`) installed into CI's own checkout reproduces `.githooks/pre-push` **byte-identically**, then the 45-arm fixture suite (`scripts/test-guide-gate.sh`) and 18-mutant matrix (`scripts/test-guide-gate-mutants.sh`) both run clean.
+- **What it does NOT check, and cannot:** whether any actual developer's clone is armed. Repository hook configuration is not cloned (design D2/the `build-workflow` spec's "clone arms its own repository hooks" requirement) — CI's checkout is always a fresh clone that has never run `make`, so this job can only ever exercise the installer's own correctness, never detect an unarmed *developer* machine. That detection gap is accepted in writing in the change's design (Risks: "a docs-only clone that never runs `make` is never armed... routed to the CI detector lane") — meaning CI is the backstop for the *installer script itself* regressing, not a way to know whether `kitimark`'s or any contributor's local clone is currently armed.
+- **Why this distinction matters for the investigator:** a red here is always a real regression (installer drift, or a fixture/mutant that stopped catching what it names) — never classify it as a benign residual. A *green* here says nothing about whether the gate is currently protecting any real push; only `git config --get xtty.guide-gate` on the machine in question answers that.
 
 ---
 

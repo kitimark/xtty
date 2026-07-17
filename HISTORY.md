@@ -52,6 +52,8 @@ bounded table-row update. Not loaded at session start.
 
 *(Clean instance of **G-TARPIT-4** — the defect was found by **using** the gate, not by reviewing its spec; and of the tar-pit's own lesson: when four rounds cannot settle a design's foundation, the answer is to **stop**, not to iterate.)*
 
+❌ **Addendum (2026-07-13, later):** the line above — *"the prerequisite is narrowing the range"* — was itself **REFUTED** the same day: the object of the narrowing is not git-derivable, and narrowing is anti-aligned with the real bypass (the `exit 0` waiver arm, an under-inclusion hole). See the Learned refutations entry in `AGENTS.md` and `cross-review-gate-defect-forensics.md` §9 (F10 / G-GATE-9).
+
 ### 2026-07-13 — brief-cross-review-pass-b (P-tooling / dev-workflow tooling) — implemented 12/12, coherence COHERENT, self-dogfooded through the full human-attestation gate, archived (`cross-model-review` spec +1 requirement)
 
 **Why.** `/xtty:cross-review`'s external soundness pass (Pass B, Codex `gpt-5.6-sol` via the `codex-plugin-cc` companion's `adversarial-review`) had been shipping **blind** — fed an auto-collected diff with **empty focus text**, because the command mis-framed focus as *"does not scope the review"*. Across three prior rounds it under-performed, once **endorsing a claim two other reviewers refuted by drill**, for want of context. The discriminating datum (`cross-review-gate-defect-forensics.md`): once finally handed a brief + drill results, a **read-only** Codex found this project's two biggest gate defects *by reading*. The bottleneck was **under-briefing, not the read-only sandbox** — which is why the fix does not reach for a write-capable reviewer.

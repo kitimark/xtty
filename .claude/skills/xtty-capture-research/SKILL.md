@@ -28,7 +28,7 @@ Capture a settled finding/decision into `research/` and bring every tracker back
 2. **Index it.** Add or update the one-line entry in `research/README.md`.
 
 3. **Reconcile the trackers** (the step that gets forgotten) — **bounded in AGENTS.md, narrative in HISTORY.md**:
-   - **`AGENTS.md` → Current status**: update the change's **table row** (state + one-liner + detail pointer; state it accurately: implemented / archived / decided / pending), refresh the **snapshot paragraph** if counts/envelope/milestone position moved, and keep the **established-specs** line matching disk. **Narrative paragraphs never go here** — a status entry is one table row.
+   - **`AGENTS.md` → Current status**: update the change's **table row** (state + one-liner + detail pointer; state it accurately: implemented / archived / decided / pending) and refresh the **snapshot paragraph** if counts/envelope/milestone position moved. (The established-specs list is not cached in AGENTS.md — step 4 verifies it against `ls openspec/specs/`.) **Narrative paragraphs never go here** — a status entry is one table row.
    - **`HISTORY.md`**: **append the full narrative** under the matching section with a dated lead-in (append-only — never rewrite existing entries).
    - If the work settled a **refutation** worth never re-litigating, add a one-liner (with its conclusion) to AGENTS.md's **Learned refutations** list.
    - **`research/04-design/02-milestones.md`** → the milestone's state tag + bullets.
@@ -37,7 +37,7 @@ Capture a settled finding/decision into `research/` and bring every tracker back
    ```
    openspec list                  # active changes   → must match the Current-status open-changes table
    ls openspec/changes/archive/   # archived changes → must be marked archived in the trackers
-   ls openspec/specs/             # established specs → must match the AGENTS list
+   ls openspec/specs/             # established specs → AGENTS.md carries no cached list; disk is the truth
    ```
    Fix any place a tracker disagrees with reality.
 
