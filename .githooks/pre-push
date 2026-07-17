@@ -29,7 +29,7 @@ MAIN_REF="refs/remotes/$REMOTE/main"
 
 # (the ceiling parse lives AFTER the identity guard: a typo'd XTTY_GUIDE_CEILING in a shell
 #  profile must never make this gate REFUSE a stranger's repository — cross-repo harm, A-14-1.)
-CEILING="${XTTY_GUIDE_CEILING:-53735}"
+CEILING="${XTTY_GUIDE_CEILING:-51770}"
 MAXDEPTH=4
 FLOOR="${XTTY_GUIDE_FLOOR:-2000}"     # below this, a "shrink" is a VAPORIZE, not a diet
 is_int() { case "${1:-}" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac; }

@@ -68,14 +68,16 @@ doctor: ## Check prerequisites it can't auto-install (advises; never runs sudo)
 	if [ "$$ok" = 1 ]; then echo "All prerequisites satisfied."; \
 	else echo "Some prerequisites are missing (see above)."; exit 1; fi
 
-setup: doctor $(SWIFTTERM_SENTINEL) $(XCODEPROJ) ## First-time setup: check prereqs, bootstrap SwiftTerm, generate the project
+setup: doctor $(SWIFTTERM_SENTINEL) $(XCODEPROJ) | hooks ## First-time setup: check prereqs, bootstrap SwiftTerm, generate the project
 	@echo "Setup complete. Run 'make build' or 'make run'."
 
 # --- guide gate (bound-the-agents-md-guide) -----------------------------------
 # `make hooks` arms this clone against an eagerly-injected-guide regrowth past
 # the ratchet ceiling (research/03-analysis/agents-md-structural-best-practices.md).
-# Cannot fail (scripts/install-hooks.sh always exits 0); not yet wired as a
-# build/test prerequisite here — see AGENTS.md -> Building for when it is.
+# Cannot fail (scripts/install-hooks.sh always exits 0). Wired below as an
+# unconditional, order-only prerequisite of every routine entry point — order-only
+# so it never marks a target out of date, and phony so it re-copies (and re-arms
+# an already-bootstrapped clone) on every invocation.
 
 hooks: ## Install the guide-gate git pre-push hook into this clone (arms xtty-guide-gate)
 	@scripts/install-hooks.sh .githooks/pre-push
@@ -94,13 +96,13 @@ $(XCODEPROJ): project.yml
 
 # --- build / run / test ------------------------------------------------------
 
-build: $(SWIFTTERM_SENTINEL) $(XCODEPROJ) ## Build the app (auto-bootstraps + generates if stale)
+build: $(SWIFTTERM_SENTINEL) $(XCODEPROJ) | hooks ## Build the app (auto-bootstraps + generates if stale)
 	@xcodebuild -project xtty.xcodeproj -scheme $(SCHEME) -derivedDataPath $(DERIVED) build $(SIGN_FLAGS)
 
-run: build ## Build then launch the app
+run: build | hooks ## Build then launch the app
 	@open $(APP)
 
-install: | $(SWIFTTERM_SENTINEL) $(XCODEPROJ) ## Install an optimized, version-stamped Release build into INSTALL_DIR (default /Applications)
+install: | $(SWIFTTERM_SENTINEL) $(XCODEPROJ) hooks ## Install an optimized, version-stamped Release build into INSTALL_DIR (default /Applications)
 	@echo "Building Release (version $(VERSION), build $(BUILD))…"
 	@xcodebuild -project xtty.xcodeproj -scheme $(SCHEME) -configuration $(RELEASE_CONFIG) -derivedDataPath $(DERIVED) build $(SIGN_FLAGS) MARKETING_VERSION="$(VERSION)" CURRENT_PROJECT_VERSION="$(BUILD)"
 	@if [ -d "$(INSTALL_DIR)/xtty.app" ]; then \
@@ -115,10 +117,10 @@ restart: ## Quit any running xtty and relaunch the installed app
 	@pkill -x xtty 2>/dev/null || true
 	@open "$(INSTALL_DIR)/xtty.app"
 
-test: $(SWIFTTERM_SENTINEL) $(XCODEPROJ) ## Run the app UI tests (XCUITests)
+test: $(SWIFTTERM_SENTINEL) $(XCODEPROJ) | hooks ## Run the app UI tests (XCUITests)
 	@xcodebuild test -project xtty.xcodeproj -scheme $(SCHEME) -destination 'platform=macOS' -derivedDataPath $(DERIVED) $(SIGN_FLAGS)
 
-test-core: $(SWIFTTERM_SENTINEL) ## Run the fast XttyCore unit tests (no app build)
+test-core: $(SWIFTTERM_SENTINEL) | hooks ## Run the fast XttyCore unit tests (no app build)
 	@swift test --package-path XttyCore
 
 bench: build ## Measure latency+memory (P7a regression baseline); writes a JSON report
