@@ -87,3 +87,22 @@ jobs:
           name: xcresult
           path: build/TestResults.xcresult
           if-no-files-found: ignore
+
+  guide-gate:
+    name: guide-gate (installer regression + fixture suite — verifies CI's own clone, not a detector of unarmed dev clones)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the hook and verify the installed copy is byte-identical to the tracked source
+        run: |
+          make hooks
+          installed="$(git rev-parse --git-common-dir)/hooks/pre-push"
+          cmp -s .githooks/pre-push "$installed" || {
+            echo "guide-gate: installed hook DRIFTED from the tracked source ($installed)" >&2
+            diff .githooks/pre-push "$installed" || true
+            exit 1
+          }
+
+      - name: Run the guide-gate fixture suite (45 arms) + mutation matrix
+        run: make test-guide-gate

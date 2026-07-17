@@ -51,11 +51,11 @@ VERSION         := $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^
 VERSION         := $(or $(VERSION),$(PROJECT_VERSION),0.0.1)
 BUILD           := $(shell git rev-list --count HEAD 2>/dev/null || echo 1)
 
-.PHONY: help doctor setup build run install restart test test-core build-core bench audit-leaks image image-zsh bootstrap generate clean reset
+.PHONY: help doctor setup build run install restart test test-core build-core bench audit-leaks image image-zsh bootstrap generate clean reset hooks test-guide-gate
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
-		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-11s\033[0m %s\n", $$1, $$2}'
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
 doctor: ## Check prerequisites it can't auto-install (advises; never runs sudo)
 	@ok=1; \
@@ -70,6 +70,19 @@ doctor: ## Check prerequisites it can't auto-install (advises; never runs sudo)
 
 setup: doctor $(SWIFTTERM_SENTINEL) $(XCODEPROJ) ## First-time setup: check prereqs, bootstrap SwiftTerm, generate the project
 	@echo "Setup complete. Run 'make build' or 'make run'."
+
+# --- guide gate (bound-the-agents-md-guide) -----------------------------------
+# `make hooks` arms this clone against an eagerly-injected-guide regrowth past
+# the ratchet ceiling (research/03-analysis/agents-md-structural-best-practices.md).
+# Cannot fail (scripts/install-hooks.sh always exits 0); not yet wired as a
+# build/test prerequisite here — see AGENTS.md -> Building for when it is.
+
+hooks: ## Install the guide-gate git pre-push hook into this clone (arms xtty-guide-gate)
+	@scripts/install-hooks.sh .githooks/pre-push
+
+test-guide-gate: ## Run the guide-gate fixture suite (47 arms) + its mutation matrix
+	@bash scripts/test-guide-gate.sh
+	@bash scripts/test-guide-gate-mutants.sh
 
 # --- file-targets: re-run a setup step only when its tracked inputs change ----
 
