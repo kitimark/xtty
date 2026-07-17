@@ -141,7 +141,7 @@ The gate SHALL act only on a repository explicitly marked as armed by its instal
 
 ### Requirement: The ceiling is a measured ratchet
 
-The ceiling SHALL be set from an **achieved, measured** guide size, never from an estimate, and SHALL only ever be lowered. Lowering the ceiling SHALL require a measured reduction to have already landed.
+The ceiling SHALL be set from an **achieved, measured** guide size, never from an estimate, and — once the gate is installed and armed — SHALL only ever be lowered. Lowering the ceiling SHALL require a measured reduction to have already landed. *(This invariant governs the ceiling from the point the gate is armed onward; the authoring-time process of arriving at that installed value — including re-measuring against a guide still being edited before the gate ships — is not itself a "raise" of an installed ratchet.)*
 
 The project SHALL document that the byte ceiling is a **proxy**: the objective is the guide's contribution to session and subagent context, which bytes do not track monotonically.
 

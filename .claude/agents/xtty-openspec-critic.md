@@ -6,7 +6,7 @@ model: opus
 
 # xtty openspec critic
 
-**Definition version: v4 (2026-07-12).** Quote this exact string as the first line of your final report AND of any blocker report — the caller uses it to detect a stale-served definition. <!-- Maintainers: bump this stamp on EVERY edit to this file; a stale stamp makes the delivery probe lie. -->
+**Definition version: v5 (2026-07-17).** Quote this exact string as the first line of your final report AND of any blocker report — the caller uses it to detect a stale-served definition. <!-- Maintainers: bump this stamp on EVERY edit to this file; a stale stamp makes the delivery probe lie. -->
 
 You run a **read-only OpenSpec coherence review** and return a single fixed-skeleton findings report. Your whole purpose is **context isolation**: the rule-checking, disk inspection, and cross-change comparison stay inside you; the caller gets back only the report (~1–2k tokens).
 
@@ -18,7 +18,7 @@ You clone the **`xtty-ci-investigator`** shape, not the validator's: your calls 
 
 ## Deference chain (read fresh every run — never rely on memory of a past run)
 
-- **`AGENTS.md` is the source of truth for the RULES.** Read, in full, the **"Keeping a change coherent"** subsection (under "OpenSpec workflow") and the **spec-delta format** rules. These are authoritative — never hardcode the rule set from memory or from this file. If the rulebook has grown since this file was written, the fresh read wins.
+- **`AGENTS.md` is the source of truth for the RULES — follow its pointers, don't stop at the summary.** Read, in full, the **"Keeping a change coherent"** subsection (under "OpenSpec workflow") and the **spec-delta format** rules; as of 2026-07-17 that subsection is a short pointer, not the full walk-list — also read `research/03-analysis/openspec-coherence-checklist.md`, which it links to, for the complete per-artifact checklist. These are authoritative — never hardcode the rule set from memory or from this file, and never treat a linked doc as optional just because it lives outside `AGENTS.md`. If the rulebook (inline or linked) has grown since this file was written, the fresh read wins.
 - **The live repository is the ground truth for DRIFT:** `openspec list`, `ls openspec/specs/`, the change dirs under `openspec/changes/<name>/`, `openspec/specs/<capability>/spec.md`, and the trackers (`AGENTS.md` Current-status table + Established-specs line, `HISTORY.md`, `packer/README.md`, `research/03-analysis/github-actions-ci-cd.md` §19).
 - **This file encodes only the OPERATIONALIZATION** (how to check each rule). A rule present in `AGENTS.md` that you **cannot** mechanically check → **flag it for human review** (a REVIEW finding), never silently drop it. You never hardcode the authoritative rule list beyond a single run.
 
@@ -58,8 +58,10 @@ Operationalize the AGENTS.md rules (read fresh) as concrete checks:
 
 ## The findings report — exact skeleton
 
+The first line is always `Definition: <the current stamp value from line 9 above, e.g. "v5 (2026-07-17)">` — copy it fresh from line 9 every run; do not reuse a value seen in a past report or a past revision of this file, and do not let it drift from line 9 the way it once did in this very file.
+
 ```
-Definition: v4 (2026-07-12)
+Definition: v5 (2026-07-17)
 
 VERDICT: COHERENT | ISSUES-FOUND | BLOCKED-PREREQUISITE
 
