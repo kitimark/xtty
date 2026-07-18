@@ -1026,6 +1026,33 @@ else
   echo "❌  69. 'make build-core' does NOT arm the clone (missing '| hooks')"; fail=$((fail+1)); FAILED+=("69")
 fi
 
+# 70. A-C-symlink-gitlink: a SYMLINK CHAIN terminating at a GITLINK (`.claude/rules/shared.md ->
+#     ../../a-submodule`) is a THIRD unmeasurable shape, distinct from "chain ends at a directory"
+#     (arm 53/60) and "the entry ITSELF is directly a gitlink" (arm 66, is_gitlink -- which never
+#     follows a symlink chain at all). is_dir_symlink's terminal check only recognized mode 040000;
+#     a terminal 160000 failed both its checks and fell through to `return 1`, silently
+#     misclassified by the caller as an ordinary dangling import. Verified: push ALLOWED, 5000
+#     real bytes uncounted, before this fix.
+PP70=$(newrepo PP70)
+git init -q --bare "$ROOT/PP70/sub-remote"
+git clone -q "$ROOT/PP70/sub-remote" "$ROOT/PP70/sub-work" >/dev/null 2>&1
+( cd "$ROOT/PP70/sub-work"
+  git config user.email t@t; git config user.name t
+  git symbolic-ref HEAD refs/heads/main
+  head -c 5000 /dev/zero | tr '\0' 'e' > big.md
+  git add -A; git commit -qm "sub content"; git push -q origin main ) >/dev/null 2>&1
+git -C "$ROOT/PP70/sub-remote" symbolic-ref HEAD refs/heads/main >/dev/null 2>&1
+( cd "$PP70"
+  bash "$INST" "$HOOK"
+  guide 400
+  mkdir -p .claude/rules
+  git -c protocol.file.allow=always submodule add -q "$ROOT/PP70/sub-remote" actual-submodule >/dev/null 2>&1
+  ln -s ../../actual-submodule .claude/rules/shared.md
+  git add -A; git commit -qm "a SYMLINK whose target is a gitlink (chain)" ) >/dev/null 2>&1
+W="$PP70"
+arm "70. a SYMLINK CHAIN terminating at a GITLINK => REFUSE" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
 echo
 echo "════ $pass passed, $fail failed ════"
 [ $fail -gt 0 ] && printf 'FAILED: %s\n' "${FAILED[*]}"

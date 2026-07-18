@@ -116,6 +116,10 @@ mut "gitlink: has_symlinked_ancestor stops catching a gitlink ancestor (A-C-gitl
 mut_inst "installer: physical-path containment check removed, symlinked hooks dir escapes (A-C-phys)" "s=s.replace('  \"\$common_dir_abs\"/*) : ;;   # genuinely inside our own git-common-dir tree -- safe','  *) : ;;',1)"
 mut_inst "installer: arming-verify readback removed, silent config-write failure again (A-C-arm-verify)" "s=s.replace('if [ \"\$(git config --get xtty.guide-gate 2>/dev/null || true)\" != \"true\" ]; then','if false; then',1)"
 
+echo
+echo "════ codex stop-gate round 2 mutants (2026-07-18, blocked session end again) ════"
+mut "symlink-gitlink: is_dir_symlink stops recognizing a terminal GITLINK (A-C-symlink-gitlink)" "s=s.replace('case \"\$mode\" in 040000|160000) return 0 ;; esac      # reached a directory OR a gitlink: success','[ \"\$mode\" = \"040000\" ] && return 0',1)"
+
 if [ "$bad" -eq 0 ]; then
   echo
   echo "All mutants caught cleanly (0 vacuous, 0 failed)."

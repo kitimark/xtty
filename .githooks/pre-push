@@ -117,7 +117,7 @@ is_gitlink() {   # $1=oid $2=path -> success iff path is a gitlink (submodule) e
 # below REFUSE outright rather than certify a byte count it cannot back up (D7: fail closed).
 
 is_dir_symlink() {   # $1=oid $2=path -> success iff path is a (possibly CHAINED) symlink whose
-                      # eventual target names a TREE
+                      # eventual target names a TREE or a GITLINK (both unmeasurable the same way)
   local oid="$1" path="$2" hops=0 line mode blobid target
   # A-C-2c (2026-07-18, Codex- and Pass-C-caught independently, both empirically verified): the
   # original version resolved exactly ONE hop, so a symlink pointing at ANOTHER symlink that in
@@ -125,11 +125,19 @@ is_dir_symlink() {   # $1=oid $2=path -> success iff path is a (possibly CHAINED
   # through the `mode != 120000` check on the SECOND hop and returned 1 (not a directory) --
   # WORSE than the original bug: not even flagged as unresolved_symlink, totally silent. Loop like
   # resolve_entry already does (same 8-hop cap) instead of resolving exactly once.
+  # A-C-symlink-gitlink (2026-07-18, Codex stop-gate-caught, final): a symlink CHAIN that
+  # terminates at a GITLINK (`.claude/rules/shared.md -> ../../a-submodule`) is a THIRD unmeasurable
+  # shape, distinct from both "chain ends at a directory" (already handled) and "the entry ITSELF
+  # is directly a gitlink" (is_gitlink, which does not follow a symlink chain at all). Before this
+  # fix the chain hit `mode=160000` here, failed the `= "040000"` test, failed the `= "120000"`
+  # test too (a gitlink is neither), and fell through to `return 1` -- silently misclassified by
+  # the caller as an ordinary dangling import (weigh 0, warn) rather than refused. Verified by
+  # effect: the push was ALLOWED with 5000 real bytes uncounted.
   while [ "$hops" -lt 8 ]; do
     line=$(git ls-tree "$oid" -- "$path" 2>/dev/null) || return 1
     [ -z "$line" ] && return 1
     mode=${line%% *}
-    [ "$mode" = "040000" ] && return 0                   # reached a directory: success
+    case "$mode" in 040000|160000) return 0 ;; esac      # reached a directory OR a gitlink: success
     [ "$mode" = "120000" ] || return 1                    # a non-directory, non-symlink blob: not a dir
     line=${line#* }; blobid=${line%%$'\t'*}; blobid=${blobid##* }
     target=$(git cat-file blob "$blobid" 2>/dev/null) || return 1

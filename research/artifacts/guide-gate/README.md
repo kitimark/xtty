@@ -525,3 +525,32 @@ A-C-gitlink with a real `git submodule add` at `.claude/rules/shared`: must `REF
 a real `.git/hooks` filesystem symlink to a directory outside the repo: `XTTY_GUIDE_FORCE=1 make hooks`'s
 equivalent must NOT write there. Confirm A-C-arm-verify with a pre-existing `.git/config.lock`: the
 installer must print a WARNING, not stay silent.
+
+## Round C.5 (2026-07-18, same day) — a second stop-gate block, then a scope check
+
+A second, independent Codex stop-time review fired on round C.4's commit and found one more gap in the
+same family: **A-C-symlink-gitlink** — `is_dir_symlink`'s terminal check only recognized a symlink chain
+ending at a directory (`040000`); a chain ending at a GITLINK (`.claude/rules/shared.md -> ../../a-submodule`)
+fell through both its mode checks (not `040000`, not `120000`) and returned failure, which the caller then
+silently misclassified as an ordinary dangling import (weigh 0, warn only) rather than refusing. Verified
+by effect: push ALLOWED, 5000 real bytes uncounted. Fixed by widening the terminal check to
+`case "$mode" in 040000|160000)`. Fixture: arm 70, mutant confirmed non-vacuous.
+
+**Before committing, the user asked directly whether this level of hardening was still warranted**, given
+(a) this project's own G-TARPIT-1 guideline ("don't harden a mechanical gate against the model that runs
+it — the bypass set is unbounded") and the tar-pit forensics' "past the review cliff, fixes introduce
+defects faster than review removes them," and (b) the gitlink-specific work (round C.4 onward) was never
+checked against the ACTUAL Claude Code product's loading behavior for submodules the way the directory-
+symlink work was (confirmed against the live docs — "Symlinks are resolved and loaded normally" — before
+any of that work started). The docs fetched earlier this session document symlink support explicitly but
+say nothing about gitlinks; whether Claude Code's real rule-loader follows submodule content in
+`.claude/rules/` at all remains **unverified**. **User's decision: keep the gitlink hardening as-is.**
+This is recorded here rather than silently proceeding, so a future reader knows the gitlink-specific
+lanes (A-C-gitlink and its four descendants) were a deliberate choice made without that verification, not
+an oversight.
+
+Final state after round C.5: **73/73 fixtures**, **38/38 mutants** caught cleanly, 0 vacuous, 0 failed.
+
+**Re-verify by effect:** `bash scripts/test-guide-gate.sh` → `73 passed, 0 failed`; `bash
+scripts/test-guide-gate-mutants.sh` → `All mutants caught cleanly (0 vacuous, 0 failed)`, exit 0. Confirm
+A-C-symlink-gitlink with a real symlink-to-submodule chain under `.claude/rules/`: must `REFUSE`.
