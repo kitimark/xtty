@@ -233,3 +233,100 @@ real defects in *this* file (not port artifacts) the same way as round 15: point
 directory's own unmodified `pre-push` — both read `got=PASS` (the bug) there, and `got=REFUSE` against
 the fixed `.githooks/pre-push`; arm 50 reads `got=PASS` against both (confirming no regression of the
 original legitimate rung-0 case).
+
+## Round C (2026-07-18) — `/xtty:cross-review`, human-launched: 6 real defects, 2 model families
+
+The change's own dogfood: `/xtty:cross-review bound-the-agents-md-guide`, run by the human per the
+project's human-attestation gate. Pass A (Opus critic, conformance) returned COHERENT with only stale
+doc-count findings (deferred to archive-reconcile). Pass B (Codex `gpt-5.6-sol`, briefed, backgrounded)
+and Pass C (an inline Opus soundness pass, given the same brief) each read the code independently and
+found **disjoint** defect sets — the point of running two model families. Six real, distinct defects
+survived verification (each hand-traced against the actual source, and where the claim depended on
+external Claude Code product behavior, checked against the live docs — see the refuted claim below);
+zero were accepted on the reviewer's word alone.
+
+- **A-C-1 (Codex) — a dangling import path containing a SPACE corrupted `root_gone` field-parsing.**
+  `resolve_guide`'s 5-field `printf`/`read` contract put `dangling` (the one field that can legitimately
+  contain embedded whitespace — rule filenames may have spaces, arm 40) in the MIDDLE. `read`'s
+  word-splitting on an embedded space then shifted every field after it, turning `root_gone` into a
+  malformed two-word string that could never equal `"yes"` — silently defeating the root-deletion check
+  for any push that deleted the root behind a *spaced* dangling import elsewhere in the closure. Fixed by
+  moving `dangling` to the LAST field (`read`'s last named variable absorbs the whole remainder of the
+  line, embedded spaces and all — the standard idiom for this exact class of bug). Fixture: arm 55
+  (redesigned mid-round — an earlier draft using a small surviving 2nd root let the unrelated
+  vaporize-floor check also refuse the same push, masking whether this fix specifically was exercised;
+  mirroring arm 47's large-surviving-root shape closed the confound, confirmed by the mutation matrix).
+- **A-C-3 (Codex) — unclosed YAML frontmatter falsely exempted a rule from metering.**
+  `has_paths_frontmatter` set `ok=1` the instant it saw a `paths:` line, without ever requiring the
+  CLOSING `---` — so a malformed rule (`---`, `paths: …`, arbitrarily large body, no second `---`) was
+  exempted forever, an unmetered fake-diet lane hiding *inside* the metering code itself, worse than the
+  `^paths:`-anywhere bug arm 39 already guarded. Fixed: `ok` now requires the closing delimiter, and only
+  if `paths:` was already seen. Fixture: arm 51. This fix incidentally made the PRE-EXISTING "frontmatter
+  check = grep ^paths:" mutant (the one guarding the OPENING-delimiter requirement) **vacuous** against
+  arm 39's specific content — caught by the mutation matrix itself (`NONE <-- VACUOUS FIXTURE`). Fixed by
+  arm 58, which isolates the opening-delimiter requirement with content that has a `paths:` line AND a
+  later stray `---` but never opens with `---` on line 1.
+- **A-C-2 / A-C-2b (Codex + Pass C, independently) — directory-mode symlinks are invisible to the meter.**
+  Git stores a symlink as a leaf blob (mode `120000`); `git ls-tree -r` can never see through one to a
+  directory's contents. Claude Code documents directory symlinks as a sanctioned `.claude/rules/` pattern
+  ("Symlinks are resolved and loaded normally," including the exact example `ln -s ~/shared-claude-rules
+  .claude/rules/shared") — real content behind one is genuinely injected, but the meter either silently
+  dropped it (a non-`.md` symlink name failed the `*.md` filter) or misclassified an `@import` traversing
+  an intermediate symlinked directory as an ordinary "never existed" dangling import (weighed 0, warn
+  only). Pass C independently reproduced both variants empirically (own scratch-repo testing) and rated
+  it high-confidence; xtty's own repo has zero symlinks under `.claude/rules/` today, so the fix costs
+  nothing in practice. Fixed via two new helpers (`is_dir_symlink`, `has_symlinked_ancestor`) and a new
+  `unresolved_symlink` status that the caller refuses unconditionally (fail-closed — the meter cannot
+  certify a byte count it cannot see behind, per D7). Fixtures: arm 53 (`.claude/rules/` directory
+  symlink), arm 54 (`@import` through an intermediate symlinked directory).
+- **A-C-5 (Codex) — a hand-merged foreign hook was silently clobbered by the NEXT routine `make` command.**
+  The installer's foreign-hook recovery told users to "merge the logic from `$SRC` into `$TARGET` by
+  hand" — which naturally retains `$SRC`'s sentinel comment — then classified ANY sentinel-containing file
+  as "our own copy, always safe to re-copy." Since `hooks` is an order-only prerequisite of every routine
+  `make build`/`test`/`install`/etc. (not just an explicit `make hooks`, which A-15-6's warning had only
+  cautioned against by name), the very next routine command silently destroyed the hand-merged foreign
+  logic with no warning. Fixed by tracking OWNERSHIP via a recorded hash (`xtty.guide-gate-hook-sha`) of
+  what the installer itself last wrote: a sentinel match with no recorded hash, or a hash mismatch, now
+  refuses rather than overwrites. Verified end-to-end (a real foreign hook, a real hand-merge, a real
+  routine reinstall) that the merged logic survives. Fixture: arm 56. One-time transition cost accepted in
+  writing: an already-armed clone from before this fix has no recorded hash yet, so its first post-fix
+  reinstall refuses once with an actionable message rather than guessing — safe-side, matching D7.
+- **A-C-6 (Pass C, empirically verified end-to-end) — a WORKTREE-scoped `core.hooksPath` was misdiagnosed
+  as global, and the printed fix provably did not work.** `git config --worktree core.hooksPath …` (needs
+  `extensions.worktreeConfig`) is invisible to `git config --local --get`, so the installer's two-way
+  local/global check misdiagnosed it as global and printed `git config core.hooksPath "$DEST"` as the fix
+  — which writes LOCAL scope and is silently outranked by the worktree-scoped value. Pass C ran the exact
+  printed command and confirmed `git rev-parse --git-path hooks` was unchanged afterward: a dead end,
+  reproducing in a third git-config scope the same "recovery advice that leads nowhere" bug class A-15-7
+  already fixed for global-vs-local. Fixed by detecting `git config --worktree --get core.hooksPath`
+  explicitly and printing the correct unset command for that scope. Fixture: arm 57.
+- **Refuted, not fixed — Codex's import-MAXDEPTH claim.** Codex also claimed `MAXDEPTH=4` under-counts
+  against a "5-hop" Claude Code loader limit. Checked against the live docs
+  (code.claude.com/docs/en/memory) rather than accepted on the model's word: *"Imported files can
+  recursively import other files, with a maximum depth of **four** hops."* `MAXDEPTH=4` is correct; the
+  claim was false and no fix was made. This is the whole reason a second model's claims get verified
+  against ground truth rather than trusted — see `cross-model-pairing-consult-research.md`'s
+  never-corroboration rule.
+- **Accepted as a residual, not fixed — Pass C's stale-tracking-ref siblings (confidence 0.45).** Two
+  ladder lanes (the first-push fork-point rung, rung 0's `canonical` lookup) still trust a possibly-stale
+  local tracking ref for `$REMOTE/main`, unlike the explicitly-hardened non-first-push lane (A-15-1). Both
+  need an unusual precondition (history rewrite plus a stale fetch, or remote GC of still-locally-
+  referenced objects) rather than an honest push — narrower than A-15-1's routine case. Documented in
+  `design.md`'s Risks rather than fixed, per G-TARPIT-1 (don't harden a mechanical gate against every
+  conceivable staleness variant) — `git fetch` before such a push closes both in practice.
+- **Doc correction (Codex, medium) — the "only bypass is `--no-verify`" claim was too narrow.**
+  `git -c core.hooksPath=/dev/null push` and `git -c xtty.guide-gate=false push` are also valid client-side
+  bypasses (confirmed by reading the identity guard directly). `proposal.md` broadened to "any deliberate
+  client-side act."
+
+The mutation matrix was extended to also mutate `scripts/install-hooks.sh` (previously it could only
+mutate `.githooks/pre-push`) — `INSTSRC`/`mut_inst()`, with `run()`'s installer argument defaulting to the
+pristine file so existing hook-only mutants are unaffected. Final state: **58/58 fixtures**, **27/27
+mutants** caught cleanly, 0 vacuous, 0 failed, run solo (never concurrently — the round-15 lesson still
+holds).
+
+**Re-verify by effect:** `bash scripts/test-guide-gate.sh` → `58 passed, 0 failed`; `bash
+scripts/test-guide-gate-mutants.sh` → `All mutants caught cleanly (0 vacuous, 0 failed)`, exit 0. Confirm
+A-C-1/A-C-2/A-C-2b/A-C-3 are real (not port artifacts) by real `git push` against a throwaway clone: a
+directory symlink under `.claude/rules/`, an `@import` through one, unclosed frontmatter, and a spaced
+dangling import composed with a root deletion should all `REFUSE` against the fixed hook.

@@ -89,11 +89,14 @@ else
   echo "$out" | head -2 | sed 's/^/        /'
 fi
 
-# 4. upgrade an already-armed clone (sentinel => own copy => overwrite)
-W=$(newrepo t4); ( cd "$W"; guide 500; git add -A; git commit -qm base
-  bash "$INST" "$HOOK" ) >/dev/null 2>&1
-printf '#!/bin/sh\n# xtty-guide-gate v13\necho OLD\nexit 0\n' > "$W/.git/hooks/pre-push"
-( cd "$W" && bash "$INST" "$HOOK" ) >/dev/null 2>&1
+# 4. upgrade an already-armed clone (a GENUINE prior install of an OLDER version of our own hook,
+#    recorded via the installer itself -- not a hand-edited stand-in, which A-C-5's hash-tracking
+#    can no longer distinguish from a foreign hand-merge -- must silently upgrade, no staleness).
+W=$(newrepo t4); ( cd "$W"; guide 500; git add -A; git commit -qm base ) >/dev/null 2>&1
+OLDHOOK="$ROOT/t4-oldhook"
+printf '#!/bin/sh\n# xtty-guide-gate v13\necho OLD\nexit 0\n' > "$OLDHOOK"
+( cd "$W" && bash "$INST" "$OLDHOOK" ) >/dev/null 2>&1     # a genuine prior install of an "older" version
+( cd "$W" && bash "$INST" "$HOOK" ) >/dev/null 2>&1        # upgrade to the CURRENT tracked source
 if cmp -s "$HOOK" "$W/.git/hooks/pre-push"; then
   echo "✅  4. upgrade in an armed clone: own copy overwritten (no staleness)"; pass=$((pass+1))
 else
@@ -625,6 +628,136 @@ W=$(newrepo GG50); ( cd "$W"
   bash "$INST" "$HOOK" ) >/dev/null 2>&1
 arm "50. rung-0 STILL fires for a real same-commit repoint (0 new objs)" PASS \
     "XTTY_GUIDE_CEILING=$CEIL git push origin main:old"
+
+echo
+echo "════ CROSS-REVIEW ARMS (Codex + inline Opus, /xtty:cross-review round 1 — 2026-07-18) ════"
+
+# 51. A-C-3: a rule with UNCLOSED frontmatter (`paths:` opened but never closed with a second
+#     `---`) is NOT exempted -- must still be METERED. An unmetered fake-diet lane hiding INSIDE
+#     what looks like real frontmatter, worse than arm 39's body-text-paths bug.
+W=$(newrepo Y51); ( cd "$W"
+  guide 400; mkdir -p .claude/rules
+  printf -- '---\npaths:\n  - "**/*.ts"\n' > .claude/rules/broken.md    # no closing ---
+  git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  head -c 1600 /dev/zero | tr '\0' 'p' >> .claude/rules/broken.md
+  git add -A; git commit -qm "grow behind UNCLOSED frontmatter" ) >/dev/null 2>&1
+arm "51. UNCLOSED frontmatter (no 2nd ---) does NOT exempt a rule" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 52. ...regression guard: a PROPERLY closed frontmatter block must still be exempt (arm 36
+#     already covers this shape; re-asserted here alongside 51 so the two can't silently trade
+#     places -- a 51-fix that over-refuses ANY paths: line would flip this arm red).
+W=$(newrepo Y52); ( cd "$W"
+  guide 400; mkdir -p .claude/rules
+  printf -- '---\npaths:\n  - "**/*.ts"\n---\n# scoped\n' > .claude/rules/ok.md
+  git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  { printf -- '---\npaths:\n  - "**/*.ts"\n---\n'; head -c 3000 /dev/zero | tr '\0' 's'; } > .claude/rules/ok.md
+  git add -A; git commit -qm "grow a PROPERLY closed scoped rule" ) >/dev/null 2>&1
+arm "52. PROPERLY closed frontmatter is still exempt (no regression)" PASS \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 53. A-C-2: a DIRECTORY-mode symlink under .claude/rules/ (a documented, sanctioned Claude Code
+#     pattern -- "Symlinks are resolved and loaded normally", code.claude.com/docs/en/memory) is
+#     invisible to `git ls-tree -r` (it can never see through a symlink to a directory's contents)
+#     -- must REFUSE outright rather than silently weigh real content behind it as zero.
+W=$(newrepo Z53); ( cd "$W"
+  bash "$INST" "$HOOK"
+  guide 400
+  mkdir -p external-rules .claude/rules
+  head -c 5000 /dev/zero | tr '\0' 'e' > external-rules/big.md
+  ln -s ../../external-rules .claude/rules/shared
+  git add -A; git commit -qm "a directory symlink under .claude/rules, per the docs' own example" ) >/dev/null 2>&1
+arm "53. DIRECTORY symlink under .claude/rules/ => REFUSE (meter can't see behind it)" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 54. A-C-2b: an @import whose path traverses an INTERMEDIATE symlinked directory is unresolvable
+#     via git's tree object model (confirmed empirically: `git ls-tree <oid> -- linkdir/file.md`
+#     returns nothing even though the checked-out filesystem resolves it fine) -- must REFUSE, not
+#     silently treat it as an ordinary "never existed" dangling import (weighed 0, warn-only).
+W=$(newrepo Z54); ( cd "$W"
+  bash "$INST" "$HOOK"
+  head -c 400 /dev/zero | tr '\0' 'x' > AGENTS.md
+  mkdir -p realdir
+  head -c 5000 /dev/zero | tr '\0' 'e' > realdir/big.md
+  ln -s realdir linkdir
+  printf '# CLAUDE.md\n@AGENTS.md\n@linkdir/big.md\n' > CLAUDE.md
+  git add -A; git commit -qm "an @import through an intermediate symlinked directory" ) >/dev/null 2>&1
+arm "54. @import THROUGH a symlinked directory => REFUSE (not a benign dangling import)" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 55. A-C-1: a DANGLING import whose PATH CONTAINS A SPACE, in the SAME commit that deletes the
+#     guide root, must not corrupt resolve_guide's field-parsing and mask the deletion. `read`'s
+#     word-splitting on an embedded space in the (formerly middle) `dangling` field used to shift
+#     `root_gone` into a malformed two-word string that could never equal "yes" -- silently
+#     defeating the root-deletion check. (`dangling` is now the LAST field -- A-C-1's fix.)
+#     Mirrors arm 47's shape (a large SURVIVING 2nd root, kept >= FLOOR on both sides) deliberately
+#     -- the mutation matrix caught that an earlier draft using a SMALL surviving root let the
+#     unrelated VAPORIZE-FLOOR check also refuse the same push, masking whether root_gone parsing
+#     specifically was ever exercised (the mutant went uncaught by this arm as a result).
+W=$(newrepo Z55); ( cd "$W"
+  guide 500
+  mkdir -p .claude; head -c 2500 /dev/zero | tr '\0' 'e' > .claude/CLAUDE.md   # 2nd eager root, LARGE (>= FLOOR), stays large
+  git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  git rm -q AGENTS.md CLAUDE.md
+  { head -c 2500 /dev/zero | tr '\0' 'e'; printf '\n@nowhere here.md\n'; } > .claude/CLAUDE.md   # SPACED dangling import, same commit as the root deletion
+  git add -A; git commit -qm "drop the root guide behind a SPACED dangling import (field-shift escape)" ) >/dev/null 2>&1
+arm "55. root deletion not masked by a SPACED dangling import (field-shift escape)" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 56. A-C-5: a hand-merged FOREIGN hook (containing our sentinel, per the recovery instructions'
+#     own "merge the logic from $SRC by hand" step) must NOT be silently clobbered by a ROUTINE
+#     reinstall (`make build`/`test`/etc. via the order-only `hooks` prerequisite -- not just an
+#     explicit `make hooks`, which the OLD warning only cautioned against by name).
+W=$(newrepo HH56); ( cd "$W"
+  mkdir -p .git/hooks
+  printf '#!/bin/bash\necho "irreplaceable foreign logic"\nexit 0\n' > .git/hooks/pre-push
+  chmod +x .git/hooks/pre-push
+  bash "$INST" "$HOOK" >/dev/null 2>&1          # step 1: foreign, no sentinel yet -> refuses, untouched
+  { cat .git/hooks/pre-push; echo; cat "$HOOK"; } > .git/hooks/pre-push.new
+  mv .git/hooks/pre-push.new .git/hooks/pre-push; chmod +x .git/hooks/pre-push
+  git config xtty.guide-gate true               # a user who stamped WITHOUT recording the hash
+  bash "$INST" "$HOOK" >/dev/null 2>&1 ) >/dev/null 2>&1   # step 2: a ROUTINE reinstall (the risk)
+if grep -q "irreplaceable foreign logic" "$W/.git/hooks/pre-push" 2>/dev/null; then
+  echo "✅  56. hand-merged foreign hook survives a routine reinstall"; pass=$((pass+1))
+else
+  echo "❌  56. hand-merged foreign hook was CLOBBERED by a routine reinstall"; fail=$((fail+1)); FAILED+=("56")
+fi
+
+# 57. A-C-6: a WORKTREE-scoped core.hooksPath override must be diagnosed as worktree-scoped, not
+#     misreported as "global" (whose suggested fix, a LOCAL-scope write, is silently outranked by
+#     the worktree-scoped value and provably does not take effect).
+W=$(newrepo II57)
+( cd "$W"; guide 500; git add -A; git commit -qm base
+  git config extensions.worktreeConfig true
+  git worktree add -q -b II57wt "$ROOT/II57/wt" >/dev/null 2>&1
+  cd "$ROOT/II57/wt"
+  git config --worktree core.hooksPath "$ROOT/II57/wt-only-hooks" ) >/dev/null 2>&1
+out=$( cd "$ROOT/II57/wt" && bash "$INST" "$HOOK" 2>&1 )
+if echo "$out" | grep -q 'set for THIS WORKTREE'; then
+  echo "✅  57. worktree-scoped core.hooksPath correctly diagnosed (not misreported as global)"; pass=$((pass+1))
+else
+  echo "❌  57. worktree-scoped core.hooksPath MISDIAGNOSED"; fail=$((fail+1)); FAILED+=("57")
+  echo "$out" | head -3 | sed 's/^/        /'
+fi
+
+# 58. ...and a rule whose BODY has BOTH a `paths:` line and a LATER stray `---` line, but never
+#     opens with `---` on line 1 (no REAL frontmatter block at all), must not be exempted either
+#     -- the OPENING delimiter is a separate requirement from the CLOSING one (51 tests closing;
+#     this tests opening). Un-vacuates the pre-existing "frontmatter check = grep ^paths:"
+#     mutant, which A-C-3's closing-delimiter fix had incidentally superseded against arm 39's own
+#     (no-stray-"---") content -- the mutation matrix caught this itself (0 arms, NONE <-- VACUOUS).
+W=$(newrepo Y58); ( cd "$W"
+  guide 400; mkdir -p .claude/rules
+  printf 'Some notes.\npaths: are documented like this.\n---\nmore notes\n' > .claude/rules/style.md
+  git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  head -c 1600 /dev/zero | tr '\0' 's' >> .claude/rules/style.md
+  git add -A; git commit -qm "grow a rule with body-text paths: AND a later stray --- (no real opening)" ) >/dev/null 2>&1
+arm "58. body-text paths:+stray --- (no OPENING ---) does NOT exempt" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
 
 echo
 echo "════ $pass passed, $fail failed ════"

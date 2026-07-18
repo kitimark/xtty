@@ -2,10 +2,13 @@
 # Mutation matrix for the guide-gate. Reverts each fix; the arm guarding it MUST go red.
 # A fixture that never fails is decoration — this is what proves the suite isn't.
 cd "$(dirname "$0")" || exit 1
-trap 'rm -f _m.tmp' EXIT
+trap 'rm -f _m.tmp _mi.tmp' EXIT
 HOOKSRC=${HOOKSRC:-../.githooks/pre-push}
+INSTSRC=${INSTSRC:-install-hooks.sh}
 SUITE=${SUITE:-test-guide-gate.sh}
-run() { HOOK="$PWD/$1" bash "$SUITE" 2>&1 | grep -E '^❌' | sed 's/❌ *//;s/\..*//' | tr '\n' ' '; }
+# A-C-mut (2026-07-18): two of this round's fixes live in install-hooks.sh, not pre-push -- $2
+# lets a mutant target EITHER tracked source; omitted, it defaults to the real (unmutated) file.
+run() { HOOK="$PWD/${1:-$HOOKSRC}" INST="$PWD/${2:-$INSTSRC}" bash "$SUITE" 2>&1 | grep -E '^❌' | sed 's/❌ *//;s/\..*//' | tr '\n' ' '; }
 
 b=$(run "$HOOKSRC")
 echo "BASELINE reds: [${b:-none}]"
@@ -37,6 +40,24 @@ open(p,'w').write(s)" || { printf '%-46s !! mutation failed\n' "$1"; bad=$((bad+
   fi
 }
 
+# A-C-mut: install-hooks.sh's own variant -- mutates INSTSRC instead of HOOKSRC, runs the suite
+# with the pristine hook but the MUTATED installer (run's $2).
+mut_inst() {
+  cp "$INSTSRC" _mi.tmp
+  python3 -c "
+p='_mi.tmp'; s=open(p).read()
+$2
+open(p,'w').write(s)" || { printf '%-46s !! mutation failed\n' "$1"; bad=$((bad+1)); return; }
+  bash -n _mi.tmp 2>/dev/null || { printf '%-46s !! parse error\n' "$1"; bad=$((bad+1)); return; }
+  r=$(run "$HOOKSRC" _mi.tmp)
+  if [ -z "$r" ]; then
+    printf '%-46s %s\n' "$1" "NONE  <-- VACUOUS FIXTURE"
+    bad=$((bad+1))
+  else
+    printf '%-46s %s\n' "$1" "$r"
+  fi
+}
+
 mut "meter: read the blob, ignore the tree MODE"      "s=s.replace('    if [ \"\$mode\" = \"120000\" ]; then','    if false; then',1)"
 mut "meter: count CHARACTERS, not bytes"              "s=s.replace('sz=\$(git cat-file -s \"\$blobid\" 2>/dev/null)','sz=\$(git cat-file blob \"\$blobid\" 2>/dev/null | wc -m | tr -d \\\" \\\")',1)"
 mut "meter: unguard the empty-array (fail-OPEN)"      "s=s.replace('queue=(\${next[@]+\"\${next[@]}\"})','queue=(\"\${next[@]}\")',1)"
@@ -58,6 +79,15 @@ mut "alarm: restore the LYING ERR trap"               "s=s.replace('set -uo pipe
 mut "ladder: trust a stale local tracking ref (A-15-1)" "s=s.replace('trust_stale_tracking_ref=no','trust_stale_tracking_ref=yes',1)"
 mut "deletion: root check uses aggregate status again (A-15-2/A-15-2b)" "s=s.replace('if [ \"\$bas_root_gone\" = no ] && [ \"\$cur_root_gone\" = yes ]; then','if [ \"\$bas_status\" = ok ] && { [ \"\$cur_status\" = root_missing ] || [ \"\$cur_status\" = root_deleted ]; }; then',1)"
 mut "ladder: rung-0 trusts a stale digest match regardless of commit (A-15-1b)" "s=s.replace('{ [ \"\$local_oid\" = \"\${canonical:-}\" ] || [ \"\$cur\" -le \"\$CEILING\" ]; }','{ true; }',1)"
+
+echo
+echo "════ cross-review round-1 mutants (Codex + inline Opus — 2026-07-18) ════"
+mut "field-order: dangling reverts to a MIDDLE field, misaligning root_gone (A-C-1)" "s=s.replace('read -r cur cur_status cur_digest cur_root_gone cur_dangling <<<\"\$(resolve_guide \"\$local_oid\")\"','read -r cur cur_status cur_dangling cur_digest cur_root_gone <<<\"\$(resolve_guide \"\$local_oid\")\"',1)"
+mut "frontmatter: paths: alone sets ok, no closing --- required (A-C-3)" "s=s.replace('/^paths:/ { saw_paths = 1; next }','/^paths:/ { ok = 1; saw_paths = 1; next }',1)"
+mut "rules: DIRECTORY symlink under .claude/rules is not detected (A-C-2)" "s=s.replace('        is_dir_symlink \"\$oid\" \"\$r\" && status=unresolved_symlink','        :',1)"
+mut "import: symlinked-ANCESTOR path is not detected (A-C-2b)" "s=s.replace('if has_symlinked_ancestor \"\$oid\" \"\$p\"; then','if false; then',1)"
+mut_inst "installer: hash-tracking removed, hand-merge gets clobbered again (A-C-5)" "s=s.replace('if [ -z \"\$recorded_hash\" ] || [ \"\$installed_hash\" != \"\$recorded_hash\" ]; then','if false; then',1)"
+mut_inst "installer: worktree-scoped hooksPath misdiagnosed as global again (A-C-6)" "s=s.replace('if git config --worktree --get core.hooksPath >/dev/null 2>&1; then','if false; then',1)"
 
 if [ "$bad" -eq 0 ]; then
   echo

@@ -10,7 +10,7 @@ So the fix must sit **below the agent**, where no instruction, tool choice, or w
 
 ## What Changes
 
-- **Land the guide-gate: a tracked `.githooks/pre-push` hook**, installed per-clone into the repository's own git dir by a `make hooks` target. It refuses a push that **grows the eagerly-injected guide past a ceiling**, measured on the **committed blob** of the **pushed tree**. Its only bypass is `--no-verify` (an explicit forbidden act — the R3 residual the repo already accepts).
+- **Land the guide-gate: a tracked `.githooks/pre-push` hook**, installed per-clone into the repository's own git dir by a `make hooks` target. It refuses a push that **grows the eagerly-injected guide past a ceiling**, measured on the **committed blob** of the **pushed tree**. Its only bypass is a deliberate client-side act — `--no-verify`, or a config override such as `git -c core.hooksPath=/dev/null push` or `git -c xtty.guide-gate=false push` (the R3 residual the repo already accepts: an accident tripwire, not an adversarial guarantee against a repository-controlling actor).
 - **The meter measures what is actually injected**, not one file: it resolves the eager-root set (`CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`, and unscoped `.claude/rules/**`), follows `@`-imports transitively, and weighs **bytes via git** — so a symlink, a mode-swap, a moved import, or a "fake diet" into `.claude/rules/` cannot route around it.
 - **The comparator is GROWTH-vs-BASELINE, not absolute-ceiling-while-over** — a shrinking or unchanged push always passes, so the diet is always permitted and unrelated work is never frozen.
 - **The ceiling is a measured RATCHET, never an aspirational number.** Its first notch is set from the **achieved** size, and it may only decrease.

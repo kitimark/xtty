@@ -78,19 +78,69 @@ resolve_entry() {  # $1=oid $2=path -> echoes "<blob-oid> <real-path>"; 1 = unre
   return 1                                               # link loop
 }
 
-# -> "<bytes> <status> <dangling-paths,>"
-#    status: ok | root_missing | import_dangling
+# A-C-2 (2026-07-18, Codex- and Pass-C-caught independently, both empirically verified): git's
+# tree model stores a symlink as a leaf BLOB (its content IS the target path) — `git ls-tree -r`
+# can never see "through" one to whatever it points at, whether that target is a file (already
+# handled: resolve_entry follows it) or a DIRECTORY (not handled anywhere before this fix).
+# Claude Code documents directory symlinks as a sanctioned pattern for .claude/rules/ ("Symlinks
+# are resolved and loaded normally" — code.claude.com/docs/en/memory, incl. the exact example
+# `ln -s ~/shared-claude-rules .claude/rules/shared`) and real content behind one is genuinely
+# injected — but was, before this fix, either silently dropped (a non-`.md`-suffixed symlink name
+# failed the `*.md` filter) or treated as an ordinary "never existed" dangling import (weighed 0,
+# warn-only). The meter cannot measure what is behind a symlinked directory, so both call sites
+# below REFUSE outright rather than certify a byte count it cannot back up (D7: fail closed).
+
+is_dir_symlink() {   # $1=oid $2=path -> success iff path is a symlink whose target names a TREE
+  local oid="$1" path="$2" line mode blobid target tline
+  line=$(git ls-tree "$oid" -- "$path" 2>/dev/null) || return 1
+  mode=${line%% *}
+  [ "$mode" = "120000" ] || return 1
+  line=${line#* }; blobid=${line%%$'\t'*}; blobid=${blobid##* }
+  target=$(git cat-file blob "$blobid" 2>/dev/null) || return 1
+  case "$target" in /*|'~'/*) return 1 ;; esac          # absolute/home: un-pushable, not our concern
+  case "$path" in */*) target="${path%/*}/$target" ;; esac
+  target=${target#./}
+  tline=$(git ls-tree "$oid" -- "$target" 2>/dev/null) || return 1
+  [ "${tline%% *}" = "040000" ]
+}
+
+has_symlinked_ancestor() {   # $1=oid $2=path -> success iff a component BEFORE the last is a symlink
+  local oid="$1" path="$2" prefix="" rest seg line mode
+  case "$path" in */*) : ;; *) return 1 ;; esac
+  rest="${path%/*}"                                      # only the DIRECTORY prefix matters
+  while [ -n "$rest" ]; do
+    case "$rest" in
+      */*) seg="${rest%%/*}"; rest="${rest#*/}" ;;
+      *)   seg="$rest"; rest="" ;;
+    esac
+    prefix="${prefix:+$prefix/}$seg"
+    line=$(git ls-tree "$oid" -- "$prefix" 2>/dev/null) || return 1
+    [ -z "$line" ] && return 1
+    mode=${line%% *}
+    [ "$mode" = "120000" ] && return 0
+  done
+  return 1
+}
+
+# -> "<bytes> <status> <digest> <root_gone> <dangling-paths,>"
+#    status: ok | root_missing | import_dangling | unresolved_symlink
 #    the dangling PATH LIST is returned so the caller can compare baseline-vs-tip PER PATH:
 #    an import that DISAPPEARED is a deletion (refuse); one that was NEVER there is new-and-broken
 #    (warn, weigh 0) — an aggregate flag conflates them and mis-fires both ways.
 has_paths_frontmatter() {   # $1=oid $2=path
   # NB: in awk, `exit 0` inside a rule STILL RUNS THE END BLOCK — an `END { exit 1 }` there
   # silently overrides it. Set a flag; exit exactly once, in END.
+  # A-C-3 (2026-07-18, Codex-caught): `ok` must require the CLOSING `---`, not just a `paths:`
+  # line. The old rule set `ok=1` the instant it saw `paths:`, so an OPENED-but-never-CLOSED
+  # frontmatter block (a malformed rule: `---`, `paths: …`, then arbitrarily large body, no second
+  # `---`) was falsely exempted forever — an unmetered fake-diet lane inside the metering code
+  # itself, worse than the `^paths:`-anywhere bug arm 39 already guards. Only the CLOSING
+  # delimiter may set `ok`, and only if a `paths:` line was already seen.
   git cat-file blob "$1:$2" 2>/dev/null | awk '
     NR == 1 { if ($0 != "---") done = 1; next }        # no opening `---` => NOT frontmatter
     done { next }
-    /^---[[:space:]]*$/ { done = 1; next }             # frontmatter closed without a `paths` key
-    /^paths:/ { ok = 1; done = 1 }
+    /^paths:/ { saw_paths = 1; next }
+    /^---[[:space:]]*$/ { if (saw_paths) ok = 1; done = 1; next }
     END { exit (ok ? 0 : 1) }'
 }
 
@@ -106,7 +156,13 @@ resolve_guide() {
     [ -z "$r" ] && continue
     case "$r" in
       *.md) ;;
-      *) continue ;;
+      *)
+        # A-C-2: a non-`.md` leaf under .claude/rules is either harmless (a symlink to a file —
+        # Claude Code only loads `.md` files as rules) or a DIRECTORY symlink whose contents this
+        # meter cannot see. Distinguish them instead of silently dropping both.
+        is_dir_symlink "$oid" "$r" && status=unresolved_symlink
+        continue
+        ;;
     esac
     # A rule is READ-TRIGGERED (not eager) ONLY if it has real YAML frontmatter carrying `paths`.
     # DOCS: the frontmatter is delimited by `---` lines. A grep for `^paths:` anywhere in the head
@@ -129,7 +185,7 @@ resolve_guide() {
     queue=(${keep[@]+"${keep[@]}"})
     root_gone=yes
   fi
-  [ ${#queue[@]} -gt 0 ] || { printf '0 root_missing none - yes'; return; }
+  [ ${#queue[@]} -gt 0 ] || { printf '0 root_missing - yes none'; return; }
 
   # `hop` counts IMPORT HOPS. The root is hop 0 and must not consume one, or a
   # declared "max depth 4" only ever follows 3 (measured off-by-one).
@@ -141,13 +197,25 @@ resolve_guide() {
       if ! ent=$(resolve_entry "$oid" "$p"); then
         case "$p" in
           '~'/*|/*) echo "guide-gate:   note — un-pushable import weighed 0: $p" >&2 ;;
-          *) status=import_dangling; dangling="$dangling$p," ;;
+          *)
+            if has_symlinked_ancestor "$oid" "$p"; then
+              # A-C-2b: git cannot address a path THROUGH a symlinked directory (confirmed
+              # empirically — `git ls-tree <oid> -- linkdir/file.md` returns nothing even when
+              # the checked-out filesystem resolves it fine). resolve_entry's plain failure here
+              # is indistinguishable from "never existed," but the real product injects whatever
+              # is actually there — do not silently treat it as an ordinary dangling import.
+              status=unresolved_symlink
+            else
+              [ "$status" = unresolved_symlink ] || status=import_dangling
+              dangling="$dangling$p,"
+            fi
+            ;;
         esac
         continue
       fi
       blobid=${ent%% *}; real=${ent#* }
       seen="$seen $real"                           # don't double-count a link and its target
-      sz=$(git cat-file -s "$blobid" 2>/dev/null) || { status=import_dangling; dangling="$dangling$p,"; continue; }
+      sz=$(git cat-file -s "$blobid" 2>/dev/null) || { [ "$status" = unresolved_symlink ] || status=import_dangling; dangling="$dangling$p,"; continue; }
       total=$(( total + sz ))
       closure="$closure$real:$blobid\n"          # the CONTENT of the whole closure, not 2 paths
       body=$(git cat-file blob "$blobid" 2>/dev/null) || true
@@ -193,13 +261,19 @@ resolve_guide() {
   # this from the aggregate status entirely: expose root-gone as its OWN dedicated field so the
   # caller can check "did the ROOT resolve" independently of dangling-import status on either
   # side. root_missing (queue empty) also implies no root -- report "yes" there too.
-  printf '%s %s %s %s %s' "$total" "$status" "${dangling:-none}" "$(printf '%s' "$closure" | git hash-object --stdin)" "$root_gone"
+  # A-C-1 (2026-07-18, Codex-caught): `dangling` is the ONE field that can legitimately contain
+  # embedded WHITESPACE (a rule filename may contain spaces — arm 40) — `read`'s word-splitting
+  # then shifts every field AFTER it, corrupting `root_gone` into a two-word non-yes/no string and
+  # silently defeating the root-deletion check. `read`'s LAST named variable absorbs the entire
+  # remainder of the line, embedded spaces and all — so `dangling` must be LAST, never a middle
+  # field. (`total`/`status`/`digest`/`root_gone` are all space-proof: an enum, a hex hash, yes/no.)
+  printf '%s %s %s %s %s' "$total" "$status" "$(printf '%s' "$closure" | git hash-object --stdin)" "$root_gone" "${dangling:-none}"
 }
 
 canonical=$(git rev-parse -q --verify "$MAIN_REF" 2>/dev/null || true)
 canon_bytes=""
 canon_digest=""
-if [ -n "$canonical" ]; then read -r canon_bytes _ _ canon_digest _ <<<"$(resolve_guide "$canonical")"; fi
+if [ -n "$canonical" ]; then read -r canon_bytes _ canon_digest _ _ <<<"$(resolve_guide "$canonical")"; fi
 
 status=0
 zero='0000000000000000000000000000000000000000'
@@ -208,7 +282,7 @@ while read -r local_ref local_oid remote_ref remote_oid; do
   [ -z "${local_ref:-}" ] && continue
   [ "$local_oid" = "$zero" ] && continue                    # deletion push => allow
 
-  read -r cur cur_status cur_dangling cur_digest cur_root_gone <<<"$(resolve_guide "$local_oid")"
+  read -r cur cur_status cur_digest cur_root_gone cur_dangling <<<"$(resolve_guide "$local_oid")"
 
   # --- THE LADDER (order matters) -----------------------------------------
   base=""
@@ -223,6 +297,13 @@ while read -r local_ref local_oid remote_ref remote_oid; do
       # clone, or main's own first push) it waves EVERYTHING through. Split it:
       if [ "$cur_status" = root_missing ]; then
         echo "guide-gate: $local_ref — unrelated history, no guide => allow" >&2; continue
+      fi
+      # A-C-2c: an unresolved-symlink guide's byte count is INCOMPLETE (whatever is behind the
+      # symlink is not in it) — never let it pass a ceiling check that only looks trustworthy.
+      if [ "$cur_status" = unresolved_symlink ]; then
+        echo "guide-gate: REFUSE $local_ref — no baseline, and an unsupported SYMLINKED DIRECTORY" >&2
+        echo "guide-gate:   is reachable from the eager guide (the meter cannot measure it)." >&2
+        status=1; continue
       fi
       if ! is_int "${cur:-}"; then
         echo "guide-gate: REFUSE $local_ref — no baseline and the meter failed (fail-closed)." >&2
@@ -250,6 +331,10 @@ while read -r local_ref local_oid remote_ref remote_oid; do
       base="$stale_ref"
     elif [ "$cur_status" = root_missing ]; then
       echo "guide-gate: $local_ref — unfetched baseline, no guide => allow" >&2; continue
+    elif [ "$cur_status" = unresolved_symlink ]; then
+      echo "guide-gate: REFUSE $local_ref — unfetched baseline, and an unsupported SYMLINKED" >&2
+      echo "guide-gate:   DIRECTORY is reachable from the eager guide (cannot be measured)." >&2
+      status=1; continue
     elif ! is_int "${cur:-}"; then
       echo "guide-gate: REFUSE $local_ref — unfetched baseline and the meter failed (fail-closed)." >&2
       status=1; continue
@@ -261,9 +346,20 @@ while read -r local_ref local_oid remote_ref remote_oid; do
     fi
   fi
 
-  read -r bas bas_status bas_dangling bas_digest bas_root_gone <<<"$(resolve_guide "$base")"
+  read -r bas bas_status bas_digest bas_root_gone bas_dangling <<<"$(resolve_guide "$base")"
   if ! is_int "${cur:-}" || ! is_int "${bas:-}"; then
     echo "guide-gate: REFUSE $local_ref — the meter failed to produce a measurement (fail-closed)." >&2
+    status=1; continue
+  fi
+
+  # --- unresolved symlink shapes (A-C-2/A-C-2b) ---------------------------
+  # The meter cannot see behind a DIRECTORY-mode symlink (.claude/rules/ or an @import through an
+  # intermediate symlinked directory) — real content the product injects is invisible to it either
+  # way, on either side. Refuse unconditionally rather than certify a byte count it cannot back up.
+  if [ "$cur_status" = unresolved_symlink ] || [ "$bas_status" = unresolved_symlink ]; then
+    echo "guide-gate: REFUSE $local_ref — an unsupported SYMLINKED DIRECTORY is reachable from the" >&2
+    echo "guide-gate:   eager guide (.claude/rules/ or an @import) — the meter cannot measure what" >&2
+    echo "guide-gate:   is behind it. Remove the symlink (or use --no-verify if intentional)." >&2
     status=1; continue
   fi
 

@@ -33,7 +33,17 @@ if git config --get core.hooksPath >/dev/null 2>&1; then
     [ -z "$cfg" ] && cfg='(empty — git searches the worktree root)'
     echo "hooks: core.hooksPath is set ($cfg) — git will not read this repo's own hooks dir." >&2
     echo "hooks: NOT installing (refusing to write into a hooks dir this project does not own)." >&2
-    if git config --local --get core.hooksPath >/dev/null 2>&1; then
+    # A-C-6 (2026-07-18, Pass-C-caught, empirically verified): a WORKTREE-scoped override
+    # (`git config --worktree core.hooksPath …`, needs extensions.worktreeConfig) is invisible to
+    # `git config --local --get` -- the old two-way local/global check misdiagnosed it as global
+    # and printed `git config core.hooksPath "$DEST"` as the fix, which writes LOCAL scope and is
+    # silently outranked by the worktree-scoped value (confirmed: git rev-parse --git-path hooks
+    # was UNCHANGED after running that exact command) -- the same "recovery advice that leads
+    # nowhere" bug class A-15-7 already fixed for the global-vs-local case, in a third scope.
+    if git config --worktree --get core.hooksPath >/dev/null 2>&1; then
+      echo "hooks: it is set for THIS WORKTREE (git config --worktree) -- unset it there:" >&2
+      echo "hooks:     git config --worktree --unset core.hooksPath   # then re-run make hooks" >&2
+    elif git config --local --get core.hooksPath >/dev/null 2>&1; then
       echo "hooks: to arm the gate, UNSET core.hooksPath for this repo:" >&2
       echo "hooks:     git config --unset core.hooksPath   # then re-run make hooks" >&2
     else
@@ -50,24 +60,50 @@ fi
 mkdir -p "$DEST" 2>/dev/null || exit 0
 TARGET="$DEST/pre-push"
 
-if [ -e "$TARGET" ] && ! grep -qF "$SENTINEL" "$TARGET" 2>/dev/null; then
-  # A-15-6 (2026-07-18, Codex-caught): the old message said "merge by hand" but never told the
-  # user to set the stamp themselves -- this installer path exits BEFORE stamping, so a hand
-  # merge alone leaves the gate inert (the identity guard exits on an unstamped repo). And
-  # blindly re-running `make hooks` afterward is UNSAFE: if the merged file happens to contain
-  # our sentinel text, the NEXT run would classify it as our own copy and OVERWRITE the merge.
-  echo "hooks: a FOREIGN pre-push hook already exists at $TARGET — not clobbering it." >&2
-  echo "hooks: to arm the guide gate alongside it:" >&2
-  echo "hooks:   1. merge the logic from $SRC into $TARGET by hand" >&2
-  echo "hooks:   2. stamp this repo yourself (this installer never wrote $TARGET, so it never stamps):" >&2
-  echo "hooks:        git config xtty.guide-gate true" >&2
-  echo "hooks:   Do NOT just re-run 'make hooks' afterward — if the merged file contains this" >&2
-  echo "hooks:   installer's sentinel text, a later run will treat it as OUR copy and OVERWRITE" >&2
-  echo "hooks:   your merge. Edit $TARGET directly for any future update instead." >&2
-  exit 0
+if [ -e "$TARGET" ]; then
+  if ! grep -qF "$SENTINEL" "$TARGET" 2>/dev/null; then
+    # A-15-6 (2026-07-18, Codex-caught): the old message said "merge by hand" but never told the
+    # user to set the stamp themselves -- this installer path exits BEFORE stamping, so a hand
+    # merge alone leaves the gate inert (the identity guard exits on an unstamped repo).
+    echo "hooks: a FOREIGN pre-push hook already exists at $TARGET — not clobbering it." >&2
+    echo "hooks: to arm the guide gate alongside it:" >&2
+    echo "hooks:   1. merge the logic from $SRC into $TARGET by hand" >&2
+    echo "hooks:   2. record what you merged, so a routine 'make hooks'/'make build' etc. never" >&2
+    echo "hooks:      silently overwrites it later (this installer never wrote $TARGET before, so" >&2
+    echo "hooks:      it has nothing recorded to compare against — see A-C-5 below):" >&2
+    echo "hooks:        git config xtty.guide-gate-hook-sha \"\$(git hash-object $TARGET)\"" >&2
+    echo "hooks:        git config xtty.guide-gate true" >&2
+    exit 0
+  fi
+  # A-C-5 (2026-07-18, Codex-caught): a substring-sentinel match alone cannot tell "an untouched
+  # copy we installed" from "a human merged our source's text into a foreign hook" -- both contain
+  # the sentinel. The old code treated ANY sentinel match as "our own copy, always safe to
+  # re-copy," which SILENTLY DESTROYED a hand-merged foreign hook's logic on the very next routine
+  # `make build`/`test`/etc. (not just an explicit `make hooks` -- `hooks` is an order-only
+  # prerequisite of all of them), because A-15-6's warning above only cautioned against re-running
+  # `make hooks` by name. Track OWNERSHIP by a recorded hash of what WE last wrote instead: if the
+  # sentinel is present but there's no recorded hash (we never wrote here) or it doesn't match
+  # what's on disk NOW (edited/merged since), this is not verifiably our last install -- refuse,
+  # don't clobber. Only a hash match (a genuine prior install of ours, safe to upgrade -- D2's
+  # "staleness impossible" guarantee) or a first-ever install (no file yet) proceeds.
+  installed_hash=$(git hash-object "$TARGET" 2>/dev/null || true)
+  recorded_hash=$(git config --get xtty.guide-gate-hook-sha 2>/dev/null || true)
+  if [ -z "$recorded_hash" ] || [ "$installed_hash" != "$recorded_hash" ]; then
+    echo "hooks: $TARGET carries this project's sentinel but does NOT match what this installer" >&2
+    echo "hooks: last wrote here (a hand-merge, or a manual edit since) — NOT overwriting it." >&2
+    echo "hooks: to arm the gate, either:" >&2
+    echo "hooks:   1. re-run 'make hooks' after backing up any custom logic elsewhere (this" >&2
+    echo "hooks:      OVERWRITES $TARGET with the pristine tracked hook), or" >&2
+    echo "hooks:   2. keep it as-is and record it as ours so future runs leave it alone:" >&2
+    echo "hooks:        git config xtty.guide-gate-hook-sha \"$installed_hash\"" >&2
+    echo "hooks:        git config xtty.guide-gate true" >&2
+    exit 0
+  fi
 fi
 
-# Own copy (or none): always re-copy => staleness impossible, upgrades land.
+# Own copy (verified via the recorded hash above) or none: always re-copy => staleness
+# impossible, upgrades land.
 install -m 755 "$SRC" "$TARGET" 2>/dev/null || exit 0
+git config xtty.guide-gate-hook-sha "$(git hash-object "$TARGET" 2>/dev/null)" 2>/dev/null || true
 git config xtty.guide-gate true 2>/dev/null || true   # the repo stamp the hook checks
 exit 0
