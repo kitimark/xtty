@@ -104,5 +104,5 @@ jobs:
             exit 1
           }
 
-      - name: Run the guide-gate fixture suite (45 arms) + mutation matrix
+      - name: Run the guide-gate fixture suite + mutation matrix
         run: make test-guide-gate
