@@ -760,6 +760,97 @@ arm "58. body-text paths:+stray --- (no OPENING ---) does NOT exempt" REFUSE \
     "XTTY_GUIDE_CEILING=$CEIL git push origin main"
 
 echo
+echo "════ CROSS-REVIEW ARMS (Codex + inline Opus, /xtty:cross-review round 2 — 2026-07-18) ════"
+
+# 59. A-C-seen: resolve_guide's `seen` dedup was a SUBSTRING match on a space-joined string, not
+#     exact membership -- a queued path whose TAIL exactly equals a later, genuinely DISTINCT path
+#     (bounded by spaces) got silently treated as already-processed, and its growth was never
+#     added to the total. A pre-existing bug (predates this session's fixes), found independently
+#     by the inline soundness pass while hunting beyond its brief.
+W=$(newrepo HH59); ( cd "$W"
+  bash "$INST" "$HOOK"
+  guide 400
+  mkdir -p .claude/rules
+  printf '# ok\n' > ".claude/rules/AAA bar.md"
+  printf '# ok\n' > bar.md
+  printf '# CLAUDE.md\n@AGENTS.md\n@bar.md\n' > CLAUDE.md
+  git add -A; git commit -qm base; git push -q origin main
+  head -c 5000 /dev/zero | tr '\0' 'z' > bar.md
+  git add -A; git commit -qm "grow a DISTINCT bar.md whose name tail-collides with another queued path" ) >/dev/null 2>&1
+arm "59. seen-dedup does not false-positive on a tail-suffix collision" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 60. A-C-2c: is_dir_symlink resolved exactly ONE symlink hop -- a symlink pointing at ANOTHER
+#     symlink that in turn points at a directory fell through undetected, WORSE than the original
+#     bug (not even flagged, totally silent). Loop like resolve_entry does instead.
+W=$(newrepo II60); ( cd "$W"
+  bash "$INST" "$HOOK"
+  guide 400
+  mkdir -p external-rules
+  head -c 5000 /dev/zero | tr '\0' 'e' > external-rules/big.md
+  ln -s external-rules intermediate-link
+  mkdir -p .claude/rules
+  ln -s ../../intermediate-link .claude/rules/shared
+  git add -A; git commit -qm "a 2-hop directory symlink chain under .claude/rules" ) >/dev/null 2>&1
+arm "60. a 2-HOP directory symlink chain is still detected (not just 1 hop)" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 61. A-C-2d: an EMPTY queue used to hardcode status=root_missing UNCONDITIONALLY, discarding an
+#     already-detected unresolved_symlink -- a directory symlink as the ONLY thing under
+#     .claude/rules (no CLAUDE.md at all) was waved through as "no guide", worse than an ordinary
+#     refuse, since real content behind the symlink genuinely exists and is injected.
+W=$(newrepo JJ61); ( cd "$W"
+  bash "$INST" "$HOOK"
+  mkdir -p external-rules .claude/rules
+  head -c 5000 /dev/zero | tr '\0' 'e' > external-rules/big.md
+  ln -s ../../external-rules .claude/rules/shared
+  echo code > src.txt
+  git add -A; git commit -qm "no CLAUDE.md at all -- ONLY a directory symlink under .claude/rules" ) >/dev/null 2>&1
+arm "61. directory symlink as the SOLE eager root is still refused (not 'no guide')" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 62. A-C-comma: a git filename may legally contain a COMMA -- the comma-joined dangling-path list
+#     mis-split a path like "a,b.md" back into two fragments that never resolve as themselves, so
+#     the per-path vaporize-deletion check silently missed a real deletion. Switched the internal
+#     delimiter to the ASCII Unit Separator (a byte no real filename plausibly contains).
+W=$(newrepo KK62); ( cd "$W"
+  guide 2500
+  mkdir -p .claude/docs
+  { head -c 2500 /dev/zero | tr '\0' 'e'; printf '\n@docs/a,b.md\n'; } > .claude/CLAUDE.md
+  printf '# real content\n' > ".claude/docs/a,b.md"
+  git add -A; git commit -qm base; git push -q origin main
+  bash "$INST" "$HOOK"
+  git rm -q ".claude/docs/a,b.md"
+  git commit -qm "delete a COMMA-named import that resolved at baseline" ) >/dev/null 2>&1
+arm "62. deleting a COMMA-named resolved import is not masked by mis-splitting" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 63. A-C-5b: the installer's OWN printed recovery instructions must never tell the user to run a
+#     command that causes the NEXT routine reinstall to destroy what they just preserved (verified
+#     end-to-end in round 2: following the round-1 instructions literally destroyed the merge on
+#     the very next call). Assert BOTH that the printed text never mentions the self-defeating
+#     config key, and that a hand-merged hook survives repeated routine reinstalls.
+W=$(newrepo LL63); ( cd "$W"
+  mkdir -p .git/hooks
+  printf '#!/bin/bash\necho "irreplaceable foreign logic"\nexit 0\n' > .git/hooks/pre-push
+  chmod +x .git/hooks/pre-push
+  bash "$INST" "$HOOK" >/dev/null 2>&1
+  { cat .git/hooks/pre-push; echo; cat "$HOOK"; } > .git/hooks/pre-push.new
+  mv .git/hooks/pre-push.new .git/hooks/pre-push; chmod +x .git/hooks/pre-push ) >/dev/null 2>&1
+out=$( cd "$W" && bash "$INST" "$HOOK" 2>&1 )
+( cd "$W" && git config xtty.guide-gate true
+  bash "$INST" "$HOOK" >/dev/null 2>&1
+  bash "$INST" "$HOOK" >/dev/null 2>&1
+  bash "$INST" "$HOOK" >/dev/null 2>&1 )
+if echo "$out" | grep -q 'guide-gate-hook-sha'; then
+  echo "❌  63. printed recovery text still tells the user to self-defeat (guide-gate-hook-sha)"; fail=$((fail+1)); FAILED+=("63")
+elif ! grep -q "irreplaceable foreign logic" "$W/.git/hooks/pre-push" 2>/dev/null; then
+  echo "❌  63. hand-merged hook destroyed after repeated routine reinstalls"; fail=$((fail+1)); FAILED+=("63")
+else
+  echo "✅  63. recovery text is safe AND the merge survives repeated routine reinstalls"; pass=$((pass+1))
+fi
+
+echo
 echo "════ $pass passed, $fail failed ════"
 [ $fail -gt 0 ] && printf 'FAILED: %s\n' "${FAILED[*]}"
 echo "ROOT=$ROOT"

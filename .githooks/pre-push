@@ -32,6 +32,11 @@ MAIN_REF="refs/remotes/$REMOTE/main"
 CEILING="${XTTY_GUIDE_CEILING:-51770}"
 MAXDEPTH=4
 FLOOR="${XTTY_GUIDE_FLOOR:-2000}"     # below this, a "shrink" is a VAPORIZE, not a diet
+# A-C-comma (2026-07-18, Codex-caught): a git path may legally contain a comma (unlike a NUL or a
+# `/`), so joining multiple dangling paths with `,` let a path such as "docs/a,b.md" mis-split back
+# into two fragments that never resolve as themselves -- the real per-path deletion check silently
+# missed it. A control byte no real filename plausibly contains is the standard fix for this class.
+DANG_SEP=$'\x1f'                      # ASCII Unit Separator: joins/splits the dangling-path list
 is_int() { case "${1:-}" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac; }
 # A malformed ceiling made `[ "$bas" -gt "$CEILING" ]` error and the push ALLOW. Fail closed.
 if ! is_int "$CEILING" || ! is_int "$FLOOR"; then
@@ -90,18 +95,29 @@ resolve_entry() {  # $1=oid $2=path -> echoes "<blob-oid> <real-path>"; 1 = unre
 # warn-only). The meter cannot measure what is behind a symlinked directory, so both call sites
 # below REFUSE outright rather than certify a byte count it cannot back up (D7: fail closed).
 
-is_dir_symlink() {   # $1=oid $2=path -> success iff path is a symlink whose target names a TREE
-  local oid="$1" path="$2" line mode blobid target tline
-  line=$(git ls-tree "$oid" -- "$path" 2>/dev/null) || return 1
-  mode=${line%% *}
-  [ "$mode" = "120000" ] || return 1
-  line=${line#* }; blobid=${line%%$'\t'*}; blobid=${blobid##* }
-  target=$(git cat-file blob "$blobid" 2>/dev/null) || return 1
-  case "$target" in /*|'~'/*) return 1 ;; esac          # absolute/home: un-pushable, not our concern
-  case "$path" in */*) target="${path%/*}/$target" ;; esac
-  target=${target#./}
-  tline=$(git ls-tree "$oid" -- "$target" 2>/dev/null) || return 1
-  [ "${tline%% *}" = "040000" ]
+is_dir_symlink() {   # $1=oid $2=path -> success iff path is a (possibly CHAINED) symlink whose
+                      # eventual target names a TREE
+  local oid="$1" path="$2" hops=0 line mode blobid target
+  # A-C-2c (2026-07-18, Codex- and Pass-C-caught independently, both empirically verified): the
+  # original version resolved exactly ONE hop, so a symlink pointing at ANOTHER symlink that in
+  # turn points at a directory (`.claude/rules/shared -> intermediate -> external-rules/`) fell
+  # through the `mode != 120000` check on the SECOND hop and returned 1 (not a directory) --
+  # WORSE than the original bug: not even flagged as unresolved_symlink, totally silent. Loop like
+  # resolve_entry already does (same 8-hop cap) instead of resolving exactly once.
+  while [ "$hops" -lt 8 ]; do
+    line=$(git ls-tree "$oid" -- "$path" 2>/dev/null) || return 1
+    [ -z "$line" ] && return 1
+    mode=${line%% *}
+    [ "$mode" = "040000" ] && return 0                   # reached a directory: success
+    [ "$mode" = "120000" ] || return 1                    # a non-directory, non-symlink blob: not a dir
+    line=${line#* }; blobid=${line%%$'\t'*}; blobid=${blobid##* }
+    target=$(git cat-file blob "$blobid" 2>/dev/null) || return 1
+    case "$target" in /*|'~'/*) return 1 ;; esac          # absolute/home: un-pushable, not our concern
+    case "$path" in */*) path="${path%/*}/$target" ;; *) path="$target" ;; esac
+    path=${path#./}
+    hops=$(( hops + 1 ))
+  done
+  return 1                                                 # link loop / chain too deep
 }
 
 has_symlinked_ancestor() {   # $1=oid $2=path -> success iff a component BEFORE the last is a symlink
@@ -146,8 +162,8 @@ has_paths_frontmatter() {   # $1=oid $2=path
 
 resolve_guide() {
   local oid="$1" total=0 hop=0 status=ok dangling="" closure="" root_gone=no
-  local -a queue=("CLAUDE.md") next=()
-  local seen="" ent blobid real imp p sz body
+  local -a queue=("CLAUDE.md") next=() seen=()
+  local ent blobid real imp p sz body already sv
 
   # every EAGERLY-INJECTED root, not just CLAUDE.md.
   local r
@@ -185,15 +201,31 @@ resolve_guide() {
     queue=(${keep[@]+"${keep[@]}"})
     root_gone=yes
   fi
-  [ ${#queue[@]} -gt 0 ] || { printf '0 root_missing - yes none'; return; }
+  # A-C-2d (2026-07-18, Codex-caught): an empty queue used to hardcode `root_missing`
+  # UNCONDITIONALLY, discarding an already-detected `unresolved_symlink` from the .claude/rules
+  # scan above (e.g. a directory symlink as the ONLY thing under .claude/rules, with no other
+  # eager root) -- the caller's "no baseline"/"unfetched baseline" lanes check `root_missing`
+  # FIRST and allow, so real content behind an undetected symlink was waved through as "no guide
+  # at all," worse than an ordinary refuse. Preserve whatever `status` already holds.
+  if [ ${#queue[@]} -eq 0 ]; then printf '0 %s - yes none' "$status"; return; fi
 
   # `hop` counts IMPORT HOPS. The root is hop 0 and must not consume one, or a
   # declared "max depth 4" only ever follows 3 (measured off-by-one).
   while [ ${#queue[@]} -gt 0 ] && [ "$hop" -le "$MAXDEPTH" ]; do
     next=()
     for p in "${queue[@]}"; do
-      case " $seen " in *" $p "*) continue ;; esac
-      seen="$seen $p"
+      # A-C-seen (2026-07-18, Pass-C-caught, independent of round 1's brief, empirically verified):
+      # a space-wrapped SUBSTRING check (`case " $seen " in *" $p "*)`) false-positives whenever one
+      # already-queued path's TAIL exactly equals a later, genuinely DISTINCT path bounded by
+      # spaces (e.g. queued ".claude/rules/AAA bar.md" makes a later, unrelated "bar.md" register
+      # as already-seen) — the later path is silently skipped, its growth never added to `total`.
+      # A pre-existing bug (predates this session's fixes; confirmed unchanged by round C's diff),
+      # invisible to substring-matching for 15+ prior review rounds and the whole fixture suite.
+      # Exact ARRAY membership, not string containment, closes it.
+      already=no
+      for sv in ${seen[@]+"${seen[@]}"}; do [ "$sv" = "$p" ] && { already=yes; break; }; done
+      [ "$already" = yes ] && continue
+      seen+=("$p")
       if ! ent=$(resolve_entry "$oid" "$p"); then
         case "$p" in
           '~'/*|/*) echo "guide-gate:   note — un-pushable import weighed 0: $p" >&2 ;;
@@ -207,15 +239,15 @@ resolve_guide() {
               status=unresolved_symlink
             else
               [ "$status" = unresolved_symlink ] || status=import_dangling
-              dangling="$dangling$p,"
+              dangling="$dangling$p$DANG_SEP"
             fi
             ;;
         esac
         continue
       fi
       blobid=${ent%% *}; real=${ent#* }
-      seen="$seen $real"                           # don't double-count a link and its target
-      sz=$(git cat-file -s "$blobid" 2>/dev/null) || { [ "$status" = unresolved_symlink ] || status=import_dangling; dangling="$dangling$p,"; continue; }
+      seen+=("$real")                               # don't double-count a link and its target
+      sz=$(git cat-file -s "$blobid" 2>/dev/null) || { [ "$status" = unresolved_symlink ] || status=import_dangling; dangling="$dangling$p$DANG_SEP"; continue; }
       total=$(( total + sz ))
       closure="$closure$real:$blobid\n"          # the CONTENT of the whole closure, not 2 paths
       body=$(git cat-file blob "$blobid" 2>/dev/null) || true
@@ -267,6 +299,12 @@ resolve_guide() {
   # silently defeating the root-deletion check. `read`'s LAST named variable absorbs the entire
   # remainder of the line, embedded spaces and all — so `dangling` must be LAST, never a middle
   # field. (`total`/`status`/`digest`/`root_gone` are all space-proof: an enum, a hex hash, yes/no.)
+  # ⚠️ This closes the SPACE case (the realistic one — arm 40 shows honest rule filenames use it).
+  # A literal embedded NEWLINE in a path is NOT closed by field ORDER alone (round-2 soundness
+  # pass, confidence 0.85) -- the outer printf/read handoff is itself line-based, so a raw newline
+  # anywhere in `dangling` truncates what `read` captures. Accepted as an R3 adversarial-
+  # construction residual, not fixed: an honest session does not create newline-embedded
+  # filenames (design.md Risks).
   printf '%s %s %s %s %s' "$total" "$status" "$(printf '%s' "$closure" | git hash-object --stdin)" "$root_gone" "${dangling:-none}"
 }
 
@@ -378,7 +416,7 @@ while read -r local_ref local_oid remote_ref remote_oid; do
   #    was ALREADY broken, or is newly-added-and-broken, is not a deletion — warn, weigh 0, allow.
   if [ "$cur_status" = import_dangling ]; then
     vaporized=""
-    IFS=, read -ra _dangs <<<"${cur_dangling%,}"
+    IFS="$DANG_SEP" read -ra _dangs <<<"${cur_dangling%$DANG_SEP}"
     for _d in ${_dangs[@]+"${_dangs[@]}"}; do
       [ -z "$_d" ] || [ "$_d" = none ] && continue
       # RESOLVABLE at the baseline (not merely present): a dangling symlink import EXISTS in the
@@ -390,7 +428,8 @@ while read -r local_ref local_oid remote_ref remote_oid; do
       echo "guide-gate:   (the root survives, so the meter reads a 'shrink' — this is the vaporize lane)" >&2
       status=1; continue
     fi
-    echo "guide-gate: warn $local_ref — unresolvable import(s) weighed 0: ${cur_dangling%,}" >&2
+    disp="${cur_dangling%$DANG_SEP}"; disp="${disp//$DANG_SEP/, }"
+    echo "guide-gate: warn $local_ref — unresolvable import(s) weighed 0: $disp" >&2
   fi
   # Skip ONLY when neither side has a guide at all. `import_dangling` still has a MEASURABLE
   # guide — treating it as "no guide" latched the gate OPEN once a dangling import was published.

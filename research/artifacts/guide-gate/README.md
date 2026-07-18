@@ -330,3 +330,82 @@ scripts/test-guide-gate-mutants.sh` → `All mutants caught cleanly (0 vacuous, 
 A-C-1/A-C-2/A-C-2b/A-C-3 are real (not port artifacts) by real `git push` against a throwaway clone: a
 directory symlink under `.claude/rules/`, an `@import` through one, unclosed frontmatter, and a spaced
 dangling import composed with a root deletion should all `REFUSE` against the fixed hook.
+
+## Round C.2 (2026-07-18, same day) — the bounded loop's FINAL round: 5 more real defects, one self-inflicted
+
+Per `/xtty:cross-review`'s protocol, round C's fixes were checkpoint-committed and re-reviewed by a
+**second** independent A‖B‖C pass (bounded N=2 — this is the last round before escalating any residual to
+the human rather than looping further). Both soundness passes were briefed with round C's own fixes framed
+explicitly as **claims to challenge, not established facts**. Both came back `needs-attention`, and — the
+whole reason a second model pass exists — found **disjoint** real defects neither round C nor 14+ prior
+review rounds had caught, including one **self-inflicted** by round C's own fix.
+
+- **A-C-seen (Pass C, confidence 0.95, PRE-EXISTING — not introduced by round C) — `resolve_guide`'s
+  `seen` dedup was a substring match, not exact membership.** `case " $seen " in *" $p "*)` tests whether
+  `$p` is a substring of the space-joined accumulator, not whether it's an actual prior element — so a
+  queued path whose TAIL exactly equals a later, genuinely distinct path (bounded by spaces — e.g. queued
+  `.claude/rules/AAA bar.md` makes a later, unrelated `bar.md` register as already-seen) causes the later
+  path to be silently skipped, its growth never added to `total`. Confirmed unchanged by round C's diff —
+  this bug predates the whole session and survived every prior review round and the full fixture suite
+  because none of them exercise a tail-suffix collision. Fixed by converting `seen` to a real bash array
+  with exact per-element comparison. Fixture: arm 59.
+- **A-C-2c (Codex + Pass C, independently, CONSENSUS) — `is_dir_symlink` resolved exactly ONE symlink
+  hop.** A symlink pointing at ANOTHER symlink that in turn points at a directory fell through the
+  `mode != 120000` check on the second hop and returned failure — **worse than the original A-C-2 bug**:
+  not even flagged as `unresolved_symlink`, totally silent, zero warning. Fixed by making `is_dir_symlink`
+  loop like `resolve_entry` already does (same 8-hop cap) instead of resolving exactly once. Fixture: arm 60.
+- **A-C-2d (Codex) — an empty queue hardcoded `root_missing` unconditionally, discarding an
+  already-detected `unresolved_symlink`.** If a directory symlink under `.claude/rules/` was the ONLY
+  thing found (no `CLAUDE.md` at all), the empty-queue early return silently overwrote the correctly-set
+  `status=unresolved_symlink` with a hardcoded `root_missing` — and the caller's "no baseline"/"unfetched
+  baseline" lanes check `root_missing` FIRST and allow, waving through real content behind an undetected
+  symlink as "no guide at all," worse than an ordinary refuse. Fixed by preserving whatever `status`
+  already holds instead of hardcoding. Fixture: arm 61.
+- **A-C-comma (Codex, medium) — a git filename may legally contain a comma, breaking the comma-joined
+  dangling-path list.** Deleting a baseline-resolved import like `docs/a,b.md` produced
+  `cur_dangling=docs/a,b.md,`; the comma-delimited split then mis-fragmented it into `docs/a` and `b.md`,
+  neither of which resolves at the baseline as the ORIGINAL path — so `vaporized` stayed empty and the
+  deletion was silently warned-and-allowed instead of refused. A-C-1's field-order fix (round 1) protected
+  the OUTER field boundary but not the INNER comma-joined list within the `dangling` field itself. Fixed
+  by switching the internal delimiter to the ASCII Unit Separator (`$'\x1f'`, `DANG_SEP`), a byte no real
+  filename plausibly contains — the same class of fix as A-C-1, one layer deeper. Fixture: arm 62.
+- **A-C-5b (Codex, the self-inflicted one) — round C's OWN A-C-5 recovery instructions caused the exact
+  destruction they were written to prevent.** A-C-5 (round 1) added hash-tracking so a hand-merged foreign
+  hook wouldn't be silently overwritten — but its recovery message told the user to run
+  `git config xtty.guide-gate-hook-sha "$(git hash-object $TARGET)"` to "record it as ours," which makes
+  `installed_hash == recorded_hash` on the VERY NEXT run — precisely the condition the guard treats as "a
+  verified prior install of ours, safe to re-copy." **Verified end-to-end by effect**: a scratch repo where
+  the exact printed instructions were followed literally had its hand-merged hook destroyed by the next
+  routine reinstall. The fix is structural, not cosmetic: `xtty.guide-gate-hook-sha` must ONLY ever be
+  written by the installer's own successful `install` step, NEVER printed as a user-facing recovery
+  instruction — there is no config command that can mark hand-edited content "safe to keep AND
+  auto-upgrade," since those are contradictory. The only honest recovery paths left are (a) an explicit,
+  unambiguously destructive `make hooks` re-run, or (b) leave it alone forever and maintain the merge by
+  hand — the installer will simply keep refusing on every future run, safe by construction rather than by
+  documentation. Fixture: arm 63 (asserts BOTH that the printed text never mentions the dangerous config
+  key, and that the merge survives 3 repeated routine reinstalls).
+
+**Refuted in round 1, reconfirmed correct here:** Codex's `MAXDEPTH=4` claim (checked against the live
+docs: "a maximum depth of **four** hops" — correct, no fix). **Adjudicated as accepted residuals, not
+fixed** (documented in `design.md`'s Risks section): (1) a literal embedded NEWLINE in a dangling path
+still isn't closed by A-C-1's field-order fix (confidence 0.85 — an R3 adversarial-construction-only case,
+unlike the realistic embedded-space case arm 40 exercises); (2) checking out an OLD commit and running a
+routine `make` target from it can downgrade the shared common-dir hook for every worktree (a property of
+D2's whole shared-hooks-dir architecture, not a round-C regression, and requires the deliberate act of
+building from historical history rather than the branch tip). **Considered and judged NOT a defect:**
+Codex's claim that deleting a non-root eager root isn't flagged as a "deletion" — this is the comparator's
+correct, intended shrink-always-allowed behavior (D5); only the ROOT's disappearance has the
+self-disabling-gate property A-1's special handling exists to catch. Two low-severity, safe-direction
+(over-refuse only, never under-refuse) findings from Pass C were left as-is: CRLF frontmatter parsing and
+a narrow hash-tracking self-lock requiring deliberate config-clearing.
+
+Final state after round C.2: **63/63 fixtures**, **32/32 mutants** caught cleanly, 0 vacuous, 0 failed,
+run solo throughout. This is the bounded loop's last round — per protocol, no round 3 was launched; the
+residuals above were escalated in writing rather than chased further.
+
+**Re-verify by effect:** `bash scripts/test-guide-gate.sh` → `63 passed, 0 failed`; `bash
+scripts/test-guide-gate-mutants.sh` → `All mutants caught cleanly (0 vacuous, 0 failed)`, exit 0. Confirm
+A-C-seen/A-C-2c/A-C-2d/A-C-comma by real `git push` against a throwaway clone (a tail-colliding import
+growth, a 2-hop symlink chain, a symlink-only guide, a comma-named deleted import should all `REFUSE`);
+confirm A-C-5b by literally executing the installer's OWN printed recovery commands against a hand-merged
+foreign hook and running `make hooks`'s equivalent 3 more times — the foreign logic must survive.

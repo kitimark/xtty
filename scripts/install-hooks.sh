@@ -68,11 +68,11 @@ if [ -e "$TARGET" ]; then
     echo "hooks: a FOREIGN pre-push hook already exists at $TARGET — not clobbering it." >&2
     echo "hooks: to arm the guide gate alongside it:" >&2
     echo "hooks:   1. merge the logic from $SRC into $TARGET by hand" >&2
-    echo "hooks:   2. record what you merged, so a routine 'make hooks'/'make build' etc. never" >&2
-    echo "hooks:      silently overwrites it later (this installer never wrote $TARGET before, so" >&2
-    echo "hooks:      it has nothing recorded to compare against — see A-C-5 below):" >&2
-    echo "hooks:        git config xtty.guide-gate-hook-sha \"\$(git hash-object $TARGET)\"" >&2
+    echo "hooks:   2. stamp this repo (this installer never wrote $TARGET, so it never stamps):" >&2
     echo "hooks:        git config xtty.guide-gate true" >&2
+    echo "hooks:   This installer will leave $TARGET alone on every future run (see A-C-5/A-C-5b" >&2
+    echo "hooks:   below) -- there is nothing else to record. Keep the merge current BY HAND when" >&2
+    echo "hooks:   $SRC changes; this installer will never do it for you again." >&2
     exit 0
   fi
   # A-C-5 (2026-07-18, Codex-caught): a substring-sentinel match alone cannot tell "an untouched
@@ -81,22 +81,31 @@ if [ -e "$TARGET" ]; then
   # re-copy," which SILENTLY DESTROYED a hand-merged foreign hook's logic on the very next routine
   # `make build`/`test`/etc. (not just an explicit `make hooks` -- `hooks` is an order-only
   # prerequisite of all of them), because A-15-6's warning above only cautioned against re-running
-  # `make hooks` by name. Track OWNERSHIP by a recorded hash of what WE last wrote instead: if the
-  # sentinel is present but there's no recorded hash (we never wrote here) or it doesn't match
-  # what's on disk NOW (edited/merged since), this is not verifiably our last install -- refuse,
-  # don't clobber. Only a hash match (a genuine prior install of ours, safe to upgrade -- D2's
-  # "staleness impossible" guarantee) or a first-ever install (no file yet) proceeds.
+  # `make hooks` by name. Track OWNERSHIP by a recorded hash of what WE last wrote instead: only a
+  # hash WE recorded ourselves (immediately after our own `install` below) counts as "verifiably
+  # ours, safe to upgrade" (D2's "staleness impossible" guarantee) -- a first-ever install (no file
+  # yet) also proceeds.
+  # A-C-5b (2026-07-18, Codex-caught, round 2): A-C-5's OWN recovery message told the user to
+  # manually run `git config xtty.guide-gate-hook-sha "$(git hash-object $TARGET)"` to "record a
+  # hand-merge as ours" -- which makes `installed_hash == recorded_hash` on the VERY NEXT run,
+  # which is EXACTLY the condition this guard treats as "verifiably our own install, safe to
+  # re-copy." Verified by effect: a user who followed that printed instruction to the letter had
+  # their merge silently destroyed by the next routine `make build`. There is no safe way for a
+  # HUMAN-typed command to mark content as "ours" without also making it eligible for the very
+  # overwrite it was meant to prevent -- so this key must ONLY ever be written by the installer's
+  # own `install` step below, NEVER printed as a user-facing recovery instruction. A mismatch (or
+  # no recorded hash) now has exactly one honest resolution: an EXPLICIT, unambiguously destructive
+  # re-run of `make hooks` to discard whatever is there and go pristine -- or leave it alone
+  # forever and maintain the merge by hand.
   installed_hash=$(git hash-object "$TARGET" 2>/dev/null || true)
   recorded_hash=$(git config --get xtty.guide-gate-hook-sha 2>/dev/null || true)
   if [ -z "$recorded_hash" ] || [ "$installed_hash" != "$recorded_hash" ]; then
     echo "hooks: $TARGET carries this project's sentinel but does NOT match what this installer" >&2
     echo "hooks: last wrote here (a hand-merge, or a manual edit since) — NOT overwriting it." >&2
-    echo "hooks: to arm the gate, either:" >&2
-    echo "hooks:   1. re-run 'make hooks' after backing up any custom logic elsewhere (this" >&2
-    echo "hooks:      OVERWRITES $TARGET with the pristine tracked hook), or" >&2
-    echo "hooks:   2. keep it as-is and record it as ours so future runs leave it alone:" >&2
-    echo "hooks:        git config xtty.guide-gate-hook-sha \"$installed_hash\"" >&2
-    echo "hooks:        git config xtty.guide-gate true" >&2
+    echo "hooks: this installer will keep refusing to touch it (safe by design — see A-C-5b) until" >&2
+    echo "hooks: you explicitly re-run 'make hooks' to DISCARD it and install the pristine tracked" >&2
+    echo "hooks: hook instead. There is no config command that marks a hand-edited file 'safe to" >&2
+    echo "hooks: keep AND auto-upgrade' — those are contradictory. Back up any custom logic first." >&2
     exit 0
   fi
 fi

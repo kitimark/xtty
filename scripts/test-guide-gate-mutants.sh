@@ -89,6 +89,16 @@ mut "import: symlinked-ANCESTOR path is not detected (A-C-2b)" "s=s.replace('if 
 mut_inst "installer: hash-tracking removed, hand-merge gets clobbered again (A-C-5)" "s=s.replace('if [ -z \"\$recorded_hash\" ] || [ \"\$installed_hash\" != \"\$recorded_hash\" ]; then','if false; then',1)"
 mut_inst "installer: worktree-scoped hooksPath misdiagnosed as global again (A-C-6)" "s=s.replace('if git config --worktree --get core.hooksPath >/dev/null 2>&1; then','if false; then',1)"
 
+echo
+echo "════ cross-review round-2 mutants (Codex + inline Opus — 2026-07-18) ════"
+mut "seen: dedup reverts to SUFFIX match, false-positives on tail collision (A-C-seen)" "s=s.replace('[ \"\$sv\" = \"\$p\" ] && { already=yes; break; }','case \"\$sv\" in *\"\$p\") already=yes; break ;; esac',1)"
+mut "rules: DIRECTORY symlink CHAIN (2+ hops) escapes detection undetected (A-C-2c)" "old='[ \"\$hops\" -lt 8 ]'
+idx = s.rfind(old)
+s = s[:idx] + '[ \"\$hops\" -lt 2 ]' + s[idx+len(old):]"
+mut "empty queue: unresolved_symlink status discarded, reverts to root_missing (A-C-2d)" "s=s.replace('if [ \${#queue[@]} -eq 0 ]; then printf \'0 %s - yes none\' \"\$status\"; return; fi','if [ \${#queue[@]} -eq 0 ]; then printf \'0 root_missing - yes none\'; return; fi',1)"
+mut "dangling: consumer reverts to comma-splitting, mismatches the unit-separator producer (A-C-comma)" "s=s.replace('IFS=\"\$DANG_SEP\" read -ra _dangs <<<\"\${cur_dangling%\$DANG_SEP}\"','IFS=, read -ra _dangs <<<\"\${cur_dangling%,}\"',1)"
+mut_inst "installer: dangerous self-defeating recovery instruction re-added (A-C-5b)" "s=s.replace('echo \"hooks: this installer will keep refusing to touch it (safe by design — see A-C-5b) until\" >&2','echo \"hooks: this installer will keep refusing to touch it (safe by design — see A-C-5b) until\" >&2\n    echo \"hooks:        git config xtty.guide-gate-hook-sha \\\"\$(git hash-object \$TARGET)\\\"\" >&2',1)"
+
 if [ "$bad" -eq 0 ]; then
   echo
   echo "All mutants caught cleanly (0 vacuous, 0 failed)."
