@@ -60,7 +60,7 @@
 
 ## 7. Completion
 
-- [ ] 7.1 Pre-archive coherence review ⟶ **xtty-openspec-critic (bound-the-agents-md-guide)**
+- [x] 7.1 Pre-archive coherence review ⟶ **xtty-openspec-critic (bound-the-agents-md-guide)** — **VERDICT: COHERENT**, no blockers (critic Definition v6, 2026-07-18). Confirmed correct: D6/Migration Plan accuracy, spec-deltas-vs-implementation accuracy, tasks.md internal consistency (28 tasks, matches `openspec list`), all delegation markers. Three REVIEW-level (non-blocking) findings, deferred to 7.3's reconcile per the critic's own recommendation: (1) `AGENTS.md`'s open-changes row is stale (17/28 shown, actually 25/28 at review time — moot once the row is removed at archive); (2) `proposal.md`/`design.md`/`ci.yml`'s CI step name still cite the propose-time "45 fixtures/18 mutants", now 50/21; (3) `design.md`'s fates tables don't record the round-15/15.1 defects (acceptable — a propose-time artifact, the real record is in `tasks.md` §6.1 and `research/artifacts/guide-gate/README.md`).
 - [ ] 7.2 **HUMAN-ONLY — THE MODEL MUST STOP HERE.** This change is **in scope** for the cross-model gate (it touches `.githooks/`, `scripts/`, `Makefile`, `.github/` — all outside the docs allowlist). The **human** runs `/xtty:cross-review bound-the-agents-md-guide`, **reads the complete ledger**, runs `scripts/cross-review-digest.sh bound-the-agents-md-guide` themselves, and ticks this task **recording the reviewed-state digest on a delimited attestation line** in this file:
       `<!-- cross-review-attestation: base=<B> head=<HEAD> digest=<sha256> reviewed=<date> -->`
       **The model may not tick this task and may not derive, compute, or fill in the attested value.** A model-authored attestation certifies the opposite of what it claims.
