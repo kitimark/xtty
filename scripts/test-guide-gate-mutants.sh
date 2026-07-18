@@ -84,7 +84,12 @@ echo
 echo "════ cross-review round-1 mutants (Codex + inline Opus — 2026-07-18) ════"
 mut "field-order: dangling reverts to a MIDDLE field, misaligning root_gone (A-C-1)" "s=s.replace('read -r cur cur_status cur_digest cur_root_gone cur_dangling <<<\"\$(resolve_guide \"\$local_oid\")\"','read -r cur cur_status cur_dangling cur_digest cur_root_gone <<<\"\$(resolve_guide \"\$local_oid\")\"',1)"
 mut "frontmatter: paths: alone sets ok, no closing --- required (A-C-3)" "s=s.replace('/^paths:/ { saw_paths = 1; next }','/^paths:/ { ok = 1; saw_paths = 1; next }',1)"
-mut "rules: DIRECTORY symlink under .claude/rules is not detected (A-C-2)" "s=s.replace('        is_dir_symlink \"\$oid\" \"\$r\" && status=unresolved_symlink','        :',1)"
+# A-C-2's own mutant is RETIRED here (2026-07-18, stop-gate round): A-C-2e restructured the
+# .claude/rules discovery loop so BOTH the .md and non-.md cases now funnel through ONE unified
+# `if is_dir_symlink ...; then` call site -- the two-branch shape A-C-2's mutant targeted no longer
+# exists, and its search string went vacuous (0 arms) the instant that restructuring landed. Its
+# intent lives on, structurally superseded, in the "A-C-2e" mutant below (mirrors the A-15-2 ->
+# A-15-2b retirement: a fixture/mutant that can never fail again is decoration, not proof).
 mut "import: symlinked-ANCESTOR path is not detected (A-C-2b)" "s=s.replace('if has_symlinked_ancestor \"\$oid\" \"\$p\"; then','if false; then',1)"
 mut_inst "installer: hash-tracking removed, hand-merge gets clobbered again (A-C-5)" "s=s.replace('if [ -z \"\$recorded_hash\" ] || [ \"\$installed_hash\" != \"\$recorded_hash\" ]; then','if false; then',1)"
 mut_inst "installer: worktree-scoped hooksPath misdiagnosed as global again (A-C-6)" "s=s.replace('if git config --worktree --get core.hooksPath >/dev/null 2>&1; then','if false; then',1)"
@@ -97,7 +102,12 @@ idx = s.rfind(old)
 s = s[:idx] + '[ \"\$hops\" -lt 2 ]' + s[idx+len(old):]"
 mut "empty queue: unresolved_symlink status discarded, reverts to root_missing (A-C-2d)" "s=s.replace('if [ \${#queue[@]} -eq 0 ]; then printf \'0 %s - yes none\' \"\$status\"; return; fi','if [ \${#queue[@]} -eq 0 ]; then printf \'0 root_missing - yes none\'; return; fi',1)"
 mut "dangling: consumer reverts to comma-splitting, mismatches the unit-separator producer (A-C-comma)" "s=s.replace('IFS=\"\$DANG_SEP\" read -ra _dangs <<<\"\${cur_dangling%\$DANG_SEP}\"','IFS=, read -ra _dangs <<<\"\${cur_dangling%,}\"',1)"
-mut_inst "installer: dangerous self-defeating recovery instruction re-added (A-C-5b)" "s=s.replace('echo \"hooks: this installer will keep refusing to touch it (safe by design — see A-C-5b) until\" >&2','echo \"hooks: this installer will keep refusing to touch it (safe by design — see A-C-5b) until\" >&2\n    echo \"hooks:        git config xtty.guide-gate-hook-sha \\\"\$(git hash-object \$TARGET)\\\"\" >&2',1)"
+mut_inst "installer: dangerous self-defeating recovery instruction re-added (A-C-5b)" "s=s.replace('echo \"hooks: this installer will keep refusing to touch it (safe by design — see A-C-5b) on\" >&2','echo \"hooks: this installer will keep refusing to touch it (safe by design — see A-C-5b) on\" >&2\n    echo \"hooks:        git config xtty.guide-gate-hook-sha \\\"\$(git hash-object \$TARGET)\\\"\" >&2',1)"
+
+echo
+echo "════ codex stop-gate mutants (2026-07-18, blocked session end) ════"
+mut "rules: is_dir_symlink check removed entirely, ALL directory symlinks escape (A-C-2/A-C-2e)" "s=s.replace('if is_dir_symlink \"\$oid\" \"\$r\"; then','if false; then',1)"
+mut_inst "installer: XTTY_GUIDE_FORCE bypass removed, no real discard path exists (A-C-5c)" "s=s.replace('if [ -e \"\$TARGET\" ] && [ \"\${XTTY_GUIDE_FORCE:-}\" != \"1\" ]; then','if [ -e \"\$TARGET\" ]; then',1)"
 
 if [ "$bad" -eq 0 ]; then
   echo

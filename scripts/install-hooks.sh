@@ -60,7 +60,16 @@ fi
 mkdir -p "$DEST" 2>/dev/null || exit 0
 TARGET="$DEST/pre-push"
 
-if [ -e "$TARGET" ]; then
+# A-C-5c (2026-07-18, Codex stop-gate-caught): A-C-5b's recovery message told the user to
+# "explicitly re-run 'make hooks' to DISCARD it" -- but a bare re-run invokes this SAME installer,
+# which hits this SAME mismatch branch and refuses AGAIN, forever. That instruction described a
+# recovery path that DOES NOT EXIST -- verified by effect (running it twice: refused both times,
+# byte-identical). The exact "recovery advice that leads nowhere" bug class this project fixed
+# under A-15-7 for a different scope, reintroduced by A-C-5b's own fix. A real discard path needs
+# an explicit signal ORTHOGONAL to a bare re-run: an env override, mirroring the hook's own
+# XTTY_GUIDE_CEILING/XTTY_GUIDE_FLOOR idiom (never a default -- a silent env leak must never
+# discard a stranger's hook, same reasoning as the ceiling parse living after the identity guard).
+if [ -e "$TARGET" ] && [ "${XTTY_GUIDE_FORCE:-}" != "1" ]; then
   if ! grep -qF "$SENTINEL" "$TARGET" 2>/dev/null; then
     # A-15-6 (2026-07-18, Codex-caught): the old message said "merge by hand" but never told the
     # user to set the stamp themselves -- this installer path exits BEFORE stamping, so a hand
@@ -72,7 +81,8 @@ if [ -e "$TARGET" ]; then
     echo "hooks:        git config xtty.guide-gate true" >&2
     echo "hooks:   This installer will leave $TARGET alone on every future run (see A-C-5/A-C-5b" >&2
     echo "hooks:   below) -- there is nothing else to record. Keep the merge current BY HAND when" >&2
-    echo "hooks:   $SRC changes; this installer will never do it for you again." >&2
+    echo "hooks:   $SRC changes; this installer will never do it for you again, UNLESS you" >&2
+    echo "hooks:   explicitly discard it: XTTY_GUIDE_FORCE=1 make hooks" >&2
     exit 0
   fi
   # A-C-5 (2026-07-18, Codex-caught): a substring-sentinel match alone cannot tell "an untouched
@@ -93,19 +103,19 @@ if [ -e "$TARGET" ]; then
   # their merge silently destroyed by the next routine `make build`. There is no safe way for a
   # HUMAN-typed command to mark content as "ours" without also making it eligible for the very
   # overwrite it was meant to prevent -- so this key must ONLY ever be written by the installer's
-  # own `install` step below, NEVER printed as a user-facing recovery instruction. A mismatch (or
-  # no recorded hash) now has exactly one honest resolution: an EXPLICIT, unambiguously destructive
-  # re-run of `make hooks` to discard whatever is there and go pristine -- or leave it alone
-  # forever and maintain the merge by hand.
+  # own `install` step below, NEVER printed as a user-facing recovery instruction.
   installed_hash=$(git hash-object "$TARGET" 2>/dev/null || true)
   recorded_hash=$(git config --get xtty.guide-gate-hook-sha 2>/dev/null || true)
   if [ -z "$recorded_hash" ] || [ "$installed_hash" != "$recorded_hash" ]; then
     echo "hooks: $TARGET carries this project's sentinel but does NOT match what this installer" >&2
     echo "hooks: last wrote here (a hand-merge, or a manual edit since) — NOT overwriting it." >&2
-    echo "hooks: this installer will keep refusing to touch it (safe by design — see A-C-5b) until" >&2
-    echo "hooks: you explicitly re-run 'make hooks' to DISCARD it and install the pristine tracked" >&2
-    echo "hooks: hook instead. There is no config command that marks a hand-edited file 'safe to" >&2
-    echo "hooks: keep AND auto-upgrade' — those are contradictory. Back up any custom logic first." >&2
+    echo "hooks: this installer will keep refusing to touch it (safe by design — see A-C-5b) on" >&2
+    echo "hooks: every bare re-run, including 'make hooks' — that is NOT a discard path, it hits" >&2
+    echo "hooks: this exact refusal again. To actually DISCARD it and install the pristine tracked" >&2
+    echo "hooks: hook, you must pass an explicit force signal (a bare re-run never does this):" >&2
+    echo "hooks:     XTTY_GUIDE_FORCE=1 make hooks" >&2
+    echo "hooks: There is no config command that marks a hand-edited file 'safe to keep AND" >&2
+    echo "hooks: auto-upgrade' — those are contradictory. Back up any custom logic first." >&2
     exit 0
   fi
 fi

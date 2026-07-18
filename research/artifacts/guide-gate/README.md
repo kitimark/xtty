@@ -409,3 +409,50 @@ A-C-seen/A-C-2c/A-C-2d/A-C-comma by real `git push` against a throwaway clone (a
 growth, a 2-hop symlink chain, a symlink-only guide, a comma-named deleted import should all `REFUSE`);
 confirm A-C-5b by literally executing the installer's OWN printed recovery commands against a hand-merged
 foreign hook and running `make hooks`'s equivalent 3 more times — the foreign logic must survive.
+
+## Round C.3 (2026-07-18, same day) — an independent, automated stop-gate: 2 more real gaps
+
+`/xtty:cross-review`'s own bounded 2-round loop closed with round C.2. Separately, this session's **Codex
+stop-time review gate** (an automated pass that fires at end-of-turn and can block session end — distinct
+from the on-demand `/xtty:cross-review` command; the same mechanism that caught A-15-3 earlier this
+session) fired on round C.2's own commit and blocked with two more real, verified findings.
+
+- **A-C-2e — a directory symlink whose OWN NAME ends in `.md` sailed past `is_dir_symlink` entirely.**
+  The discovery loop's directory-symlink check only ran inside the `*)` (non-`.md`) branch of a
+  `case "$r" in *.md) ;; *) ... ;; esac` — so `.claude/rules/shared.md -> ../../external-rules/` (a
+  plausible, even likely name for a symlinked directory) took the `*.md)` no-op branch straight into
+  `queue`. `resolve_entry` then followed it, but its mode check only special-cases `120000` (symlink);
+  once resolved to a `040000` (tree) object, it fell through to `printf '%s %s' "$blobid" "$path"` as if
+  the tree's SHA were a file blob — and `git cat-file -s <tree-sha>` returns the TREE's own tiny
+  serialized size, not the real recursive byte content behind it. **Verified empirically: the push was
+  ALLOWED (exit 0) with 5000 real bytes completely uncounted.** Fixed by checking `is_dir_symlink` on
+  EVERY entry, unconditionally, before the `.md`-suffix filter — not only in one branch of it. Fixture:
+  arm 64. This restructuring retired the original round-1 "A-C-2" mutant (its two-branch search text no
+  longer existed) — its intent lives on, structurally superseded, in a combined "A-C-2/A-C-2e" mutant
+  (mirroring the earlier A-15-2 → A-15-2b retirement pattern exactly).
+- **A-C-5c — round C.2's OWN recovery message printed a discard instruction that does not exist.**
+  A-C-5b's message said "you explicitly re-run 'make hooks' to DISCARD it and install the pristine
+  tracked hook" — but a bare re-run invokes this SAME installer, hits this SAME mismatch branch, and
+  refuses again. **Verified empirically: two bare re-runs, refused both times, byte-identical file.** The
+  exact "recovery advice that leads nowhere" bug class this project fixed under A-15-7 for a different
+  scope, reintroduced by A-C-5b's own fix in this same session. Fixed by adding a REAL, working discard
+  path — `XTTY_GUIDE_FORCE=1 make hooks` — gated by an explicit env override (never a default, mirroring
+  the hook's own `XTTY_GUIDE_CEILING`/`XTTY_GUIDE_FLOOR` idiom: a silent env leak must never discard a
+  stranger's hook). A bare re-run still safely refuses, unchanged; only the explicit force signal
+  discards. Verified both directions. Fixture: arm 65 (asserts both: a bare re-run still preserves the
+  foreign hook, AND `XTTY_GUIDE_FORCE=1` actually discards it).
+
+One more originally-round-2 mutant (A-C-5b's own) went vacuous as a side effect of A-C-5c's wording change
+to the exact line it searched for — fixed by updating its search string to match, no narrative change (the
+underlying concern — the recovery text must never mention the self-defeating config key — is still
+independently guarded by arm 63 regardless of exact wording).
+
+Final state after round C.3: **65/65 fixtures**, **33/33 mutants** caught cleanly, 0 vacuous, 0 failed, run
+solo throughout.
+
+**Re-verify by effect:** `bash scripts/test-guide-gate.sh` → `65 passed, 0 failed`; `bash
+scripts/test-guide-gate-mutants.sh` → `All mutants caught cleanly (0 vacuous, 0 failed)`, exit 0. Confirm
+A-C-2e by real `git push`: a `.claude/rules/shared.md` directory symlink (name ending in `.md`) with real
+content behind it must `REFUSE`. Confirm A-C-5c by executing the installer's OWN printed instructions
+literally: a bare re-run of the installer against a hand-merged mismatched hook must still refuse (the
+foreign logic survives); `XTTY_GUIDE_FORCE=1` re-run of the SAME installer must actually discard it.

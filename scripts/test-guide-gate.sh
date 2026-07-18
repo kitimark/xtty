@@ -851,6 +851,49 @@ else
 fi
 
 echo
+echo "════ CODEX STOP-GATE ARMS (2026-07-18, blocked session end, both real) ════"
+
+# 64. A-C-2e: a DIRECTORY symlink whose OWN NAME ends in .md (e.g. .claude/rules/shared.md) sailed
+#     past is_dir_symlink entirely (it only ran in the non-.md case-branch), got queued as a normal
+#     candidate, and resolve_entry silently mistook the resulting TREE object for a file blob --
+#     `git cat-file -s` on a tree returns the tree's own tiny serialized size, not its real
+#     recursive content. Check every entry for being a directory symlink FIRST, before the
+#     .md-suffix filter.
+W=$(newrepo MM64); ( cd "$W"
+  bash "$INST" "$HOOK"
+  guide 400
+  mkdir -p external-rules .claude/rules
+  head -c 5000 /dev/zero | tr '\0' 'e' > external-rules/big.md
+  ln -s ../../external-rules .claude/rules/shared.md
+  git add -A; git commit -qm "a directory symlink whose NAME ends in .md" ) >/dev/null 2>&1
+arm "64. a .md-NAMED directory symlink under .claude/rules/ is still detected" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 65. A-C-5c: the mismatch recovery message said "explicitly re-run 'make hooks' to DISCARD it" --
+#     but a bare re-run invokes the SAME installer, hits the SAME mismatch branch, and refuses
+#     AGAIN, forever. That instruction described a recovery path that did not exist (verified: two
+#     bare re-runs, refused both times, byte-identical). XTTY_GUIDE_FORCE=1 is the real, working
+#     discard path; a bare re-run must still safely refuse (unchanged).
+W=$(newrepo NN65)
+( mkdir -p "$W/.git/hooks"
+  printf '#!/bin/bash\necho "irreplaceable foreign logic"\nexit 0\n' > "$W/.git/hooks/pre-push"
+  chmod +x "$W/.git/hooks/pre-push"
+  cd "$W" && bash "$INST" "$HOOK" >/dev/null 2>&1
+  { cat "$W/.git/hooks/pre-push"; echo; cat "$HOOK"; } > "$W/.git/hooks/pre-push.new"
+  mv "$W/.git/hooks/pre-push.new" "$W/.git/hooks/pre-push"; chmod +x "$W/.git/hooks/pre-push" ) >/dev/null 2>&1
+( cd "$W" && bash "$INST" "$HOOK" >/dev/null 2>&1 )   # bare re-run: must still refuse (no discard path)
+bare_survived=no
+grep -q "irreplaceable foreign logic" "$W/.git/hooks/pre-push" 2>/dev/null && bare_survived=yes
+( cd "$W" && XTTY_GUIDE_FORCE=1 bash "$INST" "$HOOK" >/dev/null 2>&1 )   # the REAL discard path
+force_discarded=no
+grep -q "irreplaceable foreign logic" "$W/.git/hooks/pre-push" 2>/dev/null || force_discarded=yes
+if [ "$bare_survived" = yes ] && [ "$force_discarded" = yes ]; then
+  echo "✅  65. bare re-run still safely refuses; XTTY_GUIDE_FORCE=1 is a REAL working discard path"; pass=$((pass+1))
+else
+  echo "❌  65. FORCE discard path is broken (bare_survived=$bare_survived force_discarded=$force_discarded)"; fail=$((fail+1)); FAILED+=("65")
+fi
+
+echo
 echo "════ $pass passed, $fail failed ════"
 [ $fail -gt 0 ] && printf 'FAILED: %s\n' "${FAILED[*]}"
 echo "ROOT=$ROOT"

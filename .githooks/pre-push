@@ -170,15 +170,21 @@ resolve_guide() {
   # NUL-delimited: a rule filename may contain spaces (`$(…)` word-splitting dropped them).
   while IFS= read -r -d '' r; do
     [ -z "$r" ] && continue
+    # A-C-2e (2026-07-18, Codex stop-gate-caught): the directory-symlink check MUST run before the
+    # `*.md` filter, not only in its `*)` (non-.md) branch. A symlink's OWN NAME can end in `.md`
+    # (e.g. `.claude/rules/shared.md -> ../../external-rules/`) -- a plausible, even likely name
+    # choice -- and such an entry sailed straight past is_dir_symlink into `queue`, where
+    # resolve_entry follows the symlink to a TREE object, mistakes it for a file blob (mode check
+    # only guards against 120000, not 040000), and `git cat-file -s` on a tree returns the tree
+    # object's OWN small serialized size, not its real recursive content -- a silent, near-total
+    # under-count with the push ALLOWED. Check every entry, regardless of suffix.
+    if is_dir_symlink "$oid" "$r"; then
+      status=unresolved_symlink
+      continue
+    fi
     case "$r" in
       *.md) ;;
-      *)
-        # A-C-2: a non-`.md` leaf under .claude/rules is either harmless (a symlink to a file —
-        # Claude Code only loads `.md` files as rules) or a DIRECTORY symlink whose contents this
-        # meter cannot see. Distinguish them instead of silently dropping both.
-        is_dir_symlink "$oid" "$r" && status=unresolved_symlink
-        continue
-        ;;
+      *) continue ;;
     esac
     # A rule is READ-TRIGGERED (not eager) ONLY if it has real YAML frontmatter carrying `paths`.
     # DOCS: the frontmatter is delimited by `---` lines. A grep for `^paths:` anywhere in the head
