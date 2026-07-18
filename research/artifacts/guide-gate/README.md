@@ -456,3 +456,72 @@ A-C-2e by real `git push`: a `.claude/rules/shared.md` directory symlink (name e
 content behind it must `REFUSE`. Confirm A-C-5c by executing the installer's OWN printed instructions
 literally: a bare re-run of the installer against a hand-merged mismatched hook must still refuse (the
 foreign logic survives); `XTTY_GUIDE_FORCE=1` re-run of the SAME installer must actually discard it.
+
+## Round C.4 (2026-07-18, same day) — a Codex-only single-model pass (user-requested): 4 more, plus 3 self-found
+
+Per explicit user request, a FOURTH review ran as a single-model pass — Codex `gpt-5.6-sol` only, no
+companion Opus, no Fable, briefed with all three prior rounds' fixes framed as claims to challenge and
+specifically asked to check whether the pattern of "each round finds a gap in the PRIOR round's own fix"
+(round 2 found gaps in round 1; round 3 found gaps in round 2) continued into round 3's own fixes.
+
+- **A-C-gitlink — a git submodule (gitlink, mode 160000) at `.claude/rules/` is completely invisible to
+  the meter.** `is_dir_symlink` only recognizes modes `040000`/`120000`; a gitlink fails both checks and
+  falls through the non-`.md` filter untouched. If `.md`-suffixed, `resolve_entry` fell through further:
+  its mode check only special-cased `120000`, so a gitlink's COMMIT SHA got treated as a file blob, and
+  `git cat-file -s` on a commit object returns the commit's own tiny size, not the submodule's real
+  (checked-out, genuinely eagerly-loaded) content. **Verified empirically with a real submodule**: 5000
+  bytes went completely uncounted, push allowed. Fixed with a new `is_gitlink` helper (checked alongside
+  `is_dir_symlink` in rule discovery) and a `resolve_entry` guard refusing to resolve mode `160000` (later
+  widened to also cover `040000`, see A-C-tree below). Fixture: arm 66.
+- **A-C-phys — a raw FILESYSTEM symlink at `<git-common-dir>/hooks` defeats the ownership guard, and this
+  session's OWN `XTTY_GUIDE_FORCE=1` fix made it WORSE.** The existing guard only inspects
+  `core.hooksPath` (a git-config-level redirection); a `.git/hooks -> /shared/hooks` symlink is a
+  filesystem-level mechanism the guard never considered, with `core.hooksPath` staying unset throughout.
+  **Verified empirically**: a bare install correctly detected the shared file as foreign (no sentinel) and
+  left it alone — but `XTTY_GUIDE_FORCE=1`, the round-3 recovery path this SAME session had just added,
+  bypassed that check entirely and silently overwrote the shared file, exactly the cross-repo harm arm 3
+  already tests for the config-level case. Fixed with an UNCONDITIONAL physical-path containment check
+  (`cd "$DEST" && pwd -P` must resolve inside `git rev-parse --git-common-dir`'s own physical path) that
+  runs BEFORE the `FORCE` gate and can never be bypassed by it — FORCE is scoped to "is this content
+  verifiably ours," never to "are we even writing inside our own repository." Fixture: arm 67.
+- **A-C-arm-verify — a silently-failed `git config` write left the hook installed but unarmed, with zero
+  diagnostic.** Both arming writes use `|| true` (by design — this installer is CANNOT-FAIL). **Verified
+  empirically**: a pre-existing `.git/config.lock` made the `xtty.guide-gate` write silently fail while
+  the installer still exited 0 and the hook file was genuinely present — a "looks protected but isn't"
+  state invisible to the user. Fixed by reading back what was actually recorded and printing a non-fatal
+  WARNING when arming didn't stick (still never fails the build). Fixture: arm 68.
+- **Makefile — `build-core` (XttyCore-only builds) was the one routine entry point missing the order-only
+  `hooks` prerequisite** every other routine target (`build`/`test`/`test-core`/`run`/`install`/`setup`)
+  carries — a real, verified gap (`grep` confirmed), not a design choice. Fixed: `| hooks` added. Fixture:
+  arm 69 (asserts `make -n build-core` fires the installer).
+
+**Self-found while verifying A-C-gitlink — the SAME pattern recurred a third time, inside the same round:**
+the ancestor-only disambiguation this session already built (A-C-2b) doesn't cover the TERMINAL path
+naming an unsupported shape directly (no path separator at all). Verified empirically with real pushes:
+- **A-C-tree/A-C-terminal-gitlink** — `@sublink` (a bare gitlink import, no separator) and `@linkdir` (a
+  bare directory-symlink import) both escaped: `has_symlinked_ancestor` returns false immediately for a
+  single-segment path ("nothing to check as an ancestor"), and `resolve_entry` had no guard against
+  resolving down to a TREE object (`040000`) either — the exact same mistaken-identity bug as the gitlink
+  case, just for symlinks-to-directories imported with no trailing segment. Fixed: widened `resolve_entry`'s
+  guard to `case "$mode" in 040000|160000) return 1 ;; esac`, and the caller's disambiguation to
+  `has_symlinked_ancestor || is_dir_symlink || is_gitlink` on the TERMINAL path. Fixtures: arms 66b, 66c.
+- **A-C-gitlink-ancestor** — an `@import` traversing THROUGH a gitlink ancestor (`@subrepo/deep.md` where
+  `subrepo` is itself a submodule) needed `has_symlinked_ancestor`'s per-component mode check widened from
+  `120000` alone to `case "$mode" in 120000|160000)`. Fixture: arm 66d.
+
+Two more mutants went stale from this round's OWN restructuring (their search text no longer matched after
+later edits in the SAME round — the fourth time this exact self-inflicted pattern occurred this session:
+round 2 found gaps in round 1, round 3 found gaps in round 2, and now round 4's own mid-round edits broke
+two of its own freshly-written mutants before the round even finished) — both repaired to match the final
+code, verified non-vacuous.
+
+Final state after round C.4: **72/72 fixtures**, **37/37 mutants** caught cleanly, 0 vacuous, 0 failed, run
+solo throughout. This closes the Codex-only single-model pass; per the user's request, no Pass A/C or Fable
+ran this round.
+
+**Re-verify by effect:** `bash scripts/test-guide-gate.sh` → `72 passed, 0 failed`; `bash
+scripts/test-guide-gate-mutants.sh` → `All mutants caught cleanly (0 vacuous, 0 failed)`, exit 0. Confirm
+A-C-gitlink with a real `git submodule add` at `.claude/rules/shared`: must `REFUSE`. Confirm A-C-phys with
+a real `.git/hooks` filesystem symlink to a directory outside the repo: `XTTY_GUIDE_FORCE=1 make hooks`'s
+equivalent must NOT write there. Confirm A-C-arm-verify with a pre-existing `.git/config.lock`: the
+installer must print a WARNING, not stay silent.

@@ -78,9 +78,30 @@ resolve_entry() {  # $1=oid $2=path -> echoes "<blob-oid> <real-path>"; 1 = unre
       path=${path#./}
       hops=$(( hops + 1 )); continue
     fi
+    # A-C-gitlink (2026-07-18, Codex-caught, final pass): mode 160000 is a GITLINK (a submodule) —
+    # `$blobid` is the submodule's COMMIT SHA, not a blob. Without this guard the code below fell
+    # through to `printf '%s %s' "$blobid" "$path"; return 0` as if it resolved to a normal file,
+    # and the caller's `git cat-file -s "$blobid"` on a COMMIT object returns the commit's own tiny
+    # serialized size, not the submodule's real (checked-out, genuinely eagerly-loaded) content.
+    # A-C-tree (2026-07-18, self-caught while verifying A-C-gitlink): the SAME mistaken-identity bug
+    # applies to mode 040000 (a TREE) -- an @import naming a directory-symlink with NO further path
+    # segment beneath it (e.g. `@somedir` where somedir -> a real directory) resolves the symlink
+    # chain down to a tree object here, and without this guard it too fell through and got weighed
+    # via `git cat-file -s <tree-sha>` (the tree's own tiny size, not its real recursive content).
+    # Never treat a tree's or a gitlink's SHA as a blob; the caller distinguishes "genuinely
+    # unresolvable" from "an unsupported shape the meter can't measure" via
+    # has_symlinked_ancestor/is_dir_symlink/is_gitlink on BOTH ancestor components and the
+    # terminal path itself.
+    case "$mode" in 040000|160000) return 1 ;; esac
     printf '%s %s' "$blobid" "$path"; return 0
   done
   return 1                                               # link loop
+}
+
+is_gitlink() {   # $1=oid $2=path -> success iff path is a gitlink (submodule) entry
+  local oid="$1" path="$2" line
+  line=$(git ls-tree "$oid" -- "$path" 2>/dev/null) || return 1
+  [ "${line%% *}" = "160000" ]
 }
 
 # A-C-2 (2026-07-18, Codex- and Pass-C-caught independently, both empirically verified): git's
@@ -120,7 +141,8 @@ is_dir_symlink() {   # $1=oid $2=path -> success iff path is a (possibly CHAINED
   return 1                                                 # link loop / chain too deep
 }
 
-has_symlinked_ancestor() {   # $1=oid $2=path -> success iff a component BEFORE the last is a symlink
+has_symlinked_ancestor() {   # $1=oid $2=path -> success iff a component BEFORE the last is a
+                              # symlink OR a gitlink (both are content this meter can't measure)
   local oid="$1" path="$2" prefix="" rest seg line mode
   case "$path" in */*) : ;; *) return 1 ;; esac
   rest="${path%/*}"                                      # only the DIRECTORY prefix matters
@@ -133,7 +155,10 @@ has_symlinked_ancestor() {   # $1=oid $2=path -> success iff a component BEFORE 
     line=$(git ls-tree "$oid" -- "$prefix" 2>/dev/null) || return 1
     [ -z "$line" ] && return 1
     mode=${line%% *}
-    [ "$mode" = "120000" ] && return 0
+    # A-C-gitlink: an @import traversing a GITLINK ancestor (e.g. `@submodule-dir/file.md` where
+    # submodule-dir is itself a submodule) is exactly as unmeasurable as one traversing a symlinked
+    # directory -- git's tree model can't address "through" a gitlink's checked-out content either.
+    case "$mode" in 120000|160000) return 0 ;; esac
   done
   return 1
 }
@@ -178,7 +203,11 @@ resolve_guide() {
     # only guards against 120000, not 040000), and `git cat-file -s` on a tree returns the tree
     # object's OWN small serialized size, not its real recursive content -- a silent, near-total
     # under-count with the push ALLOWED. Check every entry, regardless of suffix.
-    if is_dir_symlink "$oid" "$r"; then
+    # A-C-gitlink: a gitlink (submodule, mode 160000) is checked the SAME as a directory symlink —
+    # git ls-tree reports it as a leaf, its checked-out content is genuinely eagerly-loaded by the
+    # real product, and this meter has no way to weigh what's inside it either. Verified by effect:
+    # a submodule at `.claude/rules/shared` let 5000 real bytes through with the push ALLOWED.
+    if is_dir_symlink "$oid" "$r" || is_gitlink "$oid" "$r"; then
       status=unresolved_symlink
       continue
     fi
@@ -236,7 +265,14 @@ resolve_guide() {
         case "$p" in
           '~'/*|/*) echo "guide-gate:   note — un-pushable import weighed 0: $p" >&2 ;;
           *)
-            if has_symlinked_ancestor "$oid" "$p"; then
+            # A-C-terminal (2026-07-18, self-caught while verifying A-C-gitlink): an ancestor-only
+            # check misses the import naming an unsupported shape DIRECTLY, with no path separator
+            # at all (e.g. `@sublink` where sublink is itself a gitlink, or `@somedir` where
+            # somedir is a symlink to a directory) -- has_symlinked_ancestor returns false
+            # immediately for a single-segment path (nothing to check), and resolve_entry's own
+            # failure alone can't distinguish "unsupported shape" from "genuinely never existed."
+            # Check both: an ancestor component, OR the terminal path itself.
+            if has_symlinked_ancestor "$oid" "$p" || is_dir_symlink "$oid" "$p" || is_gitlink "$oid" "$p"; then
               # A-C-2b: git cannot address a path THROUGH a symlinked directory (confirmed
               # empirically — `git ls-tree <oid> -- linkdir/file.md` returns nothing even when
               # the checked-out filesystem resolves it fine). resolve_entry's plain failure here

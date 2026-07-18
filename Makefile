@@ -134,7 +134,7 @@ bench: build ## Measure latency+memory (P7a regression baseline); writes a JSON 
 	@echo "      is frame-quantized (~one refresh interval). Pin the display refresh for the steadiest cadence."
 	@echo "      Renderer verdict (2026-06-29, gate closed): CoreGraphics — see research/03-analysis/p7-measurement-methodology.md."
 
-build-core: $(SWIFTTERM_SENTINEL) ## Build XttyCore only
+build-core: $(SWIFTTERM_SENTINEL) | hooks ## Build XttyCore only
 	@swift build --package-path XttyCore
 
 audit-leaks: build ## P7c leak/allocation DIAGNOSTIC (leaks+vmmap; NOT a gate — the census churn test is)

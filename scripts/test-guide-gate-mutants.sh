@@ -90,7 +90,7 @@ mut "frontmatter: paths: alone sets ok, no closing --- required (A-C-3)" "s=s.re
 # exists, and its search string went vacuous (0 arms) the instant that restructuring landed. Its
 # intent lives on, structurally superseded, in the "A-C-2e" mutant below (mirrors the A-15-2 ->
 # A-15-2b retirement: a fixture/mutant that can never fail again is decoration, not proof).
-mut "import: symlinked-ANCESTOR path is not detected (A-C-2b)" "s=s.replace('if has_symlinked_ancestor \"\$oid\" \"\$p\"; then','if false; then',1)"
+mut "import: unsupported-shape disambiguation (ancestor OR terminal) removed entirely (A-C-2b/A-C-terminal)" "s=s.replace('if has_symlinked_ancestor \"\$oid\" \"\$p\" || is_dir_symlink \"\$oid\" \"\$p\" || is_gitlink \"\$oid\" \"\$p\"; then','if false; then',1)"
 mut_inst "installer: hash-tracking removed, hand-merge gets clobbered again (A-C-5)" "s=s.replace('if [ -z \"\$recorded_hash\" ] || [ \"\$installed_hash\" != \"\$recorded_hash\" ]; then','if false; then',1)"
 mut_inst "installer: worktree-scoped hooksPath misdiagnosed as global again (A-C-6)" "s=s.replace('if git config --worktree --get core.hooksPath >/dev/null 2>&1; then','if false; then',1)"
 
@@ -106,8 +106,15 @@ mut_inst "installer: dangerous self-defeating recovery instruction re-added (A-C
 
 echo
 echo "════ codex stop-gate mutants (2026-07-18, blocked session end) ════"
-mut "rules: is_dir_symlink check removed entirely, ALL directory symlinks escape (A-C-2/A-C-2e)" "s=s.replace('if is_dir_symlink \"\$oid\" \"\$r\"; then','if false; then',1)"
+mut "rules: discovery-time check removed entirely, ALL directory symlinks/gitlinks escape (A-C-2/A-C-2e)" "s=s.replace('if is_dir_symlink \"\$oid\" \"\$r\" || is_gitlink \"\$oid\" \"\$r\"; then','if false; then',1)"
 mut_inst "installer: XTTY_GUIDE_FORCE bypass removed, no real discard path exists (A-C-5c)" "s=s.replace('if [ -e \"\$TARGET\" ] && [ \"\${XTTY_GUIDE_FORCE:-}\" != \"1\" ]; then','if [ -e \"\$TARGET\" ]; then',1)"
+
+echo
+echo "════ codex-only final pass mutants (2026-07-18, user-requested single-model review) ════"
+mut "gitlink/tree: resolve_entry treats a gitlink OR a bare-symlinked directory as a blob again (A-C-gitlink/A-C-tree)" "s=s.replace('case \"\$mode\" in 040000|160000) return 1 ;; esac','',1)"
+mut "gitlink: has_symlinked_ancestor stops catching a gitlink ancestor (A-C-gitlink-ancestor)" "s=s.replace('case \"\$mode\" in 120000|160000) return 0 ;; esac','[ \"\$mode\" = \"120000\" ] && return 0',1)"
+mut_inst "installer: physical-path containment check removed, symlinked hooks dir escapes (A-C-phys)" "s=s.replace('  \"\$common_dir_abs\"/*) : ;;   # genuinely inside our own git-common-dir tree -- safe','  *) : ;;',1)"
+mut_inst "installer: arming-verify readback removed, silent config-write failure again (A-C-arm-verify)" "s=s.replace('if [ \"\$(git config --get xtty.guide-gate 2>/dev/null || true)\" != \"true\" ]; then','if false; then',1)"
 
 if [ "$bad" -eq 0 ]; then
   echo

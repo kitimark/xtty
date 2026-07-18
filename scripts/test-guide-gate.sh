@@ -3,7 +3,8 @@
 # arms were previously coupled through shared remote state and one early red
 # cascaded into spurious downstream reds.
 set -u
-HOOK="${HOOK:-$(cd "$(dirname "$0")/.." && pwd)/.githooks/pre-push}"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+HOOK="${HOOK:-$REPO_ROOT/.githooks/pre-push}"
 INST="${INST:-$(cd "$(dirname "$0")" && pwd)/install-hooks.sh}"
 ROOT=$(mktemp -d "${TMPDIR:-/tmp}/xtty-guide-gate-suite.XXXXXX") || {
   echo "FATAL: cannot create the scratch root — the suite cannot run. (A previous version reported" >&2
@@ -891,6 +892,138 @@ if [ "$bare_survived" = yes ] && [ "$force_discarded" = yes ]; then
   echo "✅  65. bare re-run still safely refuses; XTTY_GUIDE_FORCE=1 is a REAL working discard path"; pass=$((pass+1))
 else
   echo "❌  65. FORCE discard path is broken (bare_survived=$bare_survived force_discarded=$force_discarded)"; fail=$((fail+1)); FAILED+=("65")
+fi
+
+echo
+echo "════ CODEX-ONLY FINAL PASS (2026-07-18, user-requested single-model review) ════"
+
+# 66. A-C-gitlink: a GITLINK (git submodule, mode 160000) at .claude/rules/shared is checked the
+#     same as .claude/CLAUDE.md/CLAUDE.local.md-adjacent shapes -- resolve_entry used to fall
+#     through and treat the submodule's COMMIT SHA as if it were a file blob, and `git cat-file -s`
+#     on a commit object returns the commit's own tiny size, not the submodule's real (checked-out,
+#     genuinely eagerly-loaded) content. Verified: 5000 real bytes went completely uncounted.
+PP66=$(newrepo PP66)
+git init -q --bare "$ROOT/PP66/sub-remote"
+git clone -q "$ROOT/PP66/sub-remote" "$ROOT/PP66/sub-work" >/dev/null 2>&1
+( cd "$ROOT/PP66/sub-work"
+  git config user.email t@t; git config user.name t
+  git symbolic-ref HEAD refs/heads/main
+  head -c 5000 /dev/zero | tr '\0' 'e' > big.md
+  git add -A; git commit -qm "sub content"; git push -q origin main ) >/dev/null 2>&1
+git -C "$ROOT/PP66/sub-remote" symbolic-ref HEAD refs/heads/main >/dev/null 2>&1
+( cd "$PP66"
+  bash "$INST" "$HOOK"
+  guide 400
+  git -c protocol.file.allow=always submodule add -q "$ROOT/PP66/sub-remote" .claude/rules/shared >/dev/null 2>&1
+  git add -A; git commit -qm "add a gitlink submodule under .claude/rules" ) >/dev/null 2>&1
+W="$PP66"
+arm "66. a GITLINK (submodule) under .claude/rules/ => REFUSE (meter can't see behind it)" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 66b. A-C-tree/A-C-terminal: an @import whose TERMINAL target is a gitlink DIRECTLY (e.g.
+#      `@sublink`, no path separator) escaped both resolve_entry's mode guard (only checked
+#      non-terminal hops) and the caller's has_symlinked_ancestor (which returns false immediately
+#      for a single-segment path -- nothing to check as an "ancestor"). Verified real: the push was
+#      ALLOWED with 5000 real bytes uncounted, before this fix.
+PP66b=$(newrepo PP66b)
+git init -q --bare "$ROOT/PP66b/sub-remote"
+git clone -q "$ROOT/PP66b/sub-remote" "$ROOT/PP66b/sub-work" >/dev/null 2>&1
+( cd "$ROOT/PP66b/sub-work"
+  git config user.email t@t; git config user.name t
+  git symbolic-ref HEAD refs/heads/main
+  head -c 5000 /dev/zero | tr '\0' 'e' > big.md
+  git add -A; git commit -qm "sub content"; git push -q origin main ) >/dev/null 2>&1
+git -C "$ROOT/PP66b/sub-remote" symbolic-ref HEAD refs/heads/main >/dev/null 2>&1
+( cd "$PP66b"
+  bash "$INST" "$HOOK"
+  head -c 400 /dev/zero | tr '\0' 'x' > AGENTS.md
+  printf '# CLAUDE.md\n@AGENTS.md\n@sublink\n' > CLAUDE.md
+  git -c protocol.file.allow=always submodule add -q "$ROOT/PP66b/sub-remote" sublink >/dev/null 2>&1
+  git add -A; git commit -qm "an @import whose terminal target is a gitlink" ) >/dev/null 2>&1
+W="$PP66b"
+arm "66b. @import naming a gitlink DIRECTLY (no path separator) => REFUSE" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 66d. A-C-gitlink-ancestor: an @import traversing THROUGH a gitlink ANCESTOR (e.g.
+#      `@subrepo/deep.md` where subrepo is itself a submodule, distinct from 66b's bare-terminal
+#      case) -- git's tree model can't address "through" a gitlink's checked-out content any more
+#      than a symlinked directory's, so resolve_entry fails immediately and has_symlinked_ancestor
+#      must recognize the gitlink ancestor to correctly flag unresolved_symlink.
+PP66d=$(newrepo PP66d)
+git init -q --bare "$ROOT/PP66d/sub-remote"
+git clone -q "$ROOT/PP66d/sub-remote" "$ROOT/PP66d/sub-work" >/dev/null 2>&1
+( cd "$ROOT/PP66d/sub-work"
+  git config user.email t@t; git config user.name t
+  git symbolic-ref HEAD refs/heads/main
+  head -c 5000 /dev/zero | tr '\0' 'e' > deep.md
+  git add -A; git commit -qm "sub content"; git push -q origin main ) >/dev/null 2>&1
+git -C "$ROOT/PP66d/sub-remote" symbolic-ref HEAD refs/heads/main >/dev/null 2>&1
+( cd "$PP66d"
+  bash "$INST" "$HOOK"
+  head -c 400 /dev/zero | tr '\0' 'x' > AGENTS.md
+  printf '# CLAUDE.md\n@AGENTS.md\n@subrepo/deep.md\n' > CLAUDE.md
+  git -c protocol.file.allow=always submodule add -q "$ROOT/PP66d/sub-remote" subrepo >/dev/null 2>&1
+  git add -A; git commit -qm "@import traversing THROUGH a gitlink ancestor" ) >/dev/null 2>&1
+W="$PP66d"
+arm "66d. @import THROUGH a gitlink ancestor => REFUSE" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 66c. A-C-tree: an @import naming a BARE directory symlink (e.g. `@linkdir`, no trailing path
+#      segment) resolves the symlink chain down to a TREE object -- resolve_entry had no guard
+#      against mode 040000 either, so it fell through and got weighed via `git cat-file -s
+#      <tree-sha>` (the tree's own tiny size, not real recursive content). Distinct from arm 54
+#      (A-C-2b), which covers an import THROUGH a symlinked ancestor with a further path segment.
+W=$(newrepo PP66c); ( cd "$W"
+  bash "$INST" "$HOOK"
+  head -c 400 /dev/zero | tr '\0' 'x' > AGENTS.md
+  mkdir -p realdir
+  head -c 5000 /dev/zero | tr '\0' 'e' > realdir/big.md
+  ln -s realdir linkdir
+  printf '# CLAUDE.md\n@AGENTS.md\n@linkdir\n' > CLAUDE.md
+  git add -A; git commit -qm "an @import naming a bare directory symlink" ) >/dev/null 2>&1
+arm "66c. @import naming a BARE directory symlink (no trailing path) => REFUSE" REFUSE \
+    "XTTY_GUIDE_CEILING=$CEIL git push origin main"
+
+# 67. A-C-phys: a raw FILESYSTEM symlink at <git-common-dir>/hooks (core.hooksPath left UNSET --
+#     a completely different mechanism from the already-guarded config case) must be refused
+#     UNCONDITIONALLY, including under XTTY_GUIDE_FORCE=1 -- FORCE is scoped to "is this content
+#     verifiably ours," never to "are we even writing inside our own repository." Verified: without
+#     this fix, FORCE silently overwrote a directory that could be shared with unrelated repos.
+mkdir -p "$ROOT/QQ67-shared-hooks"
+printf '#!/bin/bash\necho "shared, unrelated to this repo"\nexit 0\n' > "$ROOT/QQ67-shared-hooks/pre-push"
+chmod +x "$ROOT/QQ67-shared-hooks/pre-push"
+mkdir -p "$ROOT/QQ67/repo"
+( cd "$ROOT/QQ67/repo"; git init -q .; git config user.email t@t; git config user.name t
+  rm -rf .git/hooks; ln -s "$ROOT/QQ67-shared-hooks" .git/hooks
+  bash "$INST" "$HOOK" >/dev/null 2>&1
+  XTTY_GUIDE_FORCE=1 bash "$INST" "$HOOK" >/dev/null 2>&1 ) >/dev/null 2>&1
+if grep -q "shared, unrelated to this repo" "$ROOT/QQ67-shared-hooks/pre-push" 2>/dev/null; then
+  echo "✅  67. symlinked .git/hooks refused UNCONDITIONALLY (survives even FORCE=1)"; pass=$((pass+1))
+else
+  echo "❌  67. symlinked .git/hooks was overwritten -- cross-repo harm, even under FORCE"; fail=$((fail+1)); FAILED+=("67")
+fi
+
+# 68. A-C-arm-verify: a silently-failed config write (e.g. a pre-existing .git/config.lock) used
+#     to leave the hook FILE installed but the repo NOT armed, with the installer still reporting
+#     success (exit 0, per its CANNOT-FAIL design) and NOTHING telling the user. Must now read back
+#     what was actually recorded and print a non-fatal WARNING when arming didn't stick.
+mkdir -p "$ROOT/RR68"
+( cd "$ROOT/RR68"; git init -q .; git config user.email t@t; git config user.name t
+  touch .git/config.lock ) >/dev/null 2>&1
+out68=$( cd "$ROOT/RR68" && bash "$INST" "$HOOK" 2>&1 )
+rm -f "$ROOT/RR68/.git/config.lock"
+if echo "$out68" | grep -qi 'WARNING'; then
+  echo "✅  68. a silently-failed config write now prints a WARNING instead of staying silent"; pass=$((pass+1))
+else
+  echo "❌  68. a silently-failed config write is still completely silent"; fail=$((fail+1)); FAILED+=("68")
+fi
+
+# 69. build-core (XttyCore-only builds) must also arm the clone -- it was the one routine make
+#     entry point missing the order-only `hooks` prerequisite every other routine target carries.
+if ( cd "$REPO_ROOT" && make -n build-core 2>/dev/null ) | grep -q 'install-hooks\.sh'; then
+  echo "✅  69. 'make build-core' fires the hooks installer (order-only prerequisite present)"; pass=$((pass+1))
+else
+  echo "❌  69. 'make build-core' does NOT arm the clone (missing '| hooks')"; fail=$((fail+1)); FAILED+=("69")
 fi
 
 echo
