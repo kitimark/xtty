@@ -290,14 +290,18 @@ struct DiffPane: View {
     #if DEBUG
     /// DEBUG-only: reports the selected diff's rendered layout geometry
     /// (fills-width, overflows-horizontally) so the harness state dump can
-    /// assert each wrap mode's actual rendered layout (design R5).
+    /// assert each wrap mode's actual rendered layout (design R5). This is a
+    /// pure **observation** side-channel — see `diffScroll` — it never feeds
+    /// back into row sizing, so DEBUG and Release render the identical tree.
     var onDiffLayoutGeometry: (Bool, Bool) -> Void = { _, _ in }
-    /// The last geometry measured for the viewport / scrollable content,
-    /// via `onGeometryChange` (a `.background(GeometryReader{...})` +
-    /// `PreferenceKey` did not reliably propagate live values through the
-    /// `ScrollView` in manual testing — `onGeometryChange` reads the resolved
-    /// layout directly and does not have that issue).
-    @State private var measuredViewportWidth: CGFloat = 0
+    /// The scrollable content's measured width, via `onGeometryChange` (a
+    /// `.background(GeometryReader{...})` + `PreferenceKey` did not reliably
+    /// propagate live values through the `ScrollView` in manual testing —
+    /// `onGeometryChange` reads the resolved layout directly and does not have
+    /// that issue). The viewport width it's compared against comes from the
+    /// same synchronous `GeometryReader` both configurations already use for
+    /// row sizing, not a second `onGeometryChange` measurement — so this state
+    /// exists purely to report to the harness, never to size anything.
     @State private var measuredContentWidth: CGFloat = 0
     #endif
 
@@ -332,46 +336,52 @@ struct DiffPane: View {
         .frame(maxHeight: .infinity)
     }
 
-    /// The scrollable diff content. **Wrap**: vertical-only, so the enclosing
-    /// width is definite and rows (`.frame(maxWidth: .infinity)`) actually wrap.
-    /// **No-wrap**: the two-axis scroll from before, but rows now carry their
-    /// own single-line content width (see `DiffLineRow`) instead of a flexible
-    /// `maxWidth: .infinity` fighting a non-wrapping `Text` (the original bug).
+    /// The scrollable diff content — ONE layout path in both DEBUG and
+    /// Release (Codex Pass B: an earlier DEBUG-only `onGeometryChange`-fed
+    /// `viewportWidth` rendered a materially different tree from Release, and
+    /// silently zeroed out on a pre-macOS-15 DEBUG host, breaking the no-wrap
+    /// width floor along with observability). **Wrap**: vertical-only, so the
+    /// enclosing width is definite and rows (`.frame(maxWidth: .infinity)`)
+    /// actually wrap. **No-wrap**: the two-axis scroll from before, but rows
+    /// now carry their own single-line content width (see `DiffLineRow`)
+    /// instead of a flexible `maxWidth: .infinity` fighting a non-wrapping
+    /// `Text` (the original bug). The DEBUG-only geometry signal (below) is an
+    /// additional **observation**, never a second source of `viewportWidth`.
+    ///
+    /// **Accepted residual (Fable Pass C):** `outerGeo.size.width` is the
+    /// `ScrollView`'s own frame, which equals the content viewport under
+    /// overlay scrollers (the macOS default) but would over-report it by a
+    /// legacy (space-reserving) vertical scrollbar's width once a diff is
+    /// tall enough to actually show one — an environment/settings-dependent
+    /// case not exercised by this change's tests. Not fixed here; flagging
+    /// for whoever next touches this measurement.
     @ViewBuilder
     private var diffScroll: some View {
-        #if DEBUG
-        ScrollView(wrapMode == .wrap ? [.vertical] : [.vertical, .horizontal]) {
-            diffLines(viewportWidth: measuredViewportWidth)
-                .padding(.vertical, 2)
-                .measuringWidth { newWidth in
-                    measuredContentWidth = newWidth
-                    publishDiffLayoutGeometry()
-                }
-        }
-        .measuringWidth { newWidth in
-            measuredViewportWidth = newWidth
-            publishDiffLayoutGeometry()
-        }
-        #else
         GeometryReader { outerGeo in
             ScrollView(wrapMode == .wrap ? [.vertical] : [.vertical, .horizontal]) {
                 diffLines(viewportWidth: outerGeo.size.width)
                     .padding(.vertical, 2)
+                    #if DEBUG
+                    .measuringWidth { newWidth in
+                        measuredContentWidth = newWidth
+                        publishDiffLayoutGeometry(viewportWidth: outerGeo.size.width)
+                    }
+                    #endif
             }
         }
-        #endif
     }
 
     #if DEBUG
-    /// Re-derive and publish the fills-width/overflows signals whenever either
-    /// measurement updates (design R5: equality-gated by the store, so an
-    /// unchanged pair of booleans is a no-op there).
-    private func publishDiffLayoutGeometry() {
-        guard measuredViewportWidth > 0 else { return }
+    /// Report the fills-width/overflows signals against the SAME viewport
+    /// width the rows were actually sized with (design R5: equality-gated by
+    /// the store, so an unchanged pair of booleans is a no-op there; this
+    /// call never feeds back into rendering).
+    private func publishDiffLayoutGeometry(viewportWidth: CGFloat) {
+        guard viewportWidth > 0 else { return }
         let tolerance: CGFloat = 1
         onDiffLayoutGeometry(
-            measuredContentWidth >= measuredViewportWidth - tolerance,
-            measuredContentWidth > measuredViewportWidth + tolerance
+            measuredContentWidth >= viewportWidth - tolerance,
+            measuredContentWidth > viewportWidth + tolerance
         )
     }
     #endif
@@ -381,8 +391,10 @@ struct DiffPane: View {
     /// `VStack`: a `LazyVStack` only measures on-screen rows, so it can't know
     /// an off-screen line's true (unwrapped) width — the horizontal scroll
     /// extent would be wrong until that row scrolled into view. The eager
-    /// `VStack` is an accepted fallback for no-wrap only (design R1), bounded by
-    /// the existing per-file 5000-line cap.
+    /// `VStack` is an accepted fallback for no-wrap only (design R1); its
+    /// worst case is bounded by `noWrapRowCap` (below), independent of the
+    /// existing per-file 5000-line/3000-char parser cap (Codex Pass B: an
+    /// unbounded eager path could lay out ~15M characters on the main thread).
     @ViewBuilder
     private func diffLines(viewportWidth: CGFloat) -> some View {
         switch wrapMode {
@@ -397,20 +409,41 @@ struct DiffPane: View {
         }
     }
 
+    /// Bounds no-wrap's eager rendering independent of the parser's 5000-line
+    /// cap: at up to 3000 chars/line, 5000 rows is a ~15M-character worst-case
+    /// main-thread layout. 500 rows keeps that ceiling to ~1.5M chars — ample
+    /// for typical reviews — while wrap mode (the default, `LazyVStack`) is
+    /// unaffected.
+    private static let noWrapRowCap = 500
+
     @ViewBuilder
     private func diffRows(viewportWidth: CGFloat) -> some View {
-        ForEach(Array(diff.hunks.enumerated()), id: \.offset) { _, hunk in
-            DiffLineRow(line: DiffLine(kind: .hunkHeader, text: hunk.header),
-                        wrapMode: wrapMode, viewportWidth: viewportWidth)
-            ForEach(Array(hunk.lines.enumerated()), id: \.offset) { _, line in
-                DiffLineRow(line: line, wrapMode: wrapMode, viewportWidth: viewportWidth)
-            }
+        let allRows = flattenedRows()
+        let overCap = wrapMode == .noWrap && allRows.count > Self.noWrapRowCap
+        let shownRows = overCap ? Array(allRows.prefix(Self.noWrapRowCap)) : allRows
+        ForEach(Array(shownRows.enumerated()), id: \.offset) { _, line in
+            DiffLineRow(line: line, wrapMode: wrapMode, viewportWidth: viewportWidth)
         }
-        if diff.truncated {
+        if overCap {
+            Button("Showing first \(Self.noWrapRowCap) lines in no-wrap mode — switch to wrap, or open in editor to see the rest", action: onOpen)
+                .font(.caption).buttonStyle(.plain)
+                .foregroundStyle(.secondary).padding(6)
+        } else if diff.truncated {
             Button("Diff truncated — open in editor", action: onOpen)
                 .font(.caption).buttonStyle(.plain)
                 .foregroundStyle(.secondary).padding(6)
         }
+    }
+
+    /// Hunk headers + lines as one flat sequence (a hunk header becomes a
+    /// synthetic `.hunkHeader` line), so no-wrap can cap the total row count.
+    private func flattenedRows() -> [DiffLine] {
+        var rows: [DiffLine] = []
+        for hunk in diff.hunks {
+            rows.append(DiffLine(kind: .hunkHeader, text: hunk.header))
+            rows.append(contentsOf: hunk.lines)
+        }
+        return rows
     }
 
     private func centeredNote(_ text: String) -> some View {
@@ -421,18 +454,18 @@ struct DiffPane: View {
 
 #if DEBUG
 private extension View {
-    /// DEBUG-only: reports this view's resolved width via `onGeometryChange`
-    /// (macOS 15+; a no-op sizing-observer on older systems — the harness runs
-    /// on modern macOS only). Used to compare the diff's viewport width against
-    /// its scrollable content width, deriving the fills-width/overflows
-    /// layout-geometry signals (design R5).
-    @ViewBuilder
+    /// DEBUG-only: reports this view's resolved width via `onGeometryChange`.
+    /// The single-value-action overload used here is back-deployed to macOS
+    /// 13.0 (only the two-parameter `(old, new)` overload needs macOS 15) —
+    /// verified against the installed SDK's `SwiftUICore.swiftinterface`, so
+    /// no availability gate is needed above this deployment target (14.0;
+    /// Fable Pass C caught an earlier, incorrect `#available(macOS 15, *)`
+    /// gate here that silently no-op'd the signal on macOS 14). Used to
+    /// compare the diff's viewport width against its scrollable content
+    /// width, deriving the fills-width/overflows layout-geometry signals
+    /// (design R5).
     func measuringWidth(_ onChange: @escaping (CGFloat) -> Void) -> some View {
-        if #available(macOS 15, *) {
-            onGeometryChange(for: CGFloat.self, of: { $0.size.width }, action: onChange)
-        } else {
-            self
-        }
+        onGeometryChange(for: CGFloat.self, of: { $0.size.width }, action: onChange)
     }
 }
 #endif
@@ -452,16 +485,23 @@ struct DiffLineRow: View {
         Group {
             if wrapMode == .wrap {
                 rowContent
+                    .padding(.horizontal, 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
+                // The `.frame(minWidth:)` floor MUST be applied AFTER padding,
+                // not before: flooring the pre-padding content and then adding
+                // padding makes every row at least `viewportWidth + 16` wide,
+                // so even a short line reports horizontal overflow —
+                // tautologically satisfying `diffContentOverflows` regardless
+                // of whether the line is actually long (Codex Pass B, high).
                 rowContent
+                    .padding(.horizontal, 8)
                     .fixedSize(horizontal: true, vertical: false)
                     .frame(minWidth: viewportWidth, alignment: .leading)
             }
         }
         .font(.system(size: 11, design: .monospaced))
-        .padding(.horizontal, 8)
         .background(background)
     }
 

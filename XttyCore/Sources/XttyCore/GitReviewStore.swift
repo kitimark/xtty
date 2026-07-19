@@ -136,6 +136,14 @@ public final class GitReviewStore {
         diffFillsWidth = fillsWidth
         diffContentOverflows = overflows
     }
+
+    /// Clear the geometry signals back to their unmeasured default — called on
+    /// selection change so a dump can never pair one file's `selectedDiff`
+    /// with a different file's stale geometry (Fable Pass C).
+    private func resetDiffLayoutGeometry() {
+        diffFillsWidth = false
+        diffContentOverflows = false
+    }
     #endif
 
     /// Publish a freshly computed snapshot (preserving an in-range selection).
@@ -148,6 +156,9 @@ public final class GitReviewStore {
            new.files.contains(where: { $0.path == sel }) {
             merged.selectedPath = sel
             merged.selectedDiff = nil  // stale; the runner reloads it
+            #if DEBUG
+            resetDiffLayoutGeometry()
+            #endif
         }
         snapshot = merged
         refreshCount &+= 1
@@ -158,6 +169,12 @@ public final class GitReviewStore {
     public func select(path: String?, diff: FileDiff?) {
         snapshot.selectedPath = path
         snapshot.selectedDiff = diff
+        #if DEBUG
+        // Fable Pass C: without this, a dump could transiently pair the newly
+        // selected path with the PREVIOUS file's geometry until the view's
+        // next `onGeometryChange` fires for the new diff.
+        resetDiffLayoutGeometry()
+        #endif
         revision &+= 1
     }
 

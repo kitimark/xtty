@@ -209,15 +209,19 @@ final class XttyGitReviewUITests: XCTestCase {
             assertSemanticCaptureInactive("git-review-wrap"); return
         }
 
-        // A tracked file whose one changed line is far longer than the ~280pt
-        // panel, so wrap/no-wrap produce visibly different (assertable) geometry.
+        // Two tracked files: short.txt's changed line stays well within the
+        // ~280pt panel (a negative control — Codex Pass B: an earlier padding
+        // bug made EVERY no-wrap row overflow by the row's own horizontal
+        // insets, so `diffContentOverflows` was tautologically true regardless
+        // of content length); long.txt's line is far longer than the panel.
         let dir = "xtty-wraptest-\(UUID().uuidString.prefix(8))"
         let longLine = "This line is deliberately padded with a lot of extra words so it " +
             "definitely overflows a two hundred eighty point wide git-review panel column."
         type("cd ~ && rm -rf \(dir) && mkdir \(dir) && cd \(dir) && git init -q && " +
-             "printf 'short\\n' > long.txt && git add long.txt && " +
+             "printf 'short\\n' > short.txt && printf 'short\\n' > long.txt && " +
+             "git add short.txt long.txt && " +
              "git -c user.email=t@e -c user.name=t commit -qm init && " +
-             "printf '\(longLine)\\n' > long.txt && true",
+             "printf 'changed\\n' > short.txt && printf '\(longLine)\\n' > long.txt && true",
              into: app)
 
         guard StateDumpReader.waitForState(timeout: 20, where: {
@@ -225,9 +229,28 @@ final class XttyGitReviewUITests: XCTestCase {
             let files = (gr["changedFiles"] as? [[String: Any]]) ?? []
             return (gr["isRepo"] as? Bool) == true
                 && files.contains { ($0["path"] as? String) == "long.txt" }
+                && files.contains { ($0["path"] as? String) == "short.txt" }
         }) != nil else {
             attachScreenshot("wrap-toggle: repo never surfaced"); return
         }
+
+        // Select short.txt first (still in the configured `nowrap` mode) →
+        // its short line must NOT overflow — the negative control for the
+        // padding-order bug above.
+        try? "short.txt".write(toFile: selectPath, atomically: true, encoding: .utf8)
+        let shortState = StateDumpReader.waitForState(timeout: 10) {
+            let gr = ($0["gitReview"] as? [String: Any]) ?? [:]
+            let sel = gr["selectedDiff"] as? [String: Any]
+            return (sel?["path"] as? String) == "short.txt"
+                && (gr["diffWrap"] as? String) == "nowrap"
+                && (gr["diffContentOverflows"] as? Bool) == false
+        }
+        StateDumpReader.attach(self, name: "git-review-wrap-nowrap-short")
+        guard let shortState else {
+            attachScreenshot("wrap-toggle: short-line negative control never reported"); return
+        }
+        XCTAssertEqual(gitReview(shortState)["diffContentOverflows"] as? Bool, false,
+                       "no-wrap with a line well within the panel must not overflow (regression guard for the padding-order bug)")
 
         // Select long.txt → the configured `nowrap` default should be reported,
         // and the long line should overflow the panel horizontally. The geometry

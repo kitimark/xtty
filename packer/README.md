@@ -612,22 +612,31 @@ have masked.
 > hang-indented continuation lines) / **no-wrap** (two-axis scroll, tint spans
 > full content width) mode, toggled by an in-panel button
 > (`gitReview.wrapToggle`) and set by a new `git-review-diff-wrap` config key.
-> `XttyCore`'s config-loader + `GitReviewStore` unit tests gained **6** (suite
-> 237 → **243**); `testConfiguredNoWrapModeTogglesAndGeometryMatchesEachMode`
+> `XttyCore`'s config-loader + `GitReviewStore` unit tests gained **8** (suite
+> 237 → **245**, the last 2 added by this change's own cross-review round 1 —
+> a selection-change geometry-reset guard); `testConfiguredNoWrapModeTogglesAndGeometryMatchesEachMode`
 > (`XttyGitReviewUITests`) drives the **real** wrap-toggle button and asserts
 > both the routing (`diffWrap` flips) and the rendered layout-geometry
-> (`diffFillsWidth`/`diffContentOverflows`) via the DEBUG state dump — suite
+> (`diffFillsWidth`/`diffContentOverflows`, including a short-line
+> negative control added in round 1) via the DEBUG state dump — suite
 > 55 → **56**. **MEASURED (2026-07-20): Tier-0 `243/0/0`, Tier-1 local `55/0/1`
-> of 56** (the lone skip is the opt-in benchmark e2e) — clean on a hands-off
+> of 56** (the lone skip is the opt-in benchmark e2e; pre-dates round 1's 2
+> additional core tests, not yet re-measured) — clean on a hands-off
 > confirmation run, after fixing an initial test-synchronization bug in the new
 > test's own wait predicate (it asserted on an async `onGeometryChange`-derived
 > field before waiting for it to land — the same "wait on the field you're
-> about to assert on" class already documented in this table). **VM tiers
-> (headless/graphics) not yet re-run for this change** — the new test is
-> shell-independent (config-seeded + real-button-driven, no shell-integration
-> dependency), so it is expected to hold across all 5 environments, but that is
-> not yet measured; treat the envelope above as local-confirmed only until a
-> full-matrix run updates this note.
+> about to assert on" class already documented in this table). **This test is
+> in the same shell-arm class as its `XttyGitReviewUITests` siblings, NOT
+> shell-independent** (an earlier note here wrongly claimed the opposite,
+> caught by this change's own `/xtty:cross-review` Pass B): its repo/selection
+> setup depends on the injected shell reporting the live cwd via OSC 7 (zsh
+> only), so on the bash VM legs it degrades to the capability-absent crisp
+> negative like every other test in this file, never reaching the toggle or
+> geometry assertions there. **VM tiers (headless/graphics) not yet re-run for
+> this change**; treat the envelope above as local-confirmed only (zsh legs
+> expected to exercise the real assertions, bash legs expected to assert the
+> crisp negative per the Shell-arm row below) until a full-matrix run updates
+> this note.
 
 ### Expected-difference matrix
 

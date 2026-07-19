@@ -136,4 +136,29 @@ final class GitDiffWrapStoreTests: XCTestCase {
         store.setDiffWrap(.wrap)   // already wrap
         XCTAssertEqual(store.revision, before, "an unchanged wrap mode must not bump revision")
     }
+
+    /// Fable Pass C: without a reset, `select` for a new file could leave the
+    /// previous file's stale geometry paired with the new `selectedDiff` until
+    /// the view's next measurement lands.
+    func testSelectResetsDiffLayoutGeometry() {
+        let store = GitReviewStore()
+        store.setDiffLayoutGeometry(fillsWidth: true, overflows: false)
+        XCTAssertTrue(store.diffFillsWidth)
+        store.select(path: "b.txt", diff: .binary)
+        XCTAssertFalse(store.diffFillsWidth, "selecting a new file must clear the previous file's geometry")
+        XCTAssertFalse(store.diffContentOverflows)
+    }
+
+    func testApplyResetsDiffLayoutGeometryWhenSelectionGoesStale() {
+        let store = GitReviewStore()
+        store.apply(GitReviewSnapshot(isRepo: true, files: [GitChangedFile(path: "a.txt", status: .modified)]))
+        store.select(path: "a.txt", diff: .binary)
+        store.setDiffLayoutGeometry(fillsWidth: true, overflows: true)
+        // A refresh that carries no new selection but still lists "a.txt"
+        // keeps the selection but marks its diff stale (`apply`'s existing
+        // contract) — the geometry must go stale with it.
+        store.apply(GitReviewSnapshot(isRepo: true, files: [GitChangedFile(path: "a.txt", status: .modified)]))
+        XCTAssertFalse(store.diffFillsWidth)
+        XCTAssertFalse(store.diffContentOverflows)
+    }
 }
