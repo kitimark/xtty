@@ -17,11 +17,12 @@ Cross-review's Pass C ("the diversity slice") is currently pinned to inline Opus
 
 ### Modified Capabilities
 
-- `cross-model-review`: Pass C's pinned model changes from Opus to Fable 5; the requirement text is clarified to state that Pass C's family-sharing with Pass A is a checkpoint choice within one vendor (not an independent third family), and that Pass C's comparative value against Pass A is evaluated by human ledger review across multiple runs, not by any computed or model-derived metric.
+- `cross-model-review`: Pass C's pinned model changes from Opus to Fable 5 (a command-file edit; no existing requirement text changes, since the concrete pin deliberately lives outside the requirement per the established spec). A new **ADDED** requirement governs the two concerns this pin creates: Pass C's family-sharing with Pass A must be documented as an in-vendor checkpoint choice — not an independent third family, and not in tension with `research.md`'s separate "Fable 5 not an analytical-reasoning tier" tiering decision, which governs a different concern — and Pass C's comparative value against Pass A must be evaluated by a human reading the ledger across multiple runs, weighing that within-family disjointness may just be prompt variance, never by a computed or model-derived metric.
 
 ## Impact
 
 - `.claude/commands/xtty/cross-review.md` — Pass C's model pin (§2) and the added evaluation-method language.
-- `openspec/specs/cross-model-review/spec.md` — the modified requirement's spec text and its scenario.
+- `openspec/specs/cross-model-review/spec.md` — one new **ADDED** requirement and its two scenarios (no existing requirement text is edited).
+- `AGENTS.md` — the open-changes tracker row for this change (added at propose time); its "Cross-model design review" summary sentence naming Pass C's model, updated alongside the command-file edit at apply time so the guide never describes a pin that no longer matches `cross-review.md`.
 - No product code, no CI, no test-suite changes.
 - This change touches `.claude/commands/xtty/cross-review.md`, a path outside the docs/tracker allowlist, so it is classified **in scope** for cross-model review before archive (per `scripts/cross-review-scope.sh`) — its `tasks.md` carries the standard human-attestation cross-review task.
