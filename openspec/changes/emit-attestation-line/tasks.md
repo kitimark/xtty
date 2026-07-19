@@ -9,7 +9,7 @@
 
 ## 2. Pre-archive review
 
-- [ ] 2.1 Pre-archive coherence review ⟶ xtty-openspec-critic (emit-attestation-line)
+- [x] 2.1 Pre-archive coherence review ⟶ xtty-openspec-critic (emit-attestation-line) — verdict COHERENT; 3 findings (stale pin-cross-review-pass-c-fable example refs in 1.2/1.4/design.md, AGENTS.md tracker drift owed to archive-ritual, 1.6 unticked-but-validated) — the two actionable ones fixed in `ffa0df3`, the tracker drift left for the archive-ritual step as expected
 - [ ] 2.2 Human-attestation cross-review (this change touches `scripts/cross-review-digest.sh`, a path outside the docs/tracker allowlist, so it will be mechanically **in scope** per `scripts/cross-review-scope.sh`). Run `/xtty:cross-review emit-attestation-line`, read the complete ledger, run `scripts/cross-review-digest.sh emit-attestation-line` (the PRE-modification version, per the reviewed-base rule — note this task is reviewing a change to the very tool it's using to compute its own digest, and the established spec's rule already covers exactly this case), and record the reviewed-state digest on a delimited attestation line. **HUMAN-ONLY — the model MUST NOT tick this task or derive the attested value:**
   `<!-- cross-review-attestation: base=<B> head=<HEAD> digest=<sha256> reviewed=<date> -->`
 
