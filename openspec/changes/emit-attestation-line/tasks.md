@@ -1,0 +1,18 @@
+## 1. Implement the `--line` emitter
+
+- [ ] 1.1 Edit `scripts/cross-review-digest.sh`: capture the digest into a variable; parse an optional leading `--line` flag before the existing positional change-name argument; assemble `LINE="<!-- cross-review-attestation: base=$B head=$(git rev-parse HEAD) digest=$DIGEST reviewed=$(date +%F) -->"` from the already-computed `$B` and digest plus `git rev-parse HEAD` and `date +%F`. Default invocation (no flag): print the bare digest to stdout unchanged, then a short label plus the assembled line to **stderr**; with `--line <change>`: print ONLY the assembled line to stdout (for `| pbcopy`). Update the script's header comment (usage, output contract, and a one-line pointer to the new ADDED spec requirement + design.md explaining why writing/ticking/committing are permanently out of scope). Do NOT touch the shared base-resolution block (it must stay byte-identical with `scripts/cross-review-scope.sh`). Develop/exercise the edit in a scratch clone (e.g. `git clone . /tmp/xtty-scratch`) — the script refuses on a dirty tree, so editing the tracked script here dirties the tree before it can be run
+- [ ] 1.2 Prove the default stdout contract is byte-identical before vs. after the edit: run the pre-edit script (via `git show <parent-of-this-change's-proposal-commit>:scripts/cross-review-digest.sh`) and the edited script against the same already-existing change (e.g. `pin-cross-review-pass-c-fable`, fully attested) and diff their stdout — must be byte-identical (stderr may differ)
+- [ ] 1.3 Prove the shared base-resolution block is untouched: diff that block between `scripts/cross-review-digest.sh` and `scripts/cross-review-scope.sh` before vs. after the edit — still byte-identical
+- [ ] 1.4 Validate the assembled `--line` output field-by-field against `pin-cross-review-pass-c-fable`'s already-recorded attestation line in its `tasks.md`: `base=` must string-equal the recorded value (invariant per change); `head=` is EXPECTED to differ from the recorded value once new commits land — do not misread that as a bug; `digest=` must equal the same invocation's stdout digest; and the overall line's shape (delimiter syntax, field names, ordering) must match the recorded line byte-for-byte modulo field values
+- [ ] 1.5 Confirm/finalize the already-drafted spec delta at `specs/cross-model-review/spec.md` in this change directory — verify the ADDED requirement + scenarios match the shipped emitter behavior (this task is confirmation, not drafting it fresh)
+- [ ] 1.6 `openspec validate "emit-attestation-line"` — mechanical validation of the change artifacts
+
+## 2. Pre-archive review
+
+- [ ] 2.1 Pre-archive coherence review ⟶ xtty-openspec-critic (emit-attestation-line)
+- [ ] 2.2 Human-attestation cross-review (this change touches `scripts/cross-review-digest.sh`, a path outside the docs/tracker allowlist, so it will be mechanically **in scope** per `scripts/cross-review-scope.sh`). Run `/xtty:cross-review emit-attestation-line`, read the complete ledger, run `scripts/cross-review-digest.sh emit-attestation-line` (the PRE-modification version, per the reviewed-base rule — note this task is reviewing a change to the very tool it's using to compute its own digest, and the established spec's rule already covers exactly this case), and record the reviewed-state digest on a delimited attestation line. **HUMAN-ONLY — the model MUST NOT tick this task or derive the attested value:**
+  `<!-- cross-review-attestation: base=<B> head=<HEAD> digest=<sha256> reviewed=<date> -->`
+
+## 3. Archive
+
+- [ ] 3.1 Archive + reconcile ⟶ archive-ritual

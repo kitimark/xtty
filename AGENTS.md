@@ -20,6 +20,7 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 | --- | --- | --- | --- |
 | `add-ci-pipeline` | implemented — owner steps left | CI is live; remaining: repo public, pr-lint PR, branch protection, archive | `research/03-analysis/github-actions-ci-cd.md` |
 | `add-git-diff-wrap-toggle` | proposed — 0/20 tasks | git-review diff fills the panel width in a **wrap** (new default) / **no-wrap** mode + in-panel toggle + `git-review-diff-wrap` config key | `research/03-analysis/p6-file-diff-decisions.md` |
+| `emit-attestation-line` | proposed — 0/9 tasks | `cross-review-digest.sh` gains a `--line` mode emitting the ready-to-paste attestation tag (print-only — permanently never writes/ticks/commits) | `openspec/changes/emit-attestation-line/design.md` |
 | `pin-cross-review-pass-c-fable` | in progress (`openspec list` for live count) | swap cross-review's Pass C to Fable 5 (in-vendor checkpoint, not a 3rd family) + human-only ledger-evaluation rule | `research/03-analysis/cross-model-seat-assignment-research.md` |
 
 **Shipped and archived** (full narratives: [HISTORY.md](HISTORY.md); what is true: `openspec/specs/`; mechanisms: `research/`):
