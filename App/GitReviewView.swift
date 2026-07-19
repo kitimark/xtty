@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import XttyCore
 
@@ -342,14 +343,14 @@ struct DiffPane: View {
     /// silently zeroed out on a pre-macOS-15 DEBUG host, breaking the no-wrap
     /// width floor along with observability). **Wrap**: vertical-only, so the
     /// enclosing width is definite and rows (`.frame(maxWidth: .infinity)`)
-    /// actually wrap. **No-wrap**: the two-axis scroll from before, but rows
-    /// now carry their own single-line content width (see `DiffLineRow`)
+    /// actually wrap. **No-wrap**: the two-axis scroll from before, with rows
+    /// floored to a precomputed content-width estimate (see `diffLines`)
     /// instead of a flexible `maxWidth: .infinity` fighting a non-wrapping
     /// `Text` (the original bug). The DEBUG-only geometry signal (below) is an
     /// additional **observation**, never a second source of `viewportWidth`.
     ///
-    /// **Accepted residual (Fable Pass C):** `outerGeo.size.width` is the
-    /// `ScrollView`'s own frame, which equals the content viewport under
+    /// **Accepted residual (Fable Pass C, round 1):** `outerGeo.size.width` is
+    /// the `ScrollView`'s own frame, which equals the content viewport under
     /// overlay scrollers (the macOS default) but would over-report it by a
     /// legacy (space-reserving) vertical scrollbar's width once a diff is
     /// tall enough to actually show one — an environment/settings-dependent
@@ -386,64 +387,76 @@ struct DiffPane: View {
     }
     #endif
 
-    /// The diff's hunk headers + lines. **Wrap** uses a `LazyVStack` (every row
-    /// is bounded-width, so laziness is safe). **No-wrap** uses an eager
-    /// `VStack`: a `LazyVStack` only measures on-screen rows, so it can't know
-    /// an off-screen line's true (unwrapped) width — the horizontal scroll
-    /// extent would be wrong until that row scrolled into view. The eager
-    /// `VStack` is an accepted fallback for no-wrap only (design R1); its
-    /// worst case is bounded by `noWrapRowCap` (below), independent of the
-    /// existing per-file 5000-line/3000-char parser cap (Codex Pass B: an
-    /// unbounded eager path could lay out ~15M characters on the main thread).
+    /// The diff's hunk headers + lines, ALWAYS a `LazyVStack` in both modes —
+    /// so both render the identical row set (design's presentation-only
+    /// invariant: switching modes never changes which lines are shown).
+    ///
+    /// **Cross-review round 2 (Codex high + Fable medium, corroborating):** an
+    /// earlier fix capped no-wrap to its first 500 rows to bound the eager
+    /// `VStack` render cost (design R1's original "eager `VStack`, bounded by
+    /// the 5000-line parser cap" fallback) — but for a diff over 500 rows,
+    /// toggling wrap→no-wrap then silently dropped rows wrap mode still
+    /// showed, violating the invariant above (and the git-review spec's own
+    /// SHALL). Fixed properly instead: no-wrap floors every row (and the
+    /// `LazyVStack` itself) to `noWrapFloorWidth` — the larger of the real
+    /// viewport width and a **precomputed** estimate of the diff's widest row,
+    /// computed once from character COUNTS only (no per-line text layout, no
+    /// examining on-screen rows). Because every row shares the SAME precomputed
+    /// floor, the `LazyVStack` never needs to inspect an off-screen row to
+    /// know its own width — laziness (bounding real work to on-screen rows) is
+    /// restored without capping which rows exist.
     @ViewBuilder
     private func diffLines(viewportWidth: CGFloat) -> some View {
         switch wrapMode {
         case .wrap:
             LazyVStack(alignment: .leading, spacing: 0) {
-                diffRows(viewportWidth: viewportWidth)
+                diffRows(noWrapFloorWidth: 0)
             }
         case .noWrap:
-            VStack(alignment: .leading, spacing: 0) {
-                diffRows(viewportWidth: viewportWidth)
+            let floorWidth = max(viewportWidth, noWrapContentWidthEstimate)
+            LazyVStack(alignment: .leading, spacing: 0) {
+                diffRows(noWrapFloorWidth: floorWidth)
             }
+            .frame(width: floorWidth, alignment: .leading)
         }
     }
 
-    /// Bounds no-wrap's eager rendering independent of the parser's 5000-line
-    /// cap: at up to 3000 chars/line, 5000 rows is a ~15M-character worst-case
-    /// main-thread layout. 500 rows keeps that ceiling to ~1.5M chars — ample
-    /// for typical reviews — while wrap mode (the default, `LazyVStack`) is
-    /// unaffected.
-    private static let noWrapRowCap = 500
+    /// A monospaced glyph's advance width at the row font size, measured once
+    /// (all glyphs share it at this design's monospaced font).
+    private static let monoCharWidth: CGFloat = {
+        let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        return ("0" as NSString).size(withAttributes: [.font: font]).width
+    }()
+
+    /// The no-wrap content width estimate: the diff's widest row (marker +
+    /// content characters, including hunk headers) times the measured
+    /// monospaced advance width, plus the row's own horizontal padding and a
+    /// small safety margin against font-metric estimation error (kerning,
+    /// unusual glyphs). O(n) over character COUNTS only — cheap even at the
+    /// parser's 5000-line cap, no per-line text layout.
+    private var noWrapContentWidthEstimate: CGFloat {
+        let maxChars = diff.hunks.reduce(0) { partial, hunk in
+            let hunkMax = hunk.lines.reduce(hunk.header.count) { max($0, $1.text.count) }
+            return max(partial, hunkMax)
+        }
+        let safetyMarginChars = 4
+        return CGFloat(maxChars + safetyMarginChars) * Self.monoCharWidth + 16  // the row's own horizontal padding
+    }
 
     @ViewBuilder
-    private func diffRows(viewportWidth: CGFloat) -> some View {
-        let allRows = flattenedRows()
-        let overCap = wrapMode == .noWrap && allRows.count > Self.noWrapRowCap
-        let shownRows = overCap ? Array(allRows.prefix(Self.noWrapRowCap)) : allRows
-        ForEach(Array(shownRows.enumerated()), id: \.offset) { _, line in
-            DiffLineRow(line: line, wrapMode: wrapMode, viewportWidth: viewportWidth)
+    private func diffRows(noWrapFloorWidth: CGFloat) -> some View {
+        ForEach(Array(diff.hunks.enumerated()), id: \.offset) { _, hunk in
+            DiffLineRow(line: DiffLine(kind: .hunkHeader, text: hunk.header),
+                        wrapMode: wrapMode, noWrapFloorWidth: noWrapFloorWidth)
+            ForEach(Array(hunk.lines.enumerated()), id: \.offset) { _, line in
+                DiffLineRow(line: line, wrapMode: wrapMode, noWrapFloorWidth: noWrapFloorWidth)
+            }
         }
-        if overCap {
-            Button("Showing first \(Self.noWrapRowCap) lines in no-wrap mode — switch to wrap, or open in editor to see the rest", action: onOpen)
-                .font(.caption).buttonStyle(.plain)
-                .foregroundStyle(.secondary).padding(6)
-        } else if diff.truncated {
+        if diff.truncated {
             Button("Diff truncated — open in editor", action: onOpen)
                 .font(.caption).buttonStyle(.plain)
                 .foregroundStyle(.secondary).padding(6)
         }
-    }
-
-    /// Hunk headers + lines as one flat sequence (a hunk header becomes a
-    /// synthetic `.hunkHeader` line), so no-wrap can cap the total row count.
-    private func flattenedRows() -> [DiffLine] {
-        var rows: [DiffLine] = []
-        for hunk in diff.hunks {
-            rows.append(DiffLine(kind: .hunkHeader, text: hunk.header))
-            rows.append(contentsOf: hunk.lines)
-        }
-        return rows
     }
 
     private func centeredNote(_ text: String) -> some View {
@@ -472,14 +485,15 @@ private extension View {
 
 /// One diff line, monospaced and tinted by kind. `wrapMode` selects the outer
 /// sizing: **wrap** stretches to the panel width and wraps; **no-wrap** takes
-/// its own single-line content width (floored to `viewportWidth` so a short
-/// line's tint still fills the panel) and never wraps.
+/// the diff's shared, precomputed content-width floor (`noWrapFloorWidth`, so
+/// a short line's tint still fills the panel/content width) and never wraps.
 @MainActor
 struct DiffLineRow: View {
     let line: DiffLine
     let wrapMode: GitDiffWrap
-    /// The panel's content viewport width — used in **no-wrap** mode only.
-    var viewportWidth: CGFloat = 0
+    /// The diff's precomputed no-wrap content-width floor — used in
+    /// **no-wrap** mode only (see `DiffPane.diffLines`).
+    var noWrapFloorWidth: CGFloat = 0
 
     var body: some View {
         Group {
@@ -491,14 +505,14 @@ struct DiffLineRow: View {
             } else {
                 // The `.frame(minWidth:)` floor MUST be applied AFTER padding,
                 // not before: flooring the pre-padding content and then adding
-                // padding makes every row at least `viewportWidth + 16` wide,
-                // so even a short line reports horizontal overflow —
+                // padding makes every row at least `noWrapFloorWidth + 16`
+                // wide, so even a short line reports horizontal overflow —
                 // tautologically satisfying `diffContentOverflows` regardless
                 // of whether the line is actually long (Codex Pass B, high).
                 rowContent
                     .padding(.horizontal, 8)
                     .fixedSize(horizontal: true, vertical: false)
-                    .frame(minWidth: viewportWidth, alignment: .leading)
+                    .frame(minWidth: noWrapFloorWidth, alignment: .leading)
             }
         }
         .font(.system(size: 11, design: .monospaced))
@@ -509,10 +523,14 @@ struct DiffLineRow: View {
     /// own run — so it is never tinted/emphasized, and the content's Character-offset
     /// emphasis maps directly onto its own `Text` (no marker arithmetic). The shared
     /// monospaced font keeps columns aligned. Header / no-newline lines render whole.
+    /// `alignment: .top` keeps the marker aligned with the content's FIRST
+    /// wrapped row rather than `HStack`'s default vertical-centering, which
+    /// would center the single-character marker beside a multi-row wrapped
+    /// block in wrap mode (Codex Pass B round 2, medium).
     @ViewBuilder
     private var rowContent: some View {
         if isContentLine {
-            HStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 0) {
                 Text(marker).foregroundStyle(.secondary)
                 Text(attributedContent).foregroundStyle(foreground)
             }

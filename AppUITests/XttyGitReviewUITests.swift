@@ -231,25 +231,41 @@ final class XttyGitReviewUITests: XCTestCase {
                 && files.contains { ($0["path"] as? String) == "long.txt" }
                 && files.contains { ($0["path"] as? String) == "short.txt" }
         }) != nil else {
-            attachScreenshot("wrap-toggle: repo never surfaced"); return
+            // Capture is confirmed active (past the guard above) — a missing
+            // repo here is a real subject-behavior failure, not a capability
+            // gap, so this MUST hard-fail rather than silently pass (Codex
+            // Pass B round 2, high: an earlier version returned without
+            // XCTFail, so a genuine regression could go green).
+            attachScreenshot("wrap-toggle: repo never surfaced")
+            XCTFail("the git-review panel never surfaced the test repo's changed files"); return
         }
 
         // Select short.txt first (still in the configured `nowrap` mode) →
         // its short line must NOT overflow — the negative control for the
-        // padding-order bug above.
+        // padding-order bug above. Also require `diffFillsWidth == true`:
+        // `select` resets both geometry booleans to `false` before the real
+        // measurement lands, and `false` is ALSO the expected `overflows`
+        // value here — so waiting on `overflows == false` alone can pass on
+        // the reset default rather than a genuine measurement (Fable Pass C
+        // round 2, medium). A real floored short row measures
+        // `fillsWidth == true`, which the reset default never satisfies.
         try? "short.txt".write(toFile: selectPath, atomically: true, encoding: .utf8)
-        let shortState = StateDumpReader.waitForState(timeout: 10) {
+        guard let shortState = StateDumpReader.waitForState(timeout: 10, where: {
             let gr = ($0["gitReview"] as? [String: Any]) ?? [:]
             let sel = gr["selectedDiff"] as? [String: Any]
             return (sel?["path"] as? String) == "short.txt"
                 && (gr["diffWrap"] as? String) == "nowrap"
+                && (gr["diffFillsWidth"] as? Bool) == true
                 && (gr["diffContentOverflows"] as? Bool) == false
+        }) else {
+            attachScreenshot("wrap-toggle: short-line negative control never reported")
+            XCTFail("no-wrap should measure a short line as filling (not overflowing) the panel"); return
         }
         StateDumpReader.attach(self, name: "git-review-wrap-nowrap-short")
-        guard let shortState else {
-            attachScreenshot("wrap-toggle: short-line negative control never reported"); return
-        }
-        XCTAssertEqual(gitReview(shortState)["diffContentOverflows"] as? Bool, false,
+        let shortGr = gitReview(shortState)
+        XCTAssertEqual(shortGr["diffFillsWidth"] as? Bool, true,
+                       "no-wrap with a line well within the panel must fill it (proves a real measurement landed, not the reset default)")
+        XCTAssertEqual(shortGr["diffContentOverflows"] as? Bool, false,
                        "no-wrap with a line well within the panel must not overflow (regression guard for the padding-order bug)")
 
         // Select long.txt → the configured `nowrap` default should be reported,
@@ -259,17 +275,17 @@ final class XttyGitReviewUITests: XCTestCase {
         // not an earlier-arriving one — or a stale (still-default) dump can pass
         // the predicate before the real measurement lands.
         try? "long.txt".write(toFile: selectPath, atomically: true, encoding: .utf8)
-        let noWrapState = StateDumpReader.waitForState(timeout: 10) {
+        guard let noWrapState = StateDumpReader.waitForState(timeout: 10, where: {
             let gr = ($0["gitReview"] as? [String: Any]) ?? [:]
             let sel = gr["selectedDiff"] as? [String: Any]
             return (sel?["path"] as? String) == "long.txt"
                 && (gr["diffWrap"] as? String) == "nowrap"
                 && (gr["diffContentOverflows"] as? Bool) == true
+        }) else {
+            attachScreenshot("wrap-toggle: nowrap default/overflow never reported")
+            XCTFail("no-wrap should measure the long line as overflowing the panel"); return
         }
         StateDumpReader.attach(self, name: "git-review-wrap-nowrap")
-        guard let noWrapState else {
-            attachScreenshot("wrap-toggle: nowrap default/overflow never reported"); return
-        }
         let noWrapGr = gitReview(noWrapState)
         XCTAssertEqual(noWrapGr["diffWrap"] as? String, "nowrap",
                        "the configured git-review-diff-wrap default should be reported")
@@ -282,16 +298,16 @@ final class XttyGitReviewUITests: XCTestCase {
         XCTAssertTrue(toggle.waitForExistence(timeout: 10), "the wrap-toggle button should exist once a diff is shown")
         toggle.click()
 
-        let wrapState = StateDumpReader.waitForState(timeout: 10) {
+        guard let wrapState = StateDumpReader.waitForState(timeout: 10, where: {
             let gr = ($0["gitReview"] as? [String: Any]) ?? [:]
             return (gr["diffWrap"] as? String) == "wrap"
                 && (gr["diffFillsWidth"] as? Bool) == true
                 && (gr["diffContentOverflows"] as? Bool) == false
+        }) else {
+            attachScreenshot("wrap-toggle: real control never flipped diffWrap/geometry")
+            XCTFail("tapping the real wrap-toggle button should flip diffWrap and the rendered geometry"); return
         }
         StateDumpReader.attach(self, name: "git-review-wrap-wrap")
-        guard let wrapState else {
-            attachScreenshot("wrap-toggle: real control never flipped diffWrap/geometry"); return
-        }
         let wrapGr = gitReview(wrapState)
         XCTAssertEqual(wrapGr["diffWrap"] as? String, "wrap",
                        "tapping the real wrap-toggle button should flip the store's diffWrap")

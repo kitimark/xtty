@@ -123,6 +123,12 @@ public final class GitReviewStore {
     public func setDiffWrap(_ newWrap: GitDiffWrap) {
         guard newWrap != diffWrap else { return }
         diffWrap = newWrap
+        #if DEBUG
+        // Fable Pass C (round 2): without this, a dump could transiently pair
+        // the new mode with the previous mode's rendered geometry until the
+        // view's next measurement lands.
+        resetDiffLayoutGeometry()
+        #endif
         revision &+= 1
     }
 
@@ -156,10 +162,18 @@ public final class GitReviewStore {
            new.files.contains(where: { $0.path == sel }) {
             merged.selectedPath = sel
             merged.selectedDiff = nil  // stale; the runner reloads it
-            #if DEBUG
-            resetDiffLayoutGeometry()
-            #endif
         }
+        #if DEBUG
+        // Fable Pass C (round 2): reset whenever the selection's identity OR
+        // its diff went stale — the path changed (a fresh selection the
+        // runner supplied, or the selection dropping out because the file is
+        // no longer listed), or the SAME path's diff just went `nil` pending
+        // reload (the stale-preserve branch above).
+        if merged.selectedPath != snapshot.selectedPath
+            || (merged.selectedDiff == nil && snapshot.selectedDiff != nil) {
+            resetDiffLayoutGeometry()
+        }
+        #endif
         snapshot = merged
         refreshCount &+= 1
         revision &+= 1
@@ -181,6 +195,9 @@ public final class GitReviewStore {
     /// Reset to the empty (no-repo) state — e.g. on focus leaving a repo.
     public func clear() {
         snapshot = .empty
+        #if DEBUG
+        resetDiffLayoutGeometry()
+        #endif
         revision &+= 1
     }
 }

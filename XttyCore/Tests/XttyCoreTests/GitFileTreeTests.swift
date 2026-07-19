@@ -161,4 +161,36 @@ final class GitDiffWrapStoreTests: XCTestCase {
         XCTAssertFalse(store.diffFillsWidth)
         XCTAssertFalse(store.diffContentOverflows)
     }
+
+    /// Fable Pass C (round 2): `apply` only reset geometry on the
+    /// stale-preserved-selection branch; a snapshot that drops the selection
+    /// entirely (the file is no longer listed) left stale geometry paired
+    /// with no selection.
+    func testApplyResetsDiffLayoutGeometryWhenSelectionDrops() {
+        let store = GitReviewStore()
+        store.apply(GitReviewSnapshot(isRepo: true, files: [GitChangedFile(path: "a.txt", status: .modified)]))
+        store.select(path: "a.txt", diff: .binary)
+        store.setDiffLayoutGeometry(fillsWidth: true, overflows: true)
+        // a.txt is gone from the new file list — the selection drops.
+        store.apply(GitReviewSnapshot(isRepo: true, files: [GitChangedFile(path: "b.txt", status: .modified)]))
+        XCTAssertNil(store.snapshot.selectedPath)
+        XCTAssertFalse(store.diffFillsWidth)
+        XCTAssertFalse(store.diffContentOverflows)
+    }
+
+    func testClearResetsDiffLayoutGeometry() {
+        let store = GitReviewStore()
+        store.setDiffLayoutGeometry(fillsWidth: true, overflows: true)
+        store.clear()
+        XCTAssertFalse(store.diffFillsWidth)
+        XCTAssertFalse(store.diffContentOverflows)
+    }
+
+    func testSetDiffWrapResetsDiffLayoutGeometry() {
+        let store = GitReviewStore()
+        store.setDiffLayoutGeometry(fillsWidth: true, overflows: true)
+        store.setDiffWrap(.noWrap)
+        XCTAssertFalse(store.diffFillsWidth)
+        XCTAssertFalse(store.diffContentOverflows)
+    }
 }
