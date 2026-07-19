@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Non-vacuous fail-closed drills for the two cross-review deterministic scripts
-# (tasks 3.7/19 + the 12c semver check). Builds a throwaway git repo and runs the
-# REAL committed scripts against constructed scenarios. Prints PASS/FAIL per drill.
+# (tasks 3.7/19 + the 12c semver check; emit-attestation-line's --line emitter,
+# its TTY-gated stderr, and its trailing-arg rejection). Builds a throwaway git
+# repo and runs the REAL committed scripts against constructed scenarios. Prints
+# PASS/FAIL per drill.
 set -uo pipefail
 
 # resolve the committed scripts relative to THIS harness (it lives alongside them
@@ -60,6 +62,38 @@ mk openspec/changes/dig/cross-review-ledger.md "advisory findings, dismissals, r
 git add -A; git commit -qm "docs: attest + ledger (bookkeeping only)"
 D2="$("$DIGEST" dig)"
 [ "$D1" = "$D2" ] && ok "digest INVARIANT to tick+attestation+ledger" || bad "digest changed under bookkeeping ($D1 vs $D2)"
+
+echo "== Scenario I (emit-attestation-line): --line matches independently-known ground truth, mutates nothing =="
+# ground truth for base/head, derived independently of BOTH cross-review scripts (raw git only)
+EXPECTED_B="$(git rev-parse "$(git log --diff-filter=A --format=%H -- openspec/changes/dig/proposal.md | tail -1)^")"
+EXPECTED_HEAD="$(git rev-parse HEAD)"
+LINE_OUT="$("$DIGEST" --line dig)"; rc=$?
+[ $rc -eq 0 ] && ok "--line exits 0" || bad "--line expected rc=0, got $rc"
+LINE_COUNT="$(printf '%s\n' "$LINE_OUT" | wc -l | tr -d ' ')"
+[ "$LINE_COUNT" = "1" ] && ok "--line prints exactly one line to stdout" || bad "--line printed $LINE_COUNT lines"
+GOT_BASE="$(printf '%s\n' "$LINE_OUT" | sed -n 's/.*base=\([^ ]*\) .*/\1/p')"
+GOT_HEAD="$(printf '%s\n' "$LINE_OUT" | sed -n 's/.*head=\([^ ]*\) .*/\1/p')"
+GOT_DIGEST="$(printf '%s\n' "$LINE_OUT" | sed -n 's/.*digest=\([^ ]*\) .*/\1/p')"
+GOT_REVIEWED="$(printf '%s\n' "$LINE_OUT" | sed -n 's/.*reviewed=\([^ ]*\) .*/\1/p')"
+[ "$GOT_BASE" = "$EXPECTED_B" ] && ok "--line base= matches ground truth derived independently of both scripts" || bad "--line base=$GOT_BASE != expected $EXPECTED_B"
+[ "$GOT_HEAD" = "$EXPECTED_HEAD" ] && ok "--line head= matches git rev-parse HEAD" || bad "--line head=$GOT_HEAD != expected $EXPECTED_HEAD"
+[ "$GOT_DIGEST" = "$D1" ] && ok "--line digest= matches default-mode stdout digest" || bad "--line digest=$GOT_DIGEST != default $D1"
+case "$GOT_REVIEWED" in
+  [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ok "--line reviewed= is a YYYY-MM-DD date" ;;
+  *) bad "--line reviewed= not a date: $GOT_REVIEWED" ;;
+esac
+BEFORE_HEAD="$(git rev-parse HEAD)"; BEFORE_STATUS="$(git status --porcelain)"
+"$DIGEST" --line dig >/dev/null
+AFTER_HEAD="$(git rev-parse HEAD)"; AFTER_STATUS="$(git status --porcelain)"
+[ "$BEFORE_HEAD" = "$AFTER_HEAD" ] && [ "$BEFORE_STATUS" = "$AFTER_STATUS" ] && ok "--line makes no repository mutation" || bad "--line mutated repo state"
+
+echo "== Scenario J (emit-attestation-line): default mode's stderr line is TTY-gated (silent when non-interactive) =="
+OUT_ERR="$("$DIGEST" dig 2>&1 1>/dev/null)"
+[ -z "$OUT_ERR" ] && ok "default mode emits nothing on stderr when non-interactive" || bad "expected empty stderr, got: $OUT_ERR"
+
+echo "== Scenario K (emit-attestation-line): an unexpected trailing argument is rejected =="
+"$DIGEST" dig extra-garbage 2>/dev/null; rc=$?
+[ $rc -eq 2 ] && ok "trailing extra arg ⇒ refuse (rc=2)" || bad "trailing extra arg expected rc=2, got $rc"
 
 echo "== Scenario E: digest CHANGES when a reviewed artifact is edited =="
 mk openspec/changes/dig/design.md "how — MATERIALLY EDITED after attestation"; git add -A; git commit -qm "docs: edit reviewed design"
