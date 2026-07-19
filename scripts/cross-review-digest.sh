@@ -16,8 +16,16 @@
 #
 # REFUSES on a dirty tree/index (the attestation must bind a COMMITTED state).
 #
-# Usage:  scripts/cross-review-digest.sh <change-name>
-# Output: a 64-hex sha256 digest on stdout (and NOTHING else on stdout).
+# Usage:  scripts/cross-review-digest.sh [--line] <change-name>
+# Output: default — the 64-hex sha256 digest on stdout (and NOTHING else on
+#         stdout), then a label plus the ready-to-paste attestation line on
+#         stderr. --line — ONLY the ready-to-paste attestation line on stdout
+#         (for | pbcopy). Either way every field is derived, never authored:
+#         base/digest are already computed here, head is `git rev-parse HEAD`,
+#         reviewed is `date +%F`. Print-only convenience — this tool never
+#         writes the line into a task file, never ticks the attestation task,
+#         and never commits (openspec/changes/emit-attestation-line/design.md;
+#         the ADDED cross-model-review spec requirement of the same name).
 # Exit:   0 ok; 2 refuse (dirty tree, unresolved/omitted range, missing input).
 #
 # Deterministic; trust class of git/openspec (committed, human-reviewable). Keep
@@ -26,7 +34,13 @@ set -euo pipefail
 
 die() { echo "cross-review-digest: $*" >&2; exit 2; }
 
-CHANGE="${1:?usage: cross-review-digest.sh <change-name>}"
+LINE_ONLY=0
+if [ "${1:-}" = "--line" ]; then
+  LINE_ONLY=1
+  shift
+fi
+
+CHANGE="${1:?usage: cross-review-digest.sh [--line] <change-name>}"
 CHANGE_DIR="openspec/changes/$CHANGE"
 [ -d "$CHANGE_DIR" ] || die "no such change dir: $CHANGE_DIR"
 
@@ -70,4 +84,13 @@ digest_stream() {
   done < <(git diff --name-only "$B"..HEAD | LC_ALL=C sort)
 }
 
-digest_stream | shasum -a 256 | awk '{print $1}'
+DIGEST="$(digest_stream | shasum -a 256 | awk '{print $1}')"
+LINE="<!-- cross-review-attestation: base=$B head=$(git rev-parse HEAD) digest=$DIGEST reviewed=$(date +%F) -->"
+
+if [ "$LINE_ONLY" -eq 1 ]; then
+  echo "$LINE"
+else
+  echo "$DIGEST"
+  echo "reviewed-state digest computed — ready-to-paste attestation line (stderr, for copy):" >&2
+  echo "$LINE" >&2
+fi
