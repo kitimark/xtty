@@ -621,10 +621,13 @@ have masked.
 > both the routing (`diffWrap` flips) and the rendered layout-geometry
 > (`diffFillsWidth`/`diffContentOverflows`, including a short-line negative
 > control hardened across both review rounds) via the DEBUG state dump —
-> suite 55 → **56**. Tier-0 core count is `248/0/0` (`swift test`, confirmed
-> locally); a Tier-1 re-validation of the full local XCUITest suite after this
-> change's 2-round cross-review is in progress as of this note — see the
-> ledger for the full finding-by-finding disposition:
+> suite 55 → **56**. **MEASURED (2026-07-20, post cross-review): Tier-0
+> `248/0/0`, Tier-1 local `55/0/1` of 56** (the lone skip is the pre-existing
+> opt-in benchmark e2e) — the toggle test passed non-vacuously (0
+> capture-inactive markers in the run log; drove the real button and
+> captured 3 distinct DEBUG dump attachments), and all other
+> `XttyGitReviewUITests` (layout/emphasis/non-repo/lists-changed-files)
+> stayed green. See the ledger for the full finding-by-finding disposition:
 > `openspec/changes/add-git-diff-wrap-toggle/cross-review-ledger.md`. Round 1
 > fixed a tautological no-wrap overflow signal from a padding/floor ordering
 > bug and unified the DEBUG/Release layout paths; round 2 found and fixed a
