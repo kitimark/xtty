@@ -21,8 +21,8 @@ Cross-review's Pass C ("the diversity slice") is currently pinned to inline Opus
 
 ## Impact
 
-- `.claude/commands/xtty/cross-review.md` — Pass C's model pin (§2) and the added evaluation-method language.
+- `.claude/commands/xtty/cross-review.md` — Pass C's model pin everywhere it's named (the §2 Pass C bullet **and** the frontmatter `description` line — both currently say "inline Opus"; the frontmatter is also the text surfaced as the `/xtty:cross-review` skill-listing description) and the added evaluation-method language.
 - `openspec/specs/cross-model-review/spec.md` — one new **ADDED** requirement and its two scenarios (no existing requirement text is edited).
-- `AGENTS.md` — the open-changes tracker row for this change (added at propose time); its "Cross-model design review" summary sentence naming Pass C's model, updated alongside the command-file edit at apply time so the guide never describes a pin that no longer matches `cross-review.md`.
+- `AGENTS.md` — the open-changes tracker row for this change (already present); its "Cross-model design review" summary sentence naming Pass C's model, updated alongside the command-file edit at apply time so the guide never describes a pin that no longer matches `cross-review.md`.
 - No product code, no CI, no test-suite changes.
-- This change touches `.claude/commands/xtty/cross-review.md`, a path outside the docs/tracker allowlist, so it is classified **in scope** for cross-model review before archive (per `scripts/cross-review-scope.sh`) — its `tasks.md` carries the standard human-attestation cross-review task.
+- This change's task 1.1 will commit an edit to `.claude/commands/xtty/cross-review.md`, a path outside the docs/tracker allowlist — once that edit lands, the reviewed range will classify **in scope** for cross-model review before archive (per `scripts/cross-review-scope.sh`, whose verdict is retrospective and non-attributive: today, pre-implementation, it reports out-of-scope, meaning "not yet knowable to be in scope," not a settled verdict) — its `tasks.md` carries the standard human-attestation cross-review task.
