@@ -609,34 +609,40 @@ have masked.
 > **`add-git-diff-wrap-toggle` fixed the git-review diff's narrow-wrap bug and
 > added 1 test (suite 55 → 56).** The diff panel's unified diff now fills the
 > full ~280pt panel width in a configurable **wrap** (new default,
-> hang-indented continuation lines) / **no-wrap** (two-axis scroll, tint spans
-> full content width) mode, toggled by an in-panel button
+> hang-indented continuation lines) / **no-wrap** (two-axis scroll, every row
+> floored to a precomputed diff-wide content-width estimate so tints span the
+> full scroll width) mode, toggled by an in-panel button
 > (`gitReview.wrapToggle`) and set by a new `git-review-diff-wrap` config key.
-> `XttyCore`'s config-loader + `GitReviewStore` unit tests gained **8** (suite
-> 237 → **245**, the last 2 added by this change's own cross-review round 1 —
-> a selection-change geometry-reset guard); `testConfiguredNoWrapModeTogglesAndGeometryMatchesEachMode`
+> `XttyCore`'s config-loader + `GitReviewStore` unit tests gained **11** (suite
+> 237 → **248** — 6 for the config key/store mutator, 5 more from this
+> change's own bounded 2-round `/xtty:cross-review` closing geometry-reset
+> coverage gaps); `testConfiguredNoWrapModeTogglesAndGeometryMatchesEachMode`
 > (`XttyGitReviewUITests`) drives the **real** wrap-toggle button and asserts
 > both the routing (`diffWrap` flips) and the rendered layout-geometry
-> (`diffFillsWidth`/`diffContentOverflows`, including a short-line
-> negative control added in round 1) via the DEBUG state dump — suite
-> 55 → **56**. **MEASURED (2026-07-20): Tier-0 `243/0/0`, Tier-1 local `55/0/1`
-> of 56** (the lone skip is the opt-in benchmark e2e; pre-dates round 1's 2
-> additional core tests, not yet re-measured) — clean on a hands-off
-> confirmation run, after fixing an initial test-synchronization bug in the new
-> test's own wait predicate (it asserted on an async `onGeometryChange`-derived
-> field before waiting for it to land — the same "wait on the field you're
-> about to assert on" class already documented in this table). **This test is
-> in the same shell-arm class as its `XttyGitReviewUITests` siblings, NOT
-> shell-independent** (an earlier note here wrongly claimed the opposite,
-> caught by this change's own `/xtty:cross-review` Pass B): its repo/selection
-> setup depends on the injected shell reporting the live cwd via OSC 7 (zsh
-> only), so on the bash VM legs it degrades to the capability-absent crisp
-> negative like every other test in this file, never reaching the toggle or
-> geometry assertions there. **VM tiers (headless/graphics) not yet re-run for
-> this change**; treat the envelope above as local-confirmed only (zsh legs
-> expected to exercise the real assertions, bash legs expected to assert the
-> crisp negative per the Shell-arm row below) until a full-matrix run updates
-> this note.
+> (`diffFillsWidth`/`diffContentOverflows`, including a short-line negative
+> control hardened across both review rounds) via the DEBUG state dump —
+> suite 55 → **56**. Tier-0 core count is `248/0/0` (`swift test`, confirmed
+> locally); a Tier-1 re-validation of the full local XCUITest suite after this
+> change's 2-round cross-review is in progress as of this note — see the
+> ledger for the full finding-by-finding disposition:
+> `openspec/changes/add-git-diff-wrap-toggle/cross-review-ledger.md`. Round 1
+> fixed a tautological no-wrap overflow signal from a padding/floor ordering
+> bug and unified the DEBUG/Release layout paths; round 2 found and fixed a
+> more serious defect the round-1 fix itself introduced — a row-count cap that
+> silently dropped lines in no-wrap mode for diffs over 500 rows, replaced
+> with a laziness-preserving precomputed-width floor that never drops rows in
+> either mode.
+> **This test is in the same shell-arm class as its `XttyGitReviewUITests`
+> siblings, NOT shell-independent** (an earlier note here wrongly claimed the
+> opposite, caught by this change's own cross-review Pass B): its
+> repo/selection setup depends on the injected shell reporting the live cwd
+> via OSC 7 (zsh only), so on the bash VM legs it degrades to the
+> capability-absent crisp negative like every other test in this file, never
+> reaching the toggle or geometry assertions there. **VM tiers
+> (headless/graphics) not yet run for this change**; treat the envelope above
+> as local-confirmed only (zsh legs expected to exercise the real assertions,
+> bash legs expected to assert the crisp negative per the Shell-arm row below)
+> until a full-matrix run updates this note.
 
 ### Expected-difference matrix
 
