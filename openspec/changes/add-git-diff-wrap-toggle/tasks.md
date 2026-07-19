@@ -30,5 +30,9 @@
 
 ## 5. Land the change
 
-- [ ] 5.1 Pre-archive coherence review of the change against AGENTS.md's rulebook and live disk state. ⟶ xtty-openspec-critic (add-git-diff-wrap-toggle)
-- [ ] 5.2 Archive + reconcile: merge the spec deltas (`openspec archive`), finish the merge by hand, tick trackers (Current-status row + snapshot + HISTORY narrative + milestone), and verify-against-disk. ⟶ archive-ritual
+- [x] 5.1 Pre-archive coherence review of the change against AGENTS.md's rulebook and live disk state. ⟶ xtty-openspec-critic (add-git-diff-wrap-toggle) — verdict COHERENT; 3 findings (missing cross-review gate task — addressed by adding 5.2 below; AGENTS.md tracker drift owed to the archive-ritual step; implementation was uncommitted at review time — fixed in `e18e43d`)
+- [ ] 5.2 Human-attestation cross-review (this change touches `App/*.swift` and `XttyCore/*.swift`, paths outside the docs/tracker allowlist, so it is mechanically **in scope** per `scripts/cross-review-scope.sh`). Run `/xtty:cross-review add-git-diff-wrap-toggle`, read the complete ledger. Then, on a clean tree, from the repo root, run:
+  `scripts/cross-review-digest.sh --line add-git-diff-wrap-toggle | pbcopy`
+  Record the reviewed-state digest on a delimited attestation line. **Source the pasted line only from a command YOU ran yourself in your own terminal — a line visible in a model's transcript, or already sitting on a clipboard a model populated, is not attestable provenance.** **HUMAN-ONLY — the model MUST NOT tick this task or derive the attested value:**
+  `<!-- cross-review-attestation: base=<B> head=<HEAD> digest=<sha256> reviewed=<date> -->`
+- [ ] 5.3 Archive + reconcile: merge the spec deltas (`openspec archive`), finish the merge by hand, tick trackers (Current-status row + snapshot + HISTORY narrative + milestone), and verify-against-disk. ⟶ archive-ritual
