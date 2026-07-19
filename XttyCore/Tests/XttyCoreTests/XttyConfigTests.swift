@@ -341,6 +341,35 @@ final class XttyConfigTests: XCTestCase {
         XCTAssertTrue(warnings.contains { $0.contains("git-review-layout") })
     }
 
+    func testResolveSetParsesGitReviewDiffWrap() {
+        XCTAssertEqual(XttyConfigLoader.resolveSet(from: "git-review-diff-wrap = nowrap").gitDiffWrap, .noWrap)
+        XCTAssertEqual(XttyConfigLoader.resolveSet(from: "git-review-diff-wrap = wrap").gitDiffWrap, .wrap)
+        // Case-insensitive value (the key itself is already lowercased by parsing).
+        XCTAssertEqual(XttyConfigLoader.resolveSet(from: "git-review-diff-wrap = NOWRAP").gitDiffWrap, .noWrap)
+    }
+
+    func testResolveSetGitReviewDiffWrapDefaultsToWrap() {
+        XCTAssertEqual(XttyConfigLoader.resolveSet(from: "").gitDiffWrap, .wrap)
+    }
+
+    func testResolveSetInvalidGitReviewDiffWrapFallsBackAndWarns() {
+        var warnings: [String] = []
+        let set = XttyConfigLoader.resolveSet(from: "git-review-diff-wrap = maybe") { warnings.append($0) }
+        XCTAssertEqual(set.gitDiffWrap, .wrap)
+        XCTAssertTrue(warnings.contains { $0.contains("git-review-diff-wrap") })
+    }
+
+    func testResolveSetGitReviewDiffWrapInsideBlockIsIgnoredWithWarning() {
+        var warnings: [String] = []
+        let set = XttyConfigLoader.resolveSet(from: """
+        git-review-diff-wrap = nowrap
+        [profile "work"]
+        git-review-diff-wrap = wrap
+        """) { warnings.append($0) }
+        XCTAssertEqual(set.gitDiffWrap, .noWrap, "the base value wins; the profile copy is ignored")
+        XCTAssertTrue(warnings.contains { $0.contains("git-review-diff-wrap") })
+    }
+
     func testResolveSetRetiredRendererKeyIsIgnoredAsUnrecognized() {
         // The `renderer` key was retired with the Metal renderer option
         // (retire-metal-renderer). A legacy config carrying it falls under the

@@ -118,3 +118,22 @@ final class GitReviewLayoutStoreTests: XCTestCase {
         XCTAssertEqual(store.revision, before, "an unchanged layout must not bump revision")
     }
 }
+
+@MainActor
+final class GitDiffWrapStoreTests: XCTestCase {
+    func testSetDiffWrapFlipsAndBumpsRevision() {
+        let store = GitReviewStore()
+        XCTAssertEqual(store.diffWrap, .wrap)
+        let before = store.revision
+        store.setDiffWrap(.noWrap)
+        XCTAssertEqual(store.diffWrap, .noWrap)
+        XCTAssertEqual(store.revision, before + 1)
+    }
+
+    func testSetDiffWrapSameValueIsNoOp() {
+        let store = GitReviewStore()
+        let before = store.revision
+        store.setDiffWrap(.wrap)   // already wrap
+        XCTAssertEqual(store.revision, before, "an unchanged wrap mode must not bump revision")
+    }
+}

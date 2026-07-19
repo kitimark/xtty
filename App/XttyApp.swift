@@ -41,7 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
 
         let controller = TerminalWindowController(
             profile: configSet.defaultProfile, registry: registry, confirmClose: configSet.confirmClose,
-            gitReviewLayout: configSet.gitReviewLayout
+            gitReviewLayout: configSet.gitReviewLayout, gitDiffWrap: configSet.gitDiffWrap
         )
         controller.coordinator = self
         windowControllers.append(controller)
@@ -279,7 +279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
     private func makeWindow(profile: XttyProfile) -> TerminalWindowController {
         let controller = TerminalWindowController(
             profile: profile, registry: registry, confirmClose: configSet.confirmClose,
-            gitReviewLayout: configSet.gitReviewLayout
+            gitReviewLayout: configSet.gitReviewLayout, gitDiffWrap: configSet.gitDiffWrap
         )
         controller.coordinator = self
         windowControllers.append(controller)
@@ -421,7 +421,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowCoordinator {
         return XttyConfigSet(
             base: newBase, profiles: set.profiles,
             defaultProfileName: set.defaultProfileName, confirmClose: set.confirmClose,
-            gitReviewLayout: set.gitReviewLayout
+            gitReviewLayout: set.gitReviewLayout, gitDiffWrap: set.gitDiffWrap
         )
     }
     #endif

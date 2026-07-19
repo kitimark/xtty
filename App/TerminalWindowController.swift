@@ -88,6 +88,7 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
 
     init(profile: XttyProfile, registry: SessionRegistry, confirmClose: Bool = true,
          gitReviewLayout: GitReviewLayout = .flat,
+         gitDiffWrap: GitDiffWrap = .wrap,
          contentSize: NSSize = NSSize(width: 900, height: 560)) {
         self.registry = registry
         self.confirmCloseEnabled = confirmClose
@@ -128,6 +129,9 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
         // Seed the configured default list layout (the header toggle overrides it
         // per-window; not persisted back to config — like live font-size).
         gitReview.store.setLayout(gitReviewLayout)
+        // Seed the configured default diff wrap mode (the diff header's toggle
+        // overrides it per-window; not persisted back to config).
+        gitReview.store.setDiffWrap(gitDiffWrap)
         #if DEBUG
         // Harness: start with the panel open so the e2e can drive it without a
         // (flaky) menu click; the file-poll trigger then drives selection.
@@ -926,6 +930,9 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             "changedFiles": files,
             "refreshCount": store.refreshCount,
             "layout": store.layout.rawValue,
+            "diffWrap": store.diffWrap.rawValue,
+            "diffFillsWidth": store.diffFillsWidth,
+            "diffContentOverflows": store.diffContentOverflows,
         ]
         if let path = snap.selectedPath {
             var sel: [String: Any] = ["path": path]

@@ -131,7 +131,22 @@ struct GitReviewView: View {
 
             if let diff = snap.selectedDiff, let path = snap.selectedPath {
                 Divider()
-                DiffPane(path: path, diff: diff, onOpen: { onOpen(path) })
+                #if DEBUG
+                DiffPane(
+                    path: path, diff: diff, wrapMode: store.diffWrap,
+                    onOpen: { onOpen(path) },
+                    onToggleWrap: { store.setDiffWrap(store.diffWrap == .wrap ? .noWrap : .wrap) },
+                    onDiffLayoutGeometry: { fills, overflows in
+                        store.setDiffLayoutGeometry(fillsWidth: fills, overflows: overflows)
+                    }
+                )
+                #else
+                DiffPane(
+                    path: path, diff: diff, wrapMode: store.diffWrap,
+                    onOpen: { onOpen(path) },
+                    onToggleWrap: { store.setDiffWrap(store.diffWrap == .wrap ? .noWrap : .wrap) }
+                )
+                #endif
             }
         }
     }
@@ -259,13 +274,32 @@ struct GitFileTreeView: View {
     }
 }
 
-/// The read-only unified diff of the selected file: a header (path + open button)
-/// over the classified diff lines, with binary/truncation fallbacks.
+/// The read-only unified diff of the selected file: a header (path + wrap
+/// toggle + open button) over the classified diff lines, with binary/truncation
+/// fallbacks. Fills the full panel width in both line-wrap modes: **wrap**
+/// stays on a vertical-only scroll so `Text` wraps at a definite width;
+/// **no-wrap** keeps the two-axis scroll with each row sized to its own
+/// (unwrapped) content width, extending the panel's horizontal scroll.
 @MainActor
 struct DiffPane: View {
     let path: String
     let diff: FileDiff
+    let wrapMode: GitDiffWrap
     let onOpen: () -> Void
+    let onToggleWrap: () -> Void
+    #if DEBUG
+    /// DEBUG-only: reports the selected diff's rendered layout geometry
+    /// (fills-width, overflows-horizontally) so the harness state dump can
+    /// assert each wrap mode's actual rendered layout (design R5).
+    var onDiffLayoutGeometry: (Bool, Bool) -> Void = { _, _ in }
+    /// The last geometry measured for the viewport / scrollable content,
+    /// via `onGeometryChange` (a `.background(GeometryReader{...})` +
+    /// `PreferenceKey` did not reliably propagate live values through the
+    /// `ScrollView` in manual testing — `onGeometryChange` reads the resolved
+    /// layout directly and does not have that issue).
+    @State private var measuredViewportWidth: CGFloat = 0
+    @State private var measuredContentWidth: CGFloat = 0
+    #endif
 
     var body: some View {
         VStack(spacing: 0) {
@@ -273,6 +307,13 @@ struct DiffPane: View {
                 Text(path).font(.caption).lineLimit(1).truncationMode(.middle)
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 4)
+                Button(action: onToggleWrap) {
+                    Image(systemName: wrapMode == .wrap ? "arrow.turn.down.left" : "arrow.right")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.plain)
+                .help(wrapMode == .wrap ? "Disable line wrap" : "Enable line wrap")
+                .accessibilityIdentifier("gitReview.wrapToggle")
                 Button(action: onOpen) {
                     Image(systemName: "arrow.up.forward.app").font(.system(size: 11))
                 }
@@ -285,25 +326,91 @@ struct DiffPane: View {
             } else if diff.hunks.isEmpty {
                 centeredNote("No textual changes")
             } else {
-                ScrollView([.vertical, .horizontal]) {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(diff.hunks.enumerated()), id: \.offset) { _, hunk in
-                            DiffLineRow(line: DiffLine(kind: .hunkHeader, text: hunk.header))
-                            ForEach(Array(hunk.lines.enumerated()), id: \.offset) { _, line in
-                                DiffLineRow(line: line)
-                            }
-                        }
-                        if diff.truncated {
-                            Button("Diff truncated — open in editor", action: onOpen)
-                                .font(.caption).buttonStyle(.plain)
-                                .foregroundStyle(.secondary).padding(6)
-                        }
-                    }
-                    .padding(.vertical, 2)
-                }
+                diffScroll
             }
         }
         .frame(maxHeight: .infinity)
+    }
+
+    /// The scrollable diff content. **Wrap**: vertical-only, so the enclosing
+    /// width is definite and rows (`.frame(maxWidth: .infinity)`) actually wrap.
+    /// **No-wrap**: the two-axis scroll from before, but rows now carry their
+    /// own single-line content width (see `DiffLineRow`) instead of a flexible
+    /// `maxWidth: .infinity` fighting a non-wrapping `Text` (the original bug).
+    @ViewBuilder
+    private var diffScroll: some View {
+        #if DEBUG
+        ScrollView(wrapMode == .wrap ? [.vertical] : [.vertical, .horizontal]) {
+            diffLines(viewportWidth: measuredViewportWidth)
+                .padding(.vertical, 2)
+                .measuringWidth { newWidth in
+                    measuredContentWidth = newWidth
+                    publishDiffLayoutGeometry()
+                }
+        }
+        .measuringWidth { newWidth in
+            measuredViewportWidth = newWidth
+            publishDiffLayoutGeometry()
+        }
+        #else
+        GeometryReader { outerGeo in
+            ScrollView(wrapMode == .wrap ? [.vertical] : [.vertical, .horizontal]) {
+                diffLines(viewportWidth: outerGeo.size.width)
+                    .padding(.vertical, 2)
+            }
+        }
+        #endif
+    }
+
+    #if DEBUG
+    /// Re-derive and publish the fills-width/overflows signals whenever either
+    /// measurement updates (design R5: equality-gated by the store, so an
+    /// unchanged pair of booleans is a no-op there).
+    private func publishDiffLayoutGeometry() {
+        guard measuredViewportWidth > 0 else { return }
+        let tolerance: CGFloat = 1
+        onDiffLayoutGeometry(
+            measuredContentWidth >= measuredViewportWidth - tolerance,
+            measuredContentWidth > measuredViewportWidth + tolerance
+        )
+    }
+    #endif
+
+    /// The diff's hunk headers + lines. **Wrap** uses a `LazyVStack` (every row
+    /// is bounded-width, so laziness is safe). **No-wrap** uses an eager
+    /// `VStack`: a `LazyVStack` only measures on-screen rows, so it can't know
+    /// an off-screen line's true (unwrapped) width — the horizontal scroll
+    /// extent would be wrong until that row scrolled into view. The eager
+    /// `VStack` is an accepted fallback for no-wrap only (design R1), bounded by
+    /// the existing per-file 5000-line cap.
+    @ViewBuilder
+    private func diffLines(viewportWidth: CGFloat) -> some View {
+        switch wrapMode {
+        case .wrap:
+            LazyVStack(alignment: .leading, spacing: 0) {
+                diffRows(viewportWidth: viewportWidth)
+            }
+        case .noWrap:
+            VStack(alignment: .leading, spacing: 0) {
+                diffRows(viewportWidth: viewportWidth)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func diffRows(viewportWidth: CGFloat) -> some View {
+        ForEach(Array(diff.hunks.enumerated()), id: \.offset) { _, hunk in
+            DiffLineRow(line: DiffLine(kind: .hunkHeader, text: hunk.header),
+                        wrapMode: wrapMode, viewportWidth: viewportWidth)
+            ForEach(Array(hunk.lines.enumerated()), id: \.offset) { _, line in
+                DiffLineRow(line: line, wrapMode: wrapMode, viewportWidth: viewportWidth)
+            }
+        }
+        if diff.truncated {
+            Button("Diff truncated — open in editor", action: onOpen)
+                .font(.caption).buttonStyle(.plain)
+                .foregroundStyle(.secondary).padding(6)
+        }
     }
 
     private func centeredNote(_ text: String) -> some View {
@@ -312,17 +419,50 @@ struct DiffPane: View {
     }
 }
 
-/// One diff line, monospaced and tinted by kind.
+#if DEBUG
+private extension View {
+    /// DEBUG-only: reports this view's resolved width via `onGeometryChange`
+    /// (macOS 15+; a no-op sizing-observer on older systems — the harness runs
+    /// on modern macOS only). Used to compare the diff's viewport width against
+    /// its scrollable content width, deriving the fills-width/overflows
+    /// layout-geometry signals (design R5).
+    @ViewBuilder
+    func measuringWidth(_ onChange: @escaping (CGFloat) -> Void) -> some View {
+        if #available(macOS 15, *) {
+            onGeometryChange(for: CGFloat.self, of: { $0.size.width }, action: onChange)
+        } else {
+            self
+        }
+    }
+}
+#endif
+
+/// One diff line, monospaced and tinted by kind. `wrapMode` selects the outer
+/// sizing: **wrap** stretches to the panel width and wraps; **no-wrap** takes
+/// its own single-line content width (floored to `viewportWidth` so a short
+/// line's tint still fills the panel) and never wraps.
 @MainActor
 struct DiffLineRow: View {
     let line: DiffLine
+    let wrapMode: GitDiffWrap
+    /// The panel's content viewport width — used in **no-wrap** mode only.
+    var viewportWidth: CGFloat = 0
 
     var body: some View {
-        rowContent
-            .font(.system(size: 11, design: .monospaced))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 8)
-            .background(background)
+        Group {
+            if wrapMode == .wrap {
+                rowContent
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                rowContent
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(minWidth: viewportWidth, alignment: .leading)
+            }
+        }
+        .font(.system(size: 11, design: .monospaced))
+        .padding(.horizontal, 8)
+        .background(background)
     }
 
     /// Content/added/removed lines split the leading `+`/`-`/space marker into its

@@ -606,6 +606,29 @@ have masked.
 > `smooth-scroll-wheel-momentum`'s own in-flight territory. Evidence:
 > `~/Downloads/xtty-vm-poc/artifacts/2026-07-10-fix-scroll-reversal-redraw-corruption/`.
 
+> **`add-git-diff-wrap-toggle` fixed the git-review diff's narrow-wrap bug and
+> added 1 test (suite 55 → 56).** The diff panel's unified diff now fills the
+> full ~280pt panel width in a configurable **wrap** (new default,
+> hang-indented continuation lines) / **no-wrap** (two-axis scroll, tint spans
+> full content width) mode, toggled by an in-panel button
+> (`gitReview.wrapToggle`) and set by a new `git-review-diff-wrap` config key.
+> `XttyCore`'s config-loader + `GitReviewStore` unit tests gained **6** (suite
+> 237 → **243**); `testConfiguredNoWrapModeTogglesAndGeometryMatchesEachMode`
+> (`XttyGitReviewUITests`) drives the **real** wrap-toggle button and asserts
+> both the routing (`diffWrap` flips) and the rendered layout-geometry
+> (`diffFillsWidth`/`diffContentOverflows`) via the DEBUG state dump — suite
+> 55 → **56**. **MEASURED (2026-07-20): Tier-0 `243/0/0`, Tier-1 local `55/0/1`
+> of 56** (the lone skip is the opt-in benchmark e2e) — clean on a hands-off
+> confirmation run, after fixing an initial test-synchronization bug in the new
+> test's own wait predicate (it asserted on an async `onGeometryChange`-derived
+> field before waiting for it to land — the same "wait on the field you're
+> about to assert on" class already documented in this table). **VM tiers
+> (headless/graphics) not yet re-run for this change** — the new test is
+> shell-independent (config-seeded + real-button-driven, no shell-integration
+> dependency), so it is expected to hold across all 5 environments, but that is
+> not yet measured; treat the envelope above as local-confirmed only until a
+> full-matrix run updates this note.
+
 ### Expected-difference matrix
 
 Differences between environments are not automatically bugs. This table

@@ -183,6 +183,101 @@ final class XttyGitReviewUITests: XCTestCase {
         XCTAssertNotNil(state, "git-review-layout = tree should be reported as the tree layout in the dump")
     }
 
+    /// add-git-diff-wrap-toggle D5: the configured `git-review-diff-wrap`
+    /// default is reported, the **real** `gitReview.wrapToggle` button flips it
+    /// (button→`setDiffWrap` wiring, not a DEBUG hook), and the DEBUG diff
+    /// layout-geometry signals confirm each mode's actual rendered layout for a
+    /// diff line longer than the panel (catches a width-collapse regression).
+    func testConfiguredNoWrapModeTogglesAndGeometryMatchesEachMode() {
+        let tmp = NSTemporaryDirectory()
+        let selectPath = (tmp as NSString).appendingPathComponent("xtty-git-wrap-\(UUID().uuidString)")
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: selectPath) }
+
+        let app = launchConfigured(
+            config: "git-review-diff-wrap = nowrap",
+            extraEnv: ["XTTY_TEST_GIT_SELECT": selectPath],
+            extraArgs: ["-UITestGitReview"]
+        )
+        guard StateDumpReader.waitForState(timeout: 10) != nil else {
+            attachScreenshot("no-state-dump (Release?)"); return
+        }
+        _ = GridDumpReader.waitForNonEmpty(timeout: 5)
+        type("true", into: app)
+        guard waitForCaptureActive(timeout: 8) else {
+            // Capability-absent arm: no OSC 7 cwd → the panel never surfaces the repo —
+            // assert the crisp negative rather than passing vacuously (D4).
+            assertSemanticCaptureInactive("git-review-wrap"); return
+        }
+
+        // A tracked file whose one changed line is far longer than the ~280pt
+        // panel, so wrap/no-wrap produce visibly different (assertable) geometry.
+        let dir = "xtty-wraptest-\(UUID().uuidString.prefix(8))"
+        let longLine = "This line is deliberately padded with a lot of extra words so it " +
+            "definitely overflows a two hundred eighty point wide git-review panel column."
+        type("cd ~ && rm -rf \(dir) && mkdir \(dir) && cd \(dir) && git init -q && " +
+             "printf 'short\\n' > long.txt && git add long.txt && " +
+             "git -c user.email=t@e -c user.name=t commit -qm init && " +
+             "printf '\(longLine)\\n' > long.txt && true",
+             into: app)
+
+        guard StateDumpReader.waitForState(timeout: 20, where: {
+            let gr = ($0["gitReview"] as? [String: Any]) ?? [:]
+            let files = (gr["changedFiles"] as? [[String: Any]]) ?? []
+            return (gr["isRepo"] as? Bool) == true
+                && files.contains { ($0["path"] as? String) == "long.txt" }
+        }) != nil else {
+            attachScreenshot("wrap-toggle: repo never surfaced"); return
+        }
+
+        // Select long.txt → the configured `nowrap` default should be reported,
+        // and the long line should overflow the panel horizontally. The geometry
+        // signal lands on a later async SwiftUI layout pass than `selectedDiff`/
+        // `diffWrap` (`onGeometryChange`), so wait on the field being asserted —
+        // not an earlier-arriving one — or a stale (still-default) dump can pass
+        // the predicate before the real measurement lands.
+        try? "long.txt".write(toFile: selectPath, atomically: true, encoding: .utf8)
+        let noWrapState = StateDumpReader.waitForState(timeout: 10) {
+            let gr = ($0["gitReview"] as? [String: Any]) ?? [:]
+            let sel = gr["selectedDiff"] as? [String: Any]
+            return (sel?["path"] as? String) == "long.txt"
+                && (gr["diffWrap"] as? String) == "nowrap"
+                && (gr["diffContentOverflows"] as? Bool) == true
+        }
+        StateDumpReader.attach(self, name: "git-review-wrap-nowrap")
+        guard let noWrapState else {
+            attachScreenshot("wrap-toggle: nowrap default/overflow never reported"); return
+        }
+        let noWrapGr = gitReview(noWrapState)
+        XCTAssertEqual(noWrapGr["diffWrap"] as? String, "nowrap",
+                       "the configured git-review-diff-wrap default should be reported")
+        XCTAssertEqual(noWrapGr["diffContentOverflows"] as? Bool, true,
+                       "no-wrap with a line longer than the panel should overflow horizontally")
+
+        // Drive the REAL in-panel control (not a debug hook) — proves the
+        // button→setDiffWrap wiring end-to-end.
+        let toggle = app.buttons["gitReview.wrapToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10), "the wrap-toggle button should exist once a diff is shown")
+        toggle.click()
+
+        let wrapState = StateDumpReader.waitForState(timeout: 10) {
+            let gr = ($0["gitReview"] as? [String: Any]) ?? [:]
+            return (gr["diffWrap"] as? String) == "wrap"
+                && (gr["diffFillsWidth"] as? Bool) == true
+                && (gr["diffContentOverflows"] as? Bool) == false
+        }
+        StateDumpReader.attach(self, name: "git-review-wrap-wrap")
+        guard let wrapState else {
+            attachScreenshot("wrap-toggle: real control never flipped diffWrap/geometry"); return
+        }
+        let wrapGr = gitReview(wrapState)
+        XCTAssertEqual(wrapGr["diffWrap"] as? String, "wrap",
+                       "tapping the real wrap-toggle button should flip the store's diffWrap")
+        XCTAssertEqual(wrapGr["diffFillsWidth"] as? Bool, true,
+                       "wrap mode should fill the panel width for the long line")
+        XCTAssertEqual(wrapGr["diffContentOverflows"] as? Bool, false,
+                       "wrap mode should not need horizontal scroll")
+    }
+
     func testNonRepositoryShowsEmptyState() {
         let app = launchConfigured(config: "", extraArgs: ["-UITestGitReview"])
         guard StateDumpReader.waitForState(timeout: 10) != nil else {

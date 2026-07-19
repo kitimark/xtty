@@ -10,6 +10,15 @@ public enum GitReviewLayout: String, Equatable, Sendable, CaseIterable {
     case tree
 }
 
+/// The git-review panel's diff line-wrap mode: `wrap` folds a long diff line
+/// onto hang-indented continuation rows within the panel width; `noWrap` keeps
+/// each line on one row and scrolls the panel horizontally. Presentation only
+/// (the diff parser/hunk model are unchanged); mirrors `GitReviewLayout`'s shape.
+public enum GitDiffWrap: String, Equatable, Sendable, CaseIterable {
+    case wrap
+    case noWrap = "nowrap"
+}
+
 /// A cached, toolkit-independent snapshot of a session's git-review state — what
 /// the panel renders and what the DEBUG harness dumps. Computed off the main
 /// thread by the app's git runner and published into `GitReviewStore`.
@@ -83,6 +92,21 @@ public final class GitReviewStore {
     /// per-window UI preference, seeded from config and flipped by the panel's
     /// header toggle; not persisted back to the config file.
     public private(set) var layout: GitReviewLayout = .flat
+    /// The active diff line-wrap mode. A per-window UI preference, seeded from
+    /// config and flipped by the diff header's wrap-toggle button; not persisted
+    /// back to the config file.
+    public private(set) var diffWrap: GitDiffWrap = .wrap
+
+    #if DEBUG
+    /// DEBUG-only diff layout-geometry signals for the selected diff, fed by a
+    /// `GeometryReader` in the panel view: whether the diff content fills the
+    /// panel width, and whether it overflows the panel horizontally. Read only
+    /// by the harness state dump — deliberately **not** wired into `revision`
+    /// (design R5: the feedback must not drive the render).
+    public private(set) var diffFillsWidth: Bool = false
+    /// See `diffFillsWidth`.
+    public private(set) var diffContentOverflows: Bool = false
+    #endif
 
     public init() {}
 
@@ -93,6 +117,26 @@ public final class GitReviewStore {
         layout = newLayout
         revision &+= 1
     }
+
+    /// Switch the diff wrap mode (no-op when unchanged); bumps `revision` so the
+    /// panel re-renders.
+    public func setDiffWrap(_ newWrap: GitDiffWrap) {
+        guard newWrap != diffWrap else { return }
+        diffWrap = newWrap
+        revision &+= 1
+    }
+
+    #if DEBUG
+    /// Publish the selected diff's rendered layout-geometry signals. Equality-
+    /// gated (a no-op when both values are unchanged) so identical measurements
+    /// from repeated layout passes never re-publish; intentionally does **not**
+    /// bump `revision` (design R5).
+    public func setDiffLayoutGeometry(fillsWidth: Bool, overflows: Bool) {
+        guard fillsWidth != diffFillsWidth || overflows != diffContentOverflows else { return }
+        diffFillsWidth = fillsWidth
+        diffContentOverflows = overflows
+    }
+    #endif
 
     /// Publish a freshly computed snapshot (preserving an in-range selection).
     public func apply(_ new: GitReviewSnapshot) {
