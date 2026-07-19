@@ -7,8 +7,9 @@
 ## 2. Pre-archive review
 
 - [x] 2.1 Pre-archive coherence review ⟶ xtty-openspec-critic (pin-cross-review-pass-c-fable)
-- [ ] 2.2 Human-attestation cross-review (this change will be mechanically **in scope** once task 1.1 lands — it commits `.claude/commands/xtty/cross-review.md`, a path outside the docs/tracker allowlist; at propose time the classifier reads exit 0, per `scripts/cross-review-scope.sh`). Run `/xtty:cross-review pin-cross-review-pass-c-fable`, read the complete ledger, run `scripts/cross-review-digest.sh pin-cross-review-pass-c-fable`, and record the reviewed-state digest on a delimited attestation line. **HUMAN-ONLY — the model MUST NOT tick this task or derive the attested value:**
+- [x] 2.2 Human-attestation cross-review (this change will be mechanically **in scope** once task 1.1 lands — it commits `.claude/commands/xtty/cross-review.md`, a path outside the docs/tracker allowlist; at propose time the classifier reads exit 0, per `scripts/cross-review-scope.sh`). Run `/xtty:cross-review pin-cross-review-pass-c-fable`, read the complete ledger, run `scripts/cross-review-digest.sh pin-cross-review-pass-c-fable`, and record the reviewed-state digest on a delimited attestation line. **HUMAN-ONLY — the model MUST NOT tick this task or derive the attested value:**
   `<!-- cross-review-attestation: base=<B> head=<HEAD> digest=<sha256> reviewed=<date> -->`
+<!-- cross-review-attestation: base=8dc589daa1384fb73d0a82fe119453ff03f927c5 head=6398208a012666eca6d2f3e13ebbde55d74a37ea digest=2d5fdf015a3014a06e2c4532d1200f864f913d8ba751d8bfbcfa849712f68f78 reviewed=2026-07-19 -->
 
 ## 3. Archive
 
