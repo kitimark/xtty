@@ -87,9 +87,9 @@ BEFORE_HEAD="$(git rev-parse HEAD)"; BEFORE_STATUS="$(git status --porcelain)"
 AFTER_HEAD="$(git rev-parse HEAD)"; AFTER_STATUS="$(git status --porcelain)"
 [ "$BEFORE_HEAD" = "$AFTER_HEAD" ] && [ "$BEFORE_STATUS" = "$AFTER_STATUS" ] && ok "--line makes no repository mutation" || bad "--line mutated repo state"
 
-echo "== Scenario J (emit-attestation-line): default mode's stderr line is TTY-gated (silent when non-interactive) =="
+echo "== Scenario J (emit-attestation-line): default mode NEVER emits anything on stderr (a TTY-gated variant was tried and rejected — see design.md) =="
 OUT_ERR="$("$DIGEST" dig 2>&1 1>/dev/null)"
-[ -z "$OUT_ERR" ] && ok "default mode emits nothing on stderr when non-interactive" || bad "expected empty stderr, got: $OUT_ERR"
+[ -z "$OUT_ERR" ] && ok "default mode emits nothing on stderr" || bad "expected empty stderr, got: $OUT_ERR"
 
 echo "== Scenario K (emit-attestation-line): an unexpected trailing argument is rejected =="
 "$DIGEST" dig extra-garbage 2>/dev/null; rc=$?

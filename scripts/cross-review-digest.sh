@@ -17,25 +17,28 @@
 # REFUSES on a dirty tree/index (the attestation must bind a COMMITTED state).
 #
 # Usage:  scripts/cross-review-digest.sh [--line] <change-name>
-# Output: default — the 64-hex sha256 digest on stdout (and NOTHING else on
-#         stdout); if stderr is an interactive terminal (`[ -t 2 ]`), ALSO a
-#         label plus the ready-to-paste attestation line on stderr — gated on
-#         a TTY so a routine tool/model invocation (stderr captured, not a
-#         terminal) never surfaces the line unasked. --line — ONLY the
-#         ready-to-paste attestation line on stdout (for | pbcopy), regardless
-#         of TTY. Either way every field is derived, never authored: base and
-#         the digest are already computed here; head and the reviewed date are
-#         each resolved once and reused for both the digest traversal and the
-#         emitted line, with a re-check that HEAD/cleanliness didn't move
-#         mid-computation. Print-only convenience — this tool never writes the
-#         line into a task file, never ticks the attestation task, and never
-#         commits (openspec/changes/emit-attestation-line/design.md; the ADDED
+# Output: default — ONLY the 64-hex sha256 digest on stdout, exactly as before
+#         this tool grew a --line mode (no stderr emission of any kind on the
+#         default path — an earlier TTY-gated variant was tried and rejected:
+#         `[ -t 2 ]` detects a terminal transport, not a human actor, and a
+#         PTY-wrapped invocation (script(1), an agent runner, tmux) defeats it,
+#         so the only reliable boundary is to never emit the line unasked).
+#         --line — ONLY the ready-to-paste attestation line on stdout (for
+#         | pbcopy); this is the sole way to obtain it. Every field is
+#         derived, never authored: base and the digest are already computed
+#         here; head and the reviewed date are each resolved once and reused
+#         for both the digest traversal and the emitted line, with a re-check
+#         that HEAD/cleanliness didn't move mid-computation. Print-only
+#         convenience — this tool never writes the line into a task file,
+#         never ticks the attestation task, and never commits
+#         (openspec/changes/emit-attestation-line/design.md; the ADDED
 #         cross-model-review spec requirement of the same name). Source a
 #         pasted line only from a command YOU ran yourself in your own
 #         terminal — one sitting in a model's transcript or already on the
 #         clipboard is not attestable provenance.
 # Exit:   0 ok; 2 refuse (dirty tree, unresolved/omitted range, missing input,
-#         extra positional args, or a HEAD/cleanliness change mid-computation).
+#         extra positional args, a HEAD/cleanliness change mid-computation, or
+#         a `git diff`/`git status` operational failure).
 #
 # Deterministic; trust class of git/openspec (committed, human-reviewable). Keep
 # the base-resolution block byte-identical with scripts/cross-review-scope.sh.
@@ -56,7 +59,11 @@ CHANGE_DIR="openspec/changes/$CHANGE"
 [ -d "$CHANGE_DIR" ] || die "no such change dir: $CHANGE_DIR"
 
 # refuse on a dirty tree/index/untracked — the attestation binds a COMMITTED state
-clean_tree() { [ -z "$(git status --porcelain)" ]; }
+clean_tree() {
+  local out
+  out="$(git status --porcelain)" || return 1
+  [ -z "$out" ]
+}
 clean_tree || die "working tree is dirty — commit or stash before computing the reviewed-state digest"
 
 # pin ONE HEAD OID for the whole run — the digest traversal and the emitted
@@ -84,10 +91,16 @@ normalize_tasks() {
 }
 
 digest_stream() {
-  # deterministic: C-sorted path list; each path (NUL-framed) followed by its
+  # deterministic: C-sorted path list, captured and exit-checked BEFORE the
+  # loop rather than piped in via process substitution — a process
+  # substitution's producer exit status is not propagated to the consuming
+  # loop, so a failing `git diff` could otherwise silently drive zero
+  # iterations and let an empty-input digest exit 0, as if there were no
+  # reviewed content at all. Each path (NUL-framed) is followed by its
   # pinned-HEAD content — the ledger excluded entirely, tasks.md normalized,
   # a deleted path a marker.
-  while IFS= read -r p; do
+  paths="$(git diff --name-only "$B".."$HEAD_SHA")" || die "git diff failed to enumerate the reviewed range"
+  printf '%s\n' "$paths" | LC_ALL=C sort | while IFS= read -r p; do
     [ -z "$p" ] && continue
     [ "$p" = "$LEDGER" ] && continue
     printf '\0PATH\0%s\0' "$p"
@@ -97,7 +110,7 @@ digest_stream() {
     else
       printf 'DELETED'
     fi
-  done < <(git diff --name-only "$B".."$HEAD_SHA" | LC_ALL=C sort)
+  done
 }
 
 DIGEST="$(digest_stream | shasum -a 256 | awk '{print $1}')"
@@ -115,8 +128,4 @@ if [ "$LINE_ONLY" -eq 1 ]; then
   echo "$LINE"
 else
   echo "$DIGEST"
-  if [ -t 2 ]; then
-    echo "reviewed-state digest computed — ready-to-paste attestation line (stderr, for copy):" >&2
-    echo "$LINE" >&2
-  fi
 fi
