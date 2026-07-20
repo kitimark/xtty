@@ -31,8 +31,9 @@
 ## 5. Land the change
 
 - [x] 5.1 Pre-archive coherence review of the change against AGENTS.md's rulebook and live disk state. ⟶ xtty-openspec-critic (add-git-diff-wrap-toggle) — verdict COHERENT; 3 findings (missing cross-review gate task — addressed by adding 5.2 below; AGENTS.md tracker drift owed to the archive-ritual step; implementation was uncommitted at review time — fixed in `e18e43d`)
-- [ ] 5.2 Human-attestation cross-review (this change touches `App/*.swift` and `XttyCore/*.swift`, paths outside the docs/tracker allowlist, so it is mechanically **in scope** per `scripts/cross-review-scope.sh`). Run `/xtty:cross-review add-git-diff-wrap-toggle`, read the complete ledger. Then, on a clean tree, from the repo root, run:
+- [x] 5.2 Human-attestation cross-review (this change touches `App/*.swift` and `XttyCore/*.swift`, paths outside the docs/tracker allowlist, so it is mechanically **in scope** per `scripts/cross-review-scope.sh`). Run `/xtty:cross-review add-git-diff-wrap-toggle`, read the complete ledger. Then, on a clean tree, from the repo root, run:
   `scripts/cross-review-digest.sh --line add-git-diff-wrap-toggle | pbcopy`
   Record the reviewed-state digest on a delimited attestation line. **Source the pasted line only from a command YOU ran yourself in your own terminal — a line visible in a model's transcript, or already sitting on a clipboard a model populated, is not attestable provenance.** **HUMAN-ONLY — the model MUST NOT tick this task or derive the attested value:**
   `<!-- cross-review-attestation: base=<B> head=<HEAD> digest=<sha256> reviewed=<date> -->`
+<!-- cross-review-attestation: base=0ba5056f26a0277d8689942203e8c53e5023bbcc head=5f89da9531225c7b15c791e4082bec017350a7e1 digest=18026a8a741747fe489d289973358196e9814d215f3ebc7dd2c025151c58d444 reviewed=2026-07-20 -->
 - [ ] 5.3 Archive + reconcile: merge the spec deltas (`openspec archive`), finish the merge by hand, tick trackers (Current-status row + snapshot + HISTORY narrative + milestone), and verify-against-disk. ⟶ archive-ritual
