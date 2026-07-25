@@ -155,7 +155,7 @@ explore ──▶ propose ──▶ apply ──▶ archive
 - `/opsx:propose <name>` — create a change and generate all artifacts (`proposal.md` → `design.md` + `specs/` → `tasks.md`).
 - `/opsx:apply` — implement a proposed change by walking its `tasks.md` checkboxes. This is where real code gets written.
 
-**Underlying CLI** (`openspec`, v1.4.x):
+**Underlying CLI** (`openspec`, v1.6.x):
 - `openspec list` — active changes · `openspec list --specs` — established specs
 - `openspec new change "<name>"` — scaffold a change
 - `openspec status --change "<name>" [--json]` — artifact build order & paths
