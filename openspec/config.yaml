@@ -8,8 +8,8 @@ context: |
 
   Stack (primary, "All-Swift"):
     - UI/chrome: Swift + SwiftUI/AppKit
-    - Renderer: custom Metal view (MTKView/CAMetalLayer), CoreText glyph atlas,
-      dedicated render thread, latency-first (frame pacing > throughput)
+    - Renderer: SwiftTerm's CoreGraphics renderer (Metal researched, then
+      skipped by the closed P7b gate — worse p99 tail, more memory, no median win)
     - VT engine: reuse SwiftTerm's headless Terminal core (parser + grid)
     - PTY: Darwin posix_openpt/forkpty + kqueue read/write loop
     - Shell integration: OSC 7 (cwd) + OSC 133 (command boundaries) capture
