@@ -83,13 +83,28 @@ into the submodule's own nested content diff instead of the safe one-line
 `Subproject commit <old>..<new>` summary, defeating the "this preview shows
 exactly one file's own diff" scope assumption the bounded producer relies on.
 `--submodule=short` restores Git's own default and is a no-op for a repository
-that never sets `diff.submodule`. A real-Git fixture
+that never sets `diff.submodule`.
+
+**Round-2 correction:** round 1's real-Git fixture
 ([`submodule-diff-recursion-probe.sh`](../artifacts/large-diff-memory/submodule-diff-recursion-probe.sh))
-confirms the recursion and its fix on Git 2.53; that same fixture did **not**
-reproduce a configured `textconv` driver executing during the recursed nested
-diff on this Git version — the recursion itself, not a textconv escape, is the
-confirmed effect. `--submodule=short` closes the recursion regardless, so no
-further textconv-specific mitigation is needed here.
+configured its `textconv` driver in the *origin* submodule repo, before `git
+submodule add` cloned it — `git clone` never copies local repo config, only
+tracked files, so the recursed nested diff ran in a checkout whose `diff=xtty`
+attribute pointed at an unconfigured driver, making the sentinel's absence
+provable but meaningless. Round 2 (both the Codex and Fable cross-review
+passes independently found this) corrected the fixture to also configure the
+driver in the checkout and to assert its result instead of printing for human
+inspection. **The configured `textconv` driver DOES execute during the
+recursed nested diff on Git 2.53 — it escapes the outer `--no-textconv`
+because the nested diff is a separate `git diff` subprocess that inherits none
+of the outer invocation's suppression flags.** `--submodule=short` closes this
+by preventing the recursion outright, so the driver is never invoked in either
+form. This is confirmed, not merely plausible: the corrected fixture asserts
+both the vulnerable arm (nested content shown, sentinel fires) and the fixed
+arm (one-line summary only, sentinel absent), and fails loudly if either
+assertion doesn't hold — verified by deliberately reintroducing the bug
+(dropping `--submodule=short` from the fixed-arm command), which the script
+correctly caught.
 
 This bounds xtty's retained and subsequently materialized preview output. It
 does **not** bound allocations Git performs internally before writing stdout;
@@ -97,12 +112,24 @@ that direct child remains the explicit residual — which after this round now
 explicitly includes a configured Git filter driver (e.g. `git-lfs`'s
 `filter.lfs.process`) or `core.fsmonitor` auto-starting during a tracked/staged
 preview or snapshot numstat. Neither `--no-ext-diff` nor `--no-textconv` closes
-those paths; both are bounded consequences (a filter's own protocol pipe is not
-xtty's stdout write end, so an orphaned filter exits on protocol-pipe EOF, and
-`fsmonitor--daemon` is a normal long-lived Git-managed process, not one xtty's
-own process-census or cutoff-reap logic needs to track), not a memory-bound
-violation. A future change should name this explicitly if it ever needs to
-reason about Git-forked descendants beyond the direct preview child.
+those paths.
+
+**Round-2 correction:** round 1 described these as "bounded consequences" (an
+orphaned filter "exits on protocol-pipe EOF"). Cross-review (Codex) correctly
+challenged this: `GitRunner.runDiff` has **no wall-clock timeout** — its read
+loop blocks on `readHandle.read(upToCount:)` until data arrives or EOF, and
+the accumulator's cutoff logic only engages once bytes actually cross a limit.
+A configured filter (or Git itself) that stalls *before emitting any output*
+is not bounded by anything in this design — the per-window serial Git queue
+blocks indefinitely, and there is no code-level guarantee a wedged or
+non-protocol-conforming filter descendant exits when the direct Git child is
+later signaled. This is not a new residual this round introduces; it is the
+**same** pre-existing "Git may allocate heavily before emitting stdout"
+residual the design's Risks section already accepts (a filter is just one
+concrete Git-forked path into it) — but it should be named honestly as
+**unbounded**, not glossed as "bounded consequences." A future change should
+add an explicit no-progress deadline if this residual is ever shown to matter
+in practice.
 
 ### Reproducible probes and evidence
 
@@ -110,15 +137,21 @@ After a DEBUG build, run the real App-path probe from the repository root:
 
 ```sh
 research/artifacts/large-diff-memory/probe.sh \
-  .build/DerivedData/Build/Products/Debug/xtty.app/Contents/MacOS/xtty \
+  build/Build/Products/Debug/xtty.app/Contents/MacOS/xtty \
   /tmp/xtty-large-diff-memory.tsv
 ```
 
+(The binary path matches `make build`'s `DERIVED := build` convention; an
+earlier revision of this command pointed at a stale `.build/DerivedData/...`
+path that `make build` does not produce — corrected in cross-review round 2.)
+
 The script creates fresh repositories and app processes for exact 5/25/75 MiB
-many-line inputs and a 25 MiB single line. It samples the App PID's RSS every
-10 ms, waits for the real selected-diff state to report truncation, captures
-the cutoff reason, and checks for matching preview Git children after
-publication. Full mechanics and cleanup bounds are in the
+many-line inputs, a 25 MiB single line, and (added in cross-review round 1)
+10/40 MiB wide-line inputs that reach the `retainedBytes` cutoff the other
+shapes don't. It samples the App PID's RSS every 10 ms, waits for the real
+selected-diff state to report truncation, captures the cutoff reason, and
+checks for matching preview Git children after publication. Full mechanics
+and cleanup bounds are in the
 [`large-diff-memory` artifact](../artifacts/large-diff-memory/README.md).
 
 Recorded 2026-07-26 result
@@ -362,8 +395,8 @@ A future fix is not complete merely because a predicate or parser changed. Re-ch
 | “`.whitespaces` removes a CRLF line's trailing `\r`.” | Foundation probe preserves `\r` | ❌ refuted |
 | “The numeric range clamp sanitizes every parsed `Double`.” | NaN survives both `Double` parsing and the min/max clamp | ❌ refuted |
 | “A green 248-test core envelope rules out these paths.” | The audit tests covered already-materialized diffs, keyboard focus, ASCII URLs, abstract cwd existence, LF config, and finite numbers | ❌ refuted — KI-1 needed producer tests; the post-fix core envelope is 260 |
-| “`--no-ext-diff --no-textconv` bounds a per-file preview to exactly that file's own diff.” | A changed submodule with `diff.submodule=diff` configured recurses into the submodule's own nested diff instead of the safe one-line summary (Git 2.53, real fixture) | ❌ refuted — `--submodule=short` added; the textconv-escape sub-hypothesis specifically did **not** reproduce on this Git version (see below) |
-| “The submodule recursion also lets a configured textconv execute nested, bypassing the outer `--no-textconv`.” | The same real fixture, with a `diff=xtty` attribute + configured `textconv` driver on the changed submodule file, never wrote its sentinel in the recursed output on Git 2.53 | ❓ not reproduced — recorded as an open question for a future Git-version re-check, not asserted as false in general |
+| “`--no-ext-diff --no-textconv` bounds a per-file preview to exactly that file's own diff.” | A changed submodule with `diff.submodule=diff` configured recurses into the submodule's own nested diff instead of the safe one-line summary (Git 2.53, real fixture) | ❌ refuted — `--submodule=short` added |
+| “The submodule recursion also lets a configured textconv execute nested, bypassing the outer `--no-textconv`.” | Round 1's fixture configured its driver in the origin repo before `submodule add` cloned it (config isn't cloned), so the sentinel could never fire regardless of Git's actual behavior — round 2 (Codex + Fable independently) found the fixture hole; corrected fixture configures the driver in the checkout and the sentinel **does** fire pre-fix, absent post-fix | ❌ refuted (as a Git-behavior claim) — round 1's non-reproduction was a fixture artifact; the escape is real and `--submodule=short` closes it |
 | “Peak growth is flat around 5 MiB regardless of large-diff shape.” | The 2026-07-26 evidence never exercised the `retainedBytes` (4 MiB) cutoff; a `wide`-line fixture that does reach it measured ~20.5 MiB, flat between 10 and 40 MiB input | ❌ refuted as stated — the plateau claim (flat vs. total input) holds per-shape, but the ~5 MiB figure understated the `retainedBytes`-cutoff shape by about 4× |
 
 ## 10. Coverage map and baseline
@@ -397,14 +430,22 @@ KI-1 implementation verification:
   test also passed non-vacuously. Earlier non-acceptance runs exposed and retired
   two harness failures: same-bundle live-app interference and an XCUITest
   runner-side `/bin/ps` denied with `EPERM`.
-- ✅ Cross-review round 1 (2026-07-27): the real-Git submodule-recursion fixture
-  ([`submodule-diff-recursion-probe.sh`](../artifacts/large-diff-memory/submodule-diff-recursion-probe.sh))
-  confirmed the recursion on Git 2.53 and confirmed `--submodule=short` closes
-  it; `make test-core` re-run clean after the `App/GitRunner.swift` edit (App
-  code is XCUITest-only, so `swift test` does not itself exercise `GitRunner` —
-  see the coverage gap noted in §2). No dedicated automated regression test was
-  added for the submodule fix — an escalated residual, not silently dropped;
-  see the cross-review ledger for this change.
+- ✅ Cross-review round 1+2 (2026-07-27): the real-Git submodule-recursion
+  fixture ([`submodule-diff-recursion-probe.sh`](../artifacts/large-diff-memory/submodule-diff-recursion-probe.sh))
+  is now self-asserting (not print-and-eyeball) and confirms, on Git 2.53: the
+  recursion, the textconv escape it enables (round 1 wrongly reported this as
+  non-reproducing — a fixture config-cloning artifact, corrected in round 2),
+  and that `--submodule=short` closes both. Mutation-tested: reintroducing the
+  bug (dropping the flag) makes the script fail loudly. `make test-core`
+  re-runs clean after the `App/GitRunner.swift` edits (App code is
+  XCUITest-only, so `swift test` does not itself exercise `GitRunner` — see
+  the coverage gap noted in §2); a targeted `XttyGitReviewUITests` run (7/7)
+  showed no regression from the edits. No dedicated automated XCUITest
+  regression was added for the submodule fix — an escalated residual, not
+  silently dropped; see the cross-review ledger for this change. A fresh
+  full Tier-1 run at the post-fix HEAD is required before archive (task 4.4's
+  recorded `57/0/1 of 58` predates these edits) — see the ledger for its
+  result once run.
 
 ## 11. Reusable guidelines
 

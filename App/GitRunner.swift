@@ -10,8 +10,9 @@ import XttyCore
 /// inherit it), cached after the first lookup. Every path is a **literal argv
 /// element** after `--` (never a shell string) — the D4 rule. `GIT_OPTIONAL_LOCKS=0`
 /// is set on every invocation so a background read never races `.git/index.lock`,
-/// and diffs use `--no-ext-diff --no-textconv --no-color` so user diff/pager
-/// config can't corrupt or expand the parsed output. All methods are nonisolated
+/// and diffs use `--no-ext-diff --no-textconv --submodule=short --no-color` so
+/// user diff/pager/submodule config can't corrupt, expand, or recurse into the
+/// parsed output. All methods are nonisolated
 /// and meant to run off the main actor (the controller dispatches them on a serial
 /// queue).
 enum GitRunner {

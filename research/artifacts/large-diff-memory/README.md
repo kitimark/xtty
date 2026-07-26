@@ -9,9 +9,12 @@ Run from the repository root after a DEBUG build:
 
 ```sh
 research/artifacts/large-diff-memory/probe.sh \
-  .build/DerivedData/Build/Products/Debug/xtty.app/Contents/MacOS/xtty \
+  build/Build/Products/Debug/xtty.app/Contents/MacOS/xtty \
   /tmp/xtty-large-diff-memory.tsv
 ```
+
+(Matches `make build`'s `DERIVED := build` convention; corrected in
+cross-review round 2 from a stale `.build/DerivedData/...` path.)
 
 The cases are exact 5, 25, and 75 MiB many-line (100-byte lines) working-tree
 files, an exact 25 MiB single-line file, and — added in cross-review round 1

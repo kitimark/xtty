@@ -81,7 +81,7 @@ The three limits are independent by design:
 
 The accumulator belongs in `XttyCore` so chunk-boundary and retention invariants are covered by the fast view-free tests. `Process` ownership remains in the App layer.
 
-The fixed values are implementation policy, not user configuration. They cap the bounded prefix; total peak xtty growth can be a larger fixed multiple while `Data`, decoded `String`, parser arrays, and the final model briefly coexist, but it no longer scales with total Git output.
+The fixed values are implementation policy, not user configuration. They cap the bounded prefix; total peak xtty growth can be a larger fixed multiple while `Data`, decoded `String`, parser arrays, and the final model briefly coexist, but it no longer scales with total Git output. (Measured post-implementation, cross-review round 1: the shape that actually reaches the full 4 MiB `retainedBytes` ceiling peaks around 20.5 MiB — about 4x the ~5 MiB figure from shapes that cut off on the line-count or single-line limits instead, at much smaller retained-byte counts. See `research/artifacts/large-diff-memory/README.md`.)
 
 **Trade-off:** 16 KiB is byte-based while the existing presentation clip is character-based. It preserves ordinary 3,000-scalar UTF-8 lines (at most about 12 KiB) but can truncate pathological grapheme clusters containing many combining scalars. That is preferable to permitting an unbounded physical line; the editor remains the lossless escape hatch.
 
@@ -139,12 +139,21 @@ submodule's own nested content diff instead of the safe one-line `Subproject
 commit <old>..<new>` summary. All four commands (the three preview
 invocations plus snapshot numstat) now also carry `--submodule=short`,
 restoring Git's own default regardless of the user's config; this is a no-op
-for a repository that never sets `diff.submodule`. A real-Git fixture
+for a repository that never sets `diff.submodule`.
+
+**Round-2 correction (2026-07-27):** round 1's real-Git fixture
 (`research/artifacts/large-diff-memory/submodule-diff-recursion-probe.sh`)
-confirms the recursion and its fix on Git 2.53, and separately confirms a
-`textconv` driver on the changed submodule file did **not** execute in the
-recursed output on that Git version — the recursion itself, not a textconv
-escape, is the confirmed effect this addendum closes.
+had configured its `textconv` driver in the *origin* submodule repo before
+`submodule add` cloned it — `git clone` does not copy local repo config — so
+its "textconv did not execute" claim was a fixture artifact, not a Git
+behavior. Both the Codex and Fable cross-review passes independently found
+this. The corrected, now self-asserting fixture confirms the driver **does**
+execute during the recursed nested diff on Git 2.53 (the nested diff is a
+separate `git diff` subprocess that inherits none of the outer invocation's
+suppression flags), and confirms `--submodule=short` closes it by preventing
+the recursion outright. The fix is therefore load-bearing for both the scope
+assumption *and* the textconv-suppression guarantee D5 establishes, not scope
+alone.
 
 ### D6 — Verification combines hard invariants with by-effect probes
 
@@ -172,7 +181,7 @@ directly without trusting `Process.isRunning`. A runner-side `/bin/ps` probe was
 measured unusable (`EPERM` under the XCUITest runner sandbox), so it is retired;
 the separate real-App RSS probe retains an external command-line child census.
 
-A focused before/after RSS probe repeats increasing 5/25/75 MiB inputs and records peak xtty footprint. The acceptance property is a plateau independent of total output, not an allocator-sensitive exact byte threshold; therefore RSS is preserved as by-effect evidence rather than a noisy CI hard gate. The configured-textconv sentinel fixture is a separate real-Git regression.
+A focused before/after RSS probe repeats increasing 5/25/75 MiB many-line inputs, a 25 MiB single-line input, and (added in cross-review round 1, to actually exercise the `retainedBytes` cutoff the other shapes never reach) 10/40 MiB wide-line inputs, and records peak xtty footprint per shape. The acceptance property is a plateau independent of total output *within each shape*, not an allocator-sensitive exact byte threshold; therefore RSS is preserved as by-effect evidence rather than a noisy CI hard gate. The configured-textconv sentinel fixture is a separate real-Git regression.
 
 ## Risks / Trade-offs
 
