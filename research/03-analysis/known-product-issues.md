@@ -106,6 +106,15 @@ assertion doesn't hold — verified by deliberately reintroducing the bug
 (dropping `--submodule=short` from the fixed-arm command), which the script
 correctly caught.
 
+Unlike the textconv sibling, this regression stays a standalone script rather
+than an `AppUITests` XCUITest: a submodule fixture (`submodule add`,
+`protocol.file.allow`, a second nested commit) is meaningfully more setup than
+the existing sentinel test, and the assertions above already give a
+deterministic, mutation-tested pass/fail without the App, panel state dump, or
+UI-test harness in the loop at all. A future change should still add UI-test
+coverage if the submodule preview path grows other panel-visible behavior
+worth guarding through the real app.
+
 This bounds xtty's retained and subsequently materialized preview output. It
 does **not** bound allocations Git performs internally before writing stdout;
 that direct child remains the explicit residual — which after this round now
