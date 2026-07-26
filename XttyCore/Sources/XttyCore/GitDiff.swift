@@ -91,11 +91,26 @@ public struct FileDiff: Equatable, Sendable {
 /// huge diffs (a per-line char cap and a per-file line cap, both setting
 /// `truncated`).
 public enum DiffParser {
-    public static func parse(_ raw: String, maxLineLength: Int = 3000, maxLines: Int = 5000) -> FileDiff {
+    public static func parse(
+        _ raw: String,
+        maxLineLength: Int = 3000,
+        maxLines: Int = 5000,
+        sourceTruncated: Bool = false
+    ) -> FileDiff {
         // Binary diffs carry no hunks.
-        if raw.contains("Binary files ") && raw.contains(" differ") { return .binary }
-        if raw.contains("GIT binary patch") { return .binary }
-        if raw.isEmpty { return .empty }
+        if raw.contains("Binary files ") && raw.contains(" differ") {
+            return FileDiff(header: [], hunks: [], isBinary: true, truncated: sourceTruncated,
+                            addedCount: 0, removedCount: 0)
+        }
+        if raw.contains("GIT binary patch") {
+            return FileDiff(header: [], hunks: [], isBinary: true, truncated: sourceTruncated,
+                            addedCount: 0, removedCount: 0)
+        }
+        if raw.isEmpty {
+            guard sourceTruncated else { return .empty }
+            return FileDiff(header: [], hunks: [], isBinary: false, truncated: true,
+                            addedCount: 0, removedCount: 0)
+        }
 
         var header: [DiffLine] = []
         var hunks: [DiffHunk] = []
@@ -105,7 +120,7 @@ public enum DiffParser {
         var added = 0
         var removed = 0
         var emitted = 0
-        var truncated = false
+        var truncated = sourceTruncated
 
         func flushHunk() {
             if let h = currentHeader {

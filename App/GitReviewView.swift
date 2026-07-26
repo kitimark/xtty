@@ -328,9 +328,15 @@ struct DiffPane: View {
             Divider()
             if diff.isBinary {
                 centeredNote("Binary file (no preview)")
+            } else if diff.truncated && diff.hunks.isEmpty {
+                centeredTruncatedAction
             } else if diff.hunks.isEmpty {
                 centeredNote("No textual changes")
             } else {
+                if diff.truncated {
+                    truncatedOpenButton
+                    Divider()
+                }
                 diffScroll
             }
         }
@@ -452,11 +458,22 @@ struct DiffPane: View {
                 DiffLineRow(line: line, wrapMode: wrapMode, noWrapFloorWidth: noWrapFloorWidth)
             }
         }
-        if diff.truncated {
-            Button("Diff truncated — open in editor", action: onOpen)
-                .font(.caption).buttonStyle(.plain)
-                .foregroundStyle(.secondary).padding(6)
+    }
+
+    private var truncatedOpenButton: some View {
+        Button("Diff too large — open in editor", action: onOpen)
+            .font(.caption).buttonStyle(.plain)
+            .foregroundStyle(.secondary).padding(6)
+            .accessibilityIdentifier("gitReview.truncatedOpen")
+    }
+
+    private var centeredTruncatedAction: some View {
+        VStack {
+            Spacer()
+            truncatedOpenButton
+            Spacer()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func centeredNote(_ text: String) -> some View {

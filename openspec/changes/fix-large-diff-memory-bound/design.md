@@ -118,11 +118,18 @@ Producer truncation must survive every shape, including an empty or header-only 
 
 **Alternative rejected — fully incremental hunk parser:** it would couple stream lifecycle, UTF-8 boundary handling, hunk state, emphasis, and process termination in one change. The 4 MiB producer ceiling makes that complexity unnecessary.
 
-### D5 — Disable text conversion on every preview diff
+### D5 — Disable text conversion throughout refresh and preview
 
 Add `--no-textconv` alongside `--no-ext-diff --no-color` for tracked, staged, and untracked preview invocations. `--no-ext-diff` blocks external diff commands but does not block Git attributes/configuration from launching a text converter.
 
-The intended P6 behavior is a binary summary, not executing arbitrary conversion programs to synthesize a text preview. A real fixture with a converter that writes a sentinel proves the command is not run, while Git's binary-summary parsing proves the preview still degrades correctly.
+The snapshot's `diff HEAD --numstat -z` query also receives `--no-textconv`.
+It remains on the generic complete-output runner—the record is not clipped—but
+without this flag merely opening/refreshing Git review can execute the converter
+before a file is selected. The intended P6 behavior is binary badges/summary,
+not executing arbitrary conversion programs to synthesize text. A real fixture
+with a converter that writes a sentinel proves the command is not run during
+either refresh or preview, while Git's binary-summary parsing proves the
+preview still degrades correctly.
 
 ### D6 — Verification combines hard invariants with by-effect probes
 

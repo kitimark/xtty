@@ -1,0 +1,5 @@
+case	shape	input_bytes	baseline_rss_kib	peak_rss_kib	rss_delta_kib	duration_ms	cutoff	lingering_preview_children
+many-5m	many	5242880	124256	129536	5280	458	physicalLines:510329	0
+many-25m	many	26214400	122912	128032	5120	602	physicalLines:510330	0
+many-75m	many	78643200	123968	128896	4928	734	physicalLines:510330	0
+single-25m	single	26214400	123520	126688	3168	455	currentLineBytes:16503	0

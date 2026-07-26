@@ -24,6 +24,6 @@ Selecting a very large file in Git review currently buffers and copies the compl
 
 - **App Git execution:** the per-file diff routes in `App/GitRunner.swift` gain bounded stdout consumption and cutoff-aware process lifecycle handling; status and numstat queries remain on their existing complete-output path.
 - **XttyCore model/parsing:** producer-side truncation is propagated through the toolkit-independent diff model and combined with parser-side truncation.
-- **Git behavior:** tracked-file diffs explicitly suppress text conversion so binary classification remains bounded and consistent with the panel's existing binary-summary behavior.
+- **Git behavior:** per-file diffs and snapshot numstat explicitly suppress text conversion so repository refresh/preview cannot execute a configured converter and binary classification remains consistent with the panel's existing binary-summary behavior.
 - **Git-review UI and harness:** the existing truncated/open-in-editor state is made reliable for every cutoff shape and covered through deterministic state plus by-effect tests.
 - No configuration key, repository write operation, external dependency, or public API is added.

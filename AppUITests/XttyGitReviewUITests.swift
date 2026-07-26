@@ -98,6 +98,9 @@ final class XttyGitReviewUITests: XCTestCase {
             return (sel?["path"] as? String) == "tracked.txt" && ((sel?["added"] as? Int) ?? 0) >= 1
         }
         XCTAssertNotNil(selected, "selecting tracked.txt should load a diff with an added line")
+        let selectedDiff = gitReview(selected)["selectedDiff"] as? [String: Any]
+        XCTAssertEqual(selectedDiff?["truncated"] as? Bool, false,
+                       "an ordinary small diff must remain complete on the bounded producer path")
         StateDumpReader.attach(self, name: "git-review-diff")
 
         // Open tracked.txt → assert it routes through the link opener (recorded,
@@ -111,6 +114,158 @@ final class XttyGitReviewUITests: XCTestCase {
         }
         XCTAssertNotNil(opened, "opening tracked.txt should route through the editor opener")
         attachScreenshot("git-review")
+    }
+
+    /// fix-large-diff-memory-bound: exercise both independent producer cutoff
+    /// shapes with the production limits through real Git, then drive the fixed,
+    /// always-reachable truncated-preview button. Publication happens only after
+    /// GitRunner has reaped its child; the process-list assertion independently
+    /// checks that lifecycle boundary.
+    func testLargeDiffPreviewBoundsManyLinesAndSingleLine() {
+        let tmp = NSTemporaryDirectory()
+        let selectPath = (tmp as NSString)
+            .appendingPathComponent("xtty-git-large-select-\(UUID().uuidString)")
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: selectPath) }
+
+        let app = launchConfigured(
+            config: "",
+            extraEnv: ["XTTY_TEST_GIT_SELECT": selectPath],
+            extraArgs: ["-UITestGitReview"]
+        )
+        guard StateDumpReader.waitForState(timeout: 10) != nil else {
+            attachScreenshot("no-state-dump (Release?)"); return
+        }
+        _ = GridDumpReader.waitForNonEmpty(timeout: 5)
+        type("true", into: app)
+        guard waitForCaptureActive(timeout: 8) else {
+            assertSemanticCaptureInactive("git-review-large-diff"); return
+        }
+
+        let dir = "xtty-largediff-\(UUID().uuidString.prefix(8))"
+        type("cd ~ && rm -rf \(dir) && mkdir \(dir) && cd \(dir) && git init -q && " +
+             "printf 'base\\n' > many.txt && printf 'base\\n' > long.txt && " +
+             "git add many.txt long.txt && " +
+             "git -c user.email=t@e -c user.name=t commit -qm init && " +
+             "awk 'BEGIN { for (i=0; i<6000; i++) print \"changed-\" i }' > many.txt && " +
+             "awk 'BEGIN { for (i=0; i<20000; i++) printf \"x\"; printf \"\\n\" }' > long.txt && true",
+             into: app)
+
+        guard StateDumpReader.waitForState(timeout: 20, where: {
+            let gr = ($0["gitReview"] as? [String: Any]) ?? [:]
+            let files = (gr["changedFiles"] as? [[String: Any]]) ?? []
+            return (gr["isRepo"] as? Bool) == true
+                && files.contains { ($0["path"] as? String) == "many.txt" }
+                && files.contains { ($0["path"] as? String) == "long.txt" }
+        }) != nil else {
+            attachScreenshot("large-diff: repo never surfaced")
+            XCTFail("the large-diff fixture never surfaced in Git review"); return
+        }
+
+        for path in ["many.txt", "long.txt"] {
+            let started = Date()
+            try? path.write(toFile: selectPath, atomically: true, encoding: .utf8)
+            guard StateDumpReader.waitForState(timeout: 10, where: {
+                let gr = ($0["gitReview"] as? [String: Any]) ?? [:]
+                let selected = gr["selectedDiff"] as? [String: Any]
+                return (selected?["path"] as? String) == path
+                    && (selected?["truncated"] as? Bool) == true
+            }) != nil else {
+                attachScreenshot("large-diff: \(path) never truncated")
+                XCTFail("\(path) should publish a truncated preview within the bounded timeout")
+                return
+            }
+            XCTAssertLessThan(Date().timeIntervalSince(started), 10,
+                              "\(path) should not wait for unread Git output")
+
+            let escape = app.buttons["gitReview.truncatedOpen"]
+            XCTAssertTrue(escape.waitForExistence(timeout: 5),
+                          "a truncated \(path) preview must expose open-in-editor")
+            escape.click()
+            let opened = StateDumpReader.waitForState(timeout: 5) {
+                let link = $0["lastLinkOpen"] as? [String: Any]
+                return (link?["action"] as? String) == "opened"
+                    && (((link?["path"] as? String) ?? "").hasSuffix(path))
+            }
+            XCTAssertNotNil(opened, "the real truncated-preview button should route \(path) to the editor opener")
+
+            let reaped = StateDumpReader.waitForState(timeout: 5) {
+                let gr = ($0["gitReview"] as? [String: Any]) ?? [:]
+                let process = gr["previewProcess"] as? [String: Any]
+                return (process?["path"] as? String) == path
+                    && ((process?["cutoffReason"] as? String) ?? "").isEmpty == false
+                    && (process?["reaped"] as? Bool) == true
+                    && (process?["absentAfterReap"] as? Bool) == true
+            }
+            XCTAssertNotNil(
+                reaped,
+                "the exact Git preview PID must be absent after reap before \(path) publication"
+            )
+        }
+        StateDumpReader.attach(self, name: "git-review-large-diff")
+    }
+
+    /// `--no-ext-diff` alone still permits a configured textconv. The preview
+    /// must suppress that converter and retain Git's binary-summary behavior.
+    func testBinaryPreviewDoesNotExecuteConfiguredTextconv() {
+        let tmp = NSTemporaryDirectory()
+        let selectPath = (tmp as NSString)
+            .appendingPathComponent("xtty-git-textconv-select-\(UUID().uuidString)")
+        let sentinelPath = (tmp as NSString)
+            .appendingPathComponent("xtty-git-textconv-sentinel-\(UUID().uuidString)")
+        addTeardownBlock {
+            try? FileManager.default.removeItem(atPath: selectPath)
+            try? FileManager.default.removeItem(atPath: sentinelPath)
+        }
+
+        let app = launchConfigured(
+            config: "",
+            extraEnv: [
+                "XTTY_TEST_GIT_SELECT": selectPath,
+                "XTTY_TEXTCONV_SENTINEL": sentinelPath,
+            ],
+            extraArgs: ["-UITestGitReview"]
+        )
+        guard StateDumpReader.waitForState(timeout: 10) != nil else {
+            attachScreenshot("no-state-dump (Release?)"); return
+        }
+        _ = GridDumpReader.waitForNonEmpty(timeout: 5)
+        type("true", into: app)
+        guard waitForCaptureActive(timeout: 8) else {
+            assertSemanticCaptureInactive("git-review-textconv"); return
+        }
+
+        let dir = "xtty-textconv-\(UUID().uuidString.prefix(8))"
+        type("cd ~ && rm -rf \(dir) && mkdir \(dir) && cd \(dir) && git init -q && " +
+             "printf '*.bin diff=xtty\\n' > .gitattributes && printf 'base\\000' > binary.bin && " +
+             "git add .gitattributes binary.bin && " +
+             "git -c user.email=t@e -c user.name=t commit -qm init && " +
+             "printf '#!/bin/sh\\nprintf ran > \"$XTTY_TEXTCONV_SENTINEL\"\\ncat \"$1\"\\n' > converter.sh && " +
+             "chmod +x converter.sh && git config diff.xtty.textconv \"$PWD/converter.sh\" && " +
+             "printf 'changed\\000' > binary.bin && true",
+             into: app)
+
+        guard StateDumpReader.waitForState(timeout: 20, where: {
+            let gr = ($0["gitReview"] as? [String: Any]) ?? [:]
+            let files = (gr["changedFiles"] as? [[String: Any]]) ?? []
+            return (gr["isRepo"] as? Bool) == true
+                && files.contains { ($0["path"] as? String) == "binary.bin" }
+        }) != nil else {
+            attachScreenshot("textconv: repo never surfaced")
+            XCTFail("the textconv fixture never surfaced in Git review"); return
+        }
+
+        try? "binary.bin".write(toFile: selectPath, atomically: true, encoding: .utf8)
+        let binary = StateDumpReader.waitForState(timeout: 10) {
+            let gr = ($0["gitReview"] as? [String: Any]) ?? [:]
+            let selected = gr["selectedDiff"] as? [String: Any]
+            return (selected?["path"] as? String) == "binary.bin"
+                && (selected?["isBinary"] as? Bool) == true
+        }
+        XCTAssertNotNil(binary, "binary.bin should retain Git's binary-summary preview")
+        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: sentinelPath),
+                       "the configured textconv must not execute during status or preview")
+        StateDumpReader.attach(self, name: "git-review-textconv")
     }
 
     /// P6a+ intra-line emphasis: a partial single-line change must yield >=1

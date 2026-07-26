@@ -314,7 +314,18 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             isRemote: remote,
             diffContext: pane.profile.config.diffContext,
             runningCommand: session.runningCommand,
-            openFile: { [weak pane] absolutePath in pane?.openLink(absolutePath) }
+            openFile: { [weak pane] absolutePath in
+                #if DEBUG
+                // The Git-review XCUITest drives the REAL truncated-preview
+                // button. Resolve + record through the real pane pipeline but
+                // suppress the external editor side effect in that test mode.
+                if ProcessInfo.processInfo.arguments.contains("-UITestGitReview") {
+                    pane?.routeTestLink(absolutePath)
+                    return
+                }
+                #endif
+                pane?.openLink(absolutePath)
+            }
         )
     }
 
@@ -947,6 +958,17 @@ final class TerminalWindowController: NSObject, PaneControllerDelegate {
             }
             dict["selectedDiff"] = sel
         }
+        #if DEBUG
+        if let process = GitRunner.debugDiffProcessObservation() {
+            dict["previewProcess"] = [
+                "pid": Int(process.processID),
+                "path": process.path,
+                "cutoffReason": process.cutoffReason ?? "",
+                "reaped": process.reaped,
+                "absentAfterReap": process.absentAfterReap,
+            ]
+        }
+        #endif
         return dict
     }
 

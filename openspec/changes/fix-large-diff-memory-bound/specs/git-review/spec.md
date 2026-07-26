@@ -2,7 +2,7 @@
 
 ### Requirement: Bounded large-diff preview
 
-For each selected file's read-only unified diff, the application SHALL bound xtty-side retained and materialized preview input by fixed limits independent of the total Git output. The limits SHALL cover both a large number of lines and a single physical line without a newline. When a limit is exceeded, the application SHALL stop the preview operation, terminate and reap its Git process without waiting on unread pipe output, mark the resulting file diff as truncated, and offer the existing open-in-editor action. A diff that completes within the limits SHALL retain its complete existing preview behavior. Per-file preview generation SHALL NOT execute repository-configured text converters; binary content SHALL retain the binary-summary behavior.
+For each selected file's read-only unified diff, the application SHALL bound xtty-side retained and materialized preview input by fixed limits independent of the total Git output. The limits SHALL cover both a large number of lines and a single physical line without a newline. When a limit is exceeded, the application SHALL stop the preview operation, terminate and reap its Git process without waiting on unread pipe output, mark the resulting file diff as truncated, and offer the existing open-in-editor action. A diff that completes within the limits SHALL retain its complete existing preview behavior. Git-review refresh and per-file preview generation SHALL NOT execute repository-configured text converters; binary content SHALL retain the binary-summary behavior.
 
 #### Scenario: Ordinary diff remains complete
 
@@ -31,5 +31,5 @@ For each selected file's read-only unified diff, the application SHALL bound xtt
 
 #### Scenario: Configured text conversion is not executed
 
-- **WHEN** a selected binary file has a repository-configured textconv driver
-- **THEN** the preview does not execute that driver and presents the file using the binary-summary behavior
+- **WHEN** a changed binary file has a repository-configured textconv driver
+- **THEN** neither Git-review refresh nor its selected-file preview executes that driver, and the panel presents the file using binary badges and summary behavior

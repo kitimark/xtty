@@ -67,6 +67,39 @@ final class DiffParserTests: XCTestCase {
         XCTAssertEqual(diff.hunks[0].lines.count, 5)
     }
 
+    func testSourceTruncationPropagatesForParsedDiff() {
+        let raw = "@@ -1 +1 @@\n-a\n+b\n"
+        let diff = DiffParser.parse(raw, sourceTruncated: true)
+        XCTAssertTrue(diff.truncated)
+        XCTAssertEqual(diff.hunks.count, 1)
+    }
+
+    func testSourceTruncationPropagatesForEmptyAndHeaderOnlyPrefixes() {
+        let empty = DiffParser.parse("", sourceTruncated: true)
+        XCTAssertTrue(empty.truncated)
+        XCTAssertTrue(empty.hunks.isEmpty)
+
+        let header = DiffParser.parse(
+            "diff --git a/a.txt b/a.txt\nindex 111..222 100644",
+            sourceTruncated: true
+        )
+        XCTAssertTrue(header.truncated)
+        XCTAssertEqual(header.header.count, 2)
+        XCTAssertTrue(header.hunks.isEmpty)
+    }
+
+    func testParserAndSourceTruncationAreCombined() {
+        let raw = "@@ -1 +1 @@\n+\(String(repeating: "x", count: 20))\n"
+        XCTAssertTrue(DiffParser.parse(raw, maxLineLength: 5).truncated)
+        XCTAssertTrue(DiffParser.parse("@@ -1 +1 @@\n+short\n", sourceTruncated: true).truncated)
+    }
+
+    func testDiffEmphasisPreservesSourceTruncation() {
+        let raw = "@@ -1 +1 @@\n-old value\n+new value\n"
+        let refined = DiffEmphasis.refine(DiffParser.parse(raw, sourceTruncated: true))
+        XCTAssertTrue(refined.truncated)
+    }
+
     func testNoNewlineMarkerClassified() {
         let raw = "@@ -1 +1 @@\n-a\n+b\n\\ No newline at end of file\n"
         let diff = DiffParser.parse(raw)

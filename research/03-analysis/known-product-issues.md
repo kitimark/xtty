@@ -3,6 +3,8 @@
 > **Provenance:** Captured 2026-07-26 from a read-only source and runtime audit performed 2026-07-25 against `9ece182111980fa6dc052b9cbb7ba99310c3cc50`. The audit traced the shipped App/XttyCore/SwiftTerm paths against the established OpenSpec requirements, ran focused Foundation/zsh probes, passed all **248/0/0** `XttyCore` tests, and completed a full `xtty` app build. No product code or OpenSpec artifact was changed. Claims marked ✅ are source-verified or probe-reproduced; ❌ marks a theory or assumption killed by evidence; ❓ marks an effect that still needs an end-to-end measurement.
 >
 > **Source scope:** [`App/GitRunner.swift`](../../App/GitRunner.swift), [`App/GitReviewController.swift`](../../App/GitReviewController.swift), [`App/TerminalWindowController.swift`](../../App/TerminalWindowController.swift), [`XttyCore/GitDiff.swift`](../../XttyCore/Sources/XttyCore/GitDiff.swift), [`XttyCore/OSC133.swift`](../../XttyCore/Sources/XttyCore/OSC133.swift), [`XttyCore/XttyConfigLoader.swift`](../../XttyCore/Sources/XttyCore/XttyConfigLoader.swift), [`XttyCore/ShellResolver.swift`](../../XttyCore/Sources/XttyCore/ShellResolver.swift), the bundled [`xtty-integration`](../../App/Resources/shell-integration/zsh/xtty-integration), pinned SwiftTerm [`Pty.swift`](../../external/SwiftTerm/Sources/SwiftTerm/Pty.swift), established specs under [`openspec/specs/`](../../openspec/specs/), and the tests named in §10.
+>
+> **KI-1 implementation addendum (2026-07-26):** `fix-large-diff-memory-bound` implements and measures the producer-side fix described in §2. The implementation is complete locally and awaits the human-only cross-review/archive gate; it is not yet an archived established-spec claim.
 
 ## 1. Headline and scope
 
@@ -10,7 +12,7 @@ The audit found **seven open product defects** that the green build and unit-tes
 
 | ID | Severity | Area | Finding | Evidence state |
 |---|---|---|---|---|
-| KI-1 | **High** | Git review / memory | The 5,000-line diff cap runs only after the entire diff has been buffered and copied | ✅ source construction; ❓ peak-RSS effect not forced |
+| KI-1 | **High — fixed, pending archive** | Git review / memory | Per-file diff stdout is bounded while streaming; cutoff terminates and reaps Git | ✅ unit invariants + real-App RSS/process probe |
 | KI-2 | **Medium** | Split focus / Git review | Mouse-click focus omits the required Git-review refresh | ✅ source construction; ❓ dedicated two-repo XCUITest pending |
 | KI-3 | **Medium** | OSC 133 / Unicode | zsh command encoding corrupts every percent-encoded non-ASCII command | ✅ probe-reproduced |
 | KI-4 | **Medium** | Profiles / cwd | A regular file passes `cwd` validation; failed `chdir` is silently ignored | ✅ source + filesystem probe |
@@ -18,17 +20,20 @@ The audit found **seven open product defects** that the green build and unit-tes
 | KI-6 | **Low** | Configuration | CRLF line endings leave `\r` in values and section headers | ✅ probe-reproduced |
 | KI-7 | **Low** | Configuration | `font-size = nan` survives parsing and range clamping | ✅ probe-reproduced |
 
-This document is a **known-issues ledger, not a fix design or priority commitment**. None of the issues has an OpenSpec change ID yet. Future non-trivial fixes should start from the established requirements and the verify-by-effect obligations in §8.
+This document is a **known-issues ledger, not a priority commitment**. KI-1 now
+has the implemented OpenSpec change `fix-large-diff-memory-bound`; the other six
+issues have no change ID. Future non-trivial fixes should start from the
+established requirements and the verify-by-effect obligations in §8.
 
-## 2. KI-1 — the large-diff cap does not bound input or peak memory
+## 2. KI-1 — large-diff input is now bounded at the producer
 
-### Symptom and impact
+### Original defect and measured scale
 
-The Git-review UI can display at most 5,000 diff lines of at most 3,000 characters each, but selecting a very large text diff still makes xtty ingest and copy the **entire** Git output first. The cap therefore bounds the final model, not peak memory or the time spent materializing input. This conflicts with the product's lean-memory requirement and the P6 decision to cap large diffs.
+The Git-review UI could display at most 5,000 diff lines of at most 3,000
+characters each, but selecting a very large text diff made xtty ingest and copy
+the **entire** Git output before applying either cap:
 
-An out-of-memory termination was **not** deliberately forced during this audit. The unbounded path is proved by construction:
-
-```
+```text
 git child stdout
   → Pipe.readDataToEndOfFile()        # complete Data
   → String(decoding: data, ...)       # complete String
@@ -36,26 +41,84 @@ git child stdout
   → emitted >= 5_000                  # first line-count stop
 ```
 
-### Mechanism
+A disposable reproduction of that allocation shape grew peak memory by about
+23.3, 111.8, and 321.6 MiB for 5, 25, and 75 MiB many-line inputs—roughly 4.3×
+input. A bounded-reader prototype stayed near 3.3 MiB for all three. A
+drain-and-discard prototype still spent about 26.9 MiB on one 25 MiB physical
+line, proving that a record-count ceiling alone does not cover a missing-newline
+adversary. Those exploratory figures establish the old scaling mechanism; they
+are not portable budgets and did not deliberately force an OOM.
 
-1. [`GitRunner.run`](../../App/GitRunner.swift) calls `readDataToEndOfFile()` and only then creates the returned `String`.
-2. [`DiffParser.parse`](../../XttyCore/Sources/XttyCore/GitDiff.swift) receives that already-complete string and creates `rawLines` for the entire diff.
-3. The `maxLines` check occurs inside the subsequent loop. Pre-hunk header lines are not counted by `emitted`, either, so even the parser's retained-output cap is not a strict cap over all parsed lines.
-4. Both tracked and untracked per-file diff routes pass through this runner and parser.
+### Implemented mechanism
 
-### Reproducible source probe
+[`GitRunner.runDiff`](../../App/GitRunner.swift) now reads only per-file preview
+commands in 64 KiB chunks through
+[`BoundedDiffOutputAccumulator`](../../XttyCore/Sources/XttyCore/BoundedDiffOutput.swift).
+It retains no more than 4 MiB, 5,008 physical LF records, or 16 KiB in the
+current physical line. The generic complete-output runner remains unchanged for
+record-oriented status, branch, and numstat queries.
+
+Exact-limit EOF is complete: truncation is recorded only after observing an
+additional byte. On an xtty-owned cutoff the App closes its read end, requests
+SIGTERM, allows 250 ms, falls back to SIGKILL if necessary, and reaps the direct
+Git child before publishing the bounded prefix. The producer cutoff is passed
+to [`DiffParser`](../../XttyCore/Sources/XttyCore/GitDiff.swift) and ORed with
+its model-side caps, including empty/header-only prefixes, so the panel always
+offers “Diff too large — open in editor.”
+
+Tracked, staged, and untracked preview commands now use `--no-textconv` as well
+as `--no-ext-diff`. The latter disables external diff commands but does not
+disable configured text-conversion drivers; a real-Git sentinel fixture killed
+that assumption. Snapshot/numstat also uses `--no-textconv`, preserving binary
+classification without executing the converter during panel refresh.
+
+This bounds xtty's retained and subsequently materialized preview output. It
+does **not** bound allocations Git performs internally before writing stdout;
+that direct child remains the explicit residual.
+
+### Reproducible probes and evidence
+
+After a DEBUG build, run the real App-path probe from the repository root:
 
 ```sh
-nl -ba App/GitRunner.swift | sed -n '35,55p'
-nl -ba XttyCore/Sources/XttyCore/GitDiff.swift | sed -n '87,145p'
-nl -ba App/GitRunner.swift | sed -n '104,128p'
+research/artifacts/large-diff-memory/probe.sh \
+  .build/DerivedData/Build/Products/Debug/xtty.app/Contents/MacOS/xtty \
+  /tmp/xtty-large-diff-memory.tsv
 ```
 
-This proves the allocation order and the late stop. It does **not** measure allocator overhead, actual resident-memory peak, or the file size at which macOS kills the app.
+The script creates fresh repositories and app processes for exact 5/25/75 MiB
+many-line inputs and a 25 MiB single line. It samples the App PID's RSS every
+10 ms, waits for the real selected-diff state to report truncation, captures
+the cutoff reason, and checks for matching preview Git children after
+publication. Full mechanics and cleanup bounds are in the
+[`large-diff-memory` artifact](../artifacts/large-diff-memory/README.md).
 
-### Coverage gap
+Recorded 2026-07-26 result
+([TSV](../artifacts/large-diff-memory/post-fix-2026-07-26.tsv)):
 
-`GitDiffTests` exercise `DiffParser` with an input `String` that the test has already materialized. They can verify the returned line count and `truncated` flag, but cannot prove that the producer stopped reading once the cap was reached.
+| Input shape | Input | Peak xtty RSS growth | Publication | Cutoff | Git children |
+| --- | ---: | ---: | ---: | --- | ---: |
+| many-line | 5 MiB | 5,280 KiB | 458 ms | physical lines | 0 |
+| many-line | 25 MiB | 5,120 KiB | 602 ms | physical lines | 0 |
+| many-line | 75 MiB | 4,928 KiB | 734 ms | physical lines | 0 |
+| single line | 25 MiB | 3,168 KiB | 455 ms | current-line bytes | 0 |
+
+The 15× many-line input increase changed peak growth by only 352 KiB, both
+cutoff shapes returned in under one second, and no preview child lingered. The
+RSS slope is corroborating by-effect evidence, not a stable threshold:
+allocator pooling and WindowServer state vary, the 10 ms sampler can miss a
+shorter peak, and RSS includes shared pages. The deterministic proof is the
+accumulator unit matrix: exact/over-limit behavior, arbitrary chunk boundaries,
+all three cutoff reasons, and invariants across increasing offered input.
+
+### Failed approaches
+
+| Approach | Experiment / mechanism | Fate |
+| --- | --- | --- |
+| Parser-only cap | Complete `Data`, `String`, and line array existed before parsing | ❌ bounded only the returned model |
+| Drain and discard after line cap | 25 MiB no-newline input still consumed about 26.9 MiB | ❌ failed the adversarial-record bound and delayed publication |
+| Stop reading, then wait | A child can block forever writing into its full pipe | ❌ deadlock-prone; close/terminate/reap is required |
+| `--no-ext-diff` alone | Configured textconv still ran and wrote its sentinel | ❌ textconv is a separate Git switch |
 
 ## 3. KI-2 — mouse-click focus does not refresh Git review
 
@@ -214,7 +277,7 @@ A future fix is not complete merely because a predicate or parser changed. Re-ch
 
 | ID | Required effect check |
 |---|---|
-| KI-1 | Select a generated very-large text diff while sampling xtty RSS; peak growth must remain bounded independently of total Git output, the UI must report truncation, and Git/pipe handling must not deadlock |
+| KI-1 | Run `research/artifacts/large-diff-memory/probe.sh` against a fresh DEBUG build; increasing total output must leave peak-growth slope flat, both cutoff reasons must publish `truncated == true`, and the matching preview-child count must be zero |
 | KI-2 | In a two-repository split, click the other pane and assert `focusedPaneIndex` and `gitReview.repoRoot` move to the same pane without waiting for the poll |
 | KI-3 | Run a zsh command containing accented Latin, Thai, emoji, spaces, semicolons, and a newline-safe case; assert the block/sidebar command equals the original Unicode string |
 | KI-4 | Launch a profile whose `cwd` is a regular file; assert a warning and the documented fallback directory, then launch a real directory and assert the child shell's `pwd` |
@@ -227,19 +290,22 @@ A future fix is not complete merely because a predicate or parser changed. Re-ch
 | Theory / assumption | Evidence | Fate |
 |---|---|---|
 | “The 5,000-line parser cap bounds large-diff memory.” | Full `Data` + `String` + `[String]` are created before the line check | ❌ refuted — it bounds only the returned model |
+| “Draining after a logical line cap handles every output shape.” | One 25 MiB no-newline record still consumed about 26.9 MiB | ❌ refuted — a current-physical-line byte limit is required |
+| “Stop reading and wait for Git after reaching the cap.” | The writer can block on a full pipe after xtty stops draining | ❌ refuted — close, terminate, and reap the owned child |
+| “`--no-ext-diff` disables configured textconv.” | A real fixture's converter wrote its sentinel until `--no-textconv` was supplied | ❌ refuted |
 | “All pane-focus routes share `focusActivePane`.” | The click monitor updates focus independently and omits refresh | ❌ refuted |
 | “Character-wise `%02X` is adequate percent encoding with a raw fallback.” | `éไทย😀` emits malformed UTF-8 encoding; Foundation returns `nil` | ❌ refuted |
 | “An existing `cwd` path is a valid working directory.” | `/etc/hosts` exists but is not a directory; child `chdir` failure is ignored | ❌ refuted |
 | “Once the store says non-repository, polling is inert.” | The timer calls `snapshot`, which begins with `rev-parse`, on every eligible tick | ❌ refuted |
 | “`.whitespaces` removes a CRLF line's trailing `\r`.” | Foundation probe preserves `\r` | ❌ refuted |
 | “The numeric range clamp sanitizes every parsed `Double`.” | NaN survives both `Double` parsing and the min/max clamp | ❌ refuted |
-| “A green 248-test core envelope rules out these paths.” | Tests cover already-materialized diffs, keyboard focus, ASCII URLs, abstract cwd existence, LF config, and finite numbers | ❌ refuted — the envelope is green but narrower than these claims |
+| “A green 248-test core envelope rules out these paths.” | The audit tests covered already-materialized diffs, keyboard focus, ASCII URLs, abstract cwd existence, LF config, and finite numbers | ❌ refuted — KI-1 needed producer tests; the post-fix core envelope is 260 |
 
 ## 10. Coverage map and baseline
 
 | Area | Existing useful coverage | Missing discriminator |
 |---|---|---|
-| Git diff | `GitDiffTests` classify and cap returned diff models | Producer-side byte/RSS bound |
+| Git diff | `BoundedDiffOutputTests` prove producer limits; `GitDiffTests` prove source-truncation propagation; real-Git XCUITests cover many-line/single-line cutoff, opener routing, child cleanup, normal completeness, and textconv suppression | Git's own pre-stdout allocations remain outside xtty's bound |
 | Split focus | `XttyMultiplexingUITests.testDirectionalFocusMovesBetweenPanes` | Mouse focus tied to Git-review repo root |
 | OSC 133 | `OSC133Tests` decode ASCII percent-encoded command text | Bundled-zsh Unicode roundtrip |
 | Profile cwd | `ShellResolverTests` inject exists/missing results | Real-file-vs-directory validation and child `pwd` |
@@ -253,6 +319,20 @@ Baseline recorded during the audit:
 - ✅ No tracked files were changed during discovery.
 - ❓ The five-environment XCUITest acceptance envelope was not rerun; the authoritative repository snapshot remains the source for that envelope.
 
+KI-1 implementation verification:
+
+- ✅ `make test-core`: **260 passed, 0 failed, 0 skipped**.
+- ✅ Full App and XCUITest bundle build-for-testing succeeded.
+- ✅ The real-App RSS/process probe produced the flat results in §2.
+- ⚠️ The delegated no-retry Tier-1 run was **46/11/1 of 58**, but is not an
+  acceptance envelope: Codex was running inside an already-live xtty instance
+  with the same bundle identity. Ten existing tests failed at the shared
+  `Running Background` launcher; the initial large-diff census used a forbidden
+  runner-side `/bin/ps` (`EPERM`). After replacing that probe with exact-PID
+  app-side reap/absence state, the many-line arm passed, while the single-line
+  selection was redirected to two pre-existing developer windows. The ordinary
+  diff and textconv tests passed; an isolated local rerun remains required.
+
 ## 11. Reusable guidelines
 
 - **G-KNOWN-1 — Bound at the producer seam, not after materialization.** A parser cap cannot substantiate a memory-bound claim if the producer has already buffered the complete input.
@@ -261,11 +341,14 @@ Baseline recorded during the audit:
 - **G-KNOWN-4 — Filesystem capability checks must validate the capability.** “Exists” does not imply “is a directory,” “is executable,” or “is writable”; validate the operation the child will perform and handle its failure.
 - **G-KNOWN-5 — Empty/degraded UI state is not proof of zero background work.** Instrument process/query counts when a requirement says “no work.”
 - **G-KNOWN-6 — Text configuration needs line-ending and numeric-domain fixtures.** Test LF/CRLF equivalence and reject non-finite floating-point values before applying range clamps.
+- **G-KNOWN-7 — Bound the adversarial record as well as the stream.** A total-byte or record-count ceiling can still drain one unbounded no-newline record; keep a byte ceiling on the current physical record and terminate the producer at that seam.
 
 ## Sources
 
 - **Product source at audit commit:** the files linked in the provenance/source-scope note and issue sections.
 - **Established behavior:** [`git-review/spec.md`](../../openspec/specs/git-review/spec.md), [`terminal-semantics/spec.md`](../../openspec/specs/terminal-semantics/spec.md), [`terminal-configuration/spec.md`](../../openspec/specs/terminal-configuration/spec.md), and [`terminal-session/spec.md`](../../openspec/specs/terminal-session/spec.md).
 - **Design intent:** [`p6-file-diff-decisions.md`](p6-file-diff-decisions.md), especially the visible/local/idle-gated refresh and large-diff cap decisions.
-- **Tests inspected:** [`GitDiffTests.swift`](../../XttyCore/Tests/XttyCoreTests/GitDiffTests.swift), [`OSC133Tests.swift`](../../XttyCore/Tests/XttyCoreTests/OSC133Tests.swift), [`ShellResolverTests.swift`](../../XttyCore/Tests/XttyCoreTests/ShellResolverTests.swift), [`XttyConfigTests.swift`](../../XttyCore/Tests/XttyCoreTests/XttyConfigTests.swift), [`XttyMultiplexingUITests.swift`](../../AppUITests/XttyMultiplexingUITests.swift), and [`XttyGitReviewUITests.swift`](../../AppUITests/XttyGitReviewUITests.swift).
+- **Tests inspected/added:** [`BoundedDiffOutputTests.swift`](../../XttyCore/Tests/XttyCoreTests/BoundedDiffOutputTests.swift), [`GitDiffTests.swift`](../../XttyCore/Tests/XttyCoreTests/GitDiffTests.swift), [`OSC133Tests.swift`](../../XttyCore/Tests/XttyCoreTests/OSC133Tests.swift), [`ShellResolverTests.swift`](../../XttyCore/Tests/XttyCoreTests/ShellResolverTests.swift), [`XttyConfigTests.swift`](../../XttyCore/Tests/XttyCoreTests/XttyConfigTests.swift), [`XttyMultiplexingUITests.swift`](../../AppUITests/XttyMultiplexingUITests.swift), and [`XttyGitReviewUITests.swift`](../../AppUITests/XttyGitReviewUITests.swift).
 - **Focused probe outputs:** zsh 5.9 `_xtty_url_encode`; Foundation via the active Xcode Swift toolchain (`removingPercentEncoding`, CR trimming/number parsing, and NaN propagation), executed 2026-07-25.
+- **KI-1 effect artifact:** [`research/artifacts/large-diff-memory/`](../artifacts/large-diff-memory/), executed 2026-07-26 against the implemented App path.
+- **KI-1 Tier-1 rig evidence:** `~/Downloads/xtty-vm-poc/artifacts/2026-07-26-fix-large-diff-memory-bound-{tier1,focused-redgreen,focused-app-census}/`; the final screenshot proves the shared-live-app collision.
