@@ -11,14 +11,14 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 **Snapshot (2026-07-26):**
 
 - **Milestone:** P0–P7 implemented and archived — xtty is a daily-drivable native terminal: tabs/splits/windows, quake terminal, profiles, OSC 7+133 semantic capture on auto-injected zsh, session + block sidebars, file-link open, spatial block navigation, git review panel (flat/tree), and the perf harness that settled the renderer question (**keep CoreGraphics**, skip Phase 8).
-- **Test envelope (authoritative — see `packer/README.md` → Acceptance):** `XttyCore` **260/0/0** unit tests; XCUITest now has **58** methods, with the last isolated accepted local envelope still **55/0/1 of 56** (the expected `57/0/1 of 58` needs an isolated rerun; the current session is inside a conflicting live xtty instance). The prior 56-test envelope was identical across all 5 environments.
+- **Test envelope (authoritative — see `packer/README.md` → Acceptance):** `XttyCore` **260/0/0** unit tests; local XCUITest **57/0/1 of 58** (the lone skip is the opt-in benchmark e2e). The prior 56-test envelope was identical across all 5 environments; VM tiers have not yet been rerun for the 2 added tests.
 - **Latest change:** `add-git-diff-wrap-toggle` — **archived**, human-attested (21/21 tasks). The git-review diff now fills the panel width in a **wrap** (new default) / **no-wrap** toggle + config key. Its own bounded 2-round cross-review found and fixed a defect round 1's OWN fix introduced — a row-count cap that silently dropped lines when toggling modes on large diffs — replaced with a laziness-preserving precomputed-width floor. Full narrative: [HISTORY.md](HISTORY.md).
 
 **Open changes** (must match `openspec list`):
 
 | Change | State | What it is | Detail |
 | --- | --- | --- | --- |
-| `fix-large-diff-memory-bound` | implemented — validation/human steps left | Bounds per-file diff stdout before parsing; cuts off/reaps Git and blocks textconv | `research/03-analysis/known-product-issues.md` |
+| `fix-large-diff-memory-bound` | implemented — human review/archive left | Bounds per-file diff stdout before parsing; cuts off/reaps Git and blocks textconv | `research/03-analysis/known-product-issues.md` |
 | `add-ci-pipeline` | implemented — owner steps left | CI is live; remaining: repo public, pr-lint PR, branch protection, archive | `research/03-analysis/github-actions-ci-cd.md` |
 
 **Shipped and archived** (full narratives: [HISTORY.md](HISTORY.md); what is true: `openspec/specs/`; mechanisms: `research/`):

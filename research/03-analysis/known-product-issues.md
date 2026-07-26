@@ -327,14 +327,13 @@ KI-1 implementation verification:
 - ✅ `make test-core`: **260 passed, 0 failed, 0 skipped**.
 - ✅ Full App and XCUITest bundle build-for-testing succeeded.
 - ✅ The real-App RSS/process probe produced the flat results in §2.
-- ⚠️ The delegated no-retry Tier-1 run was **46/11/1 of 58**, but is not an
-  acceptance envelope: Codex was running inside an already-live xtty instance
-  with the same bundle identity. Ten existing tests failed at the shared
-  `Running Background` launcher; the initial large-diff census used a forbidden
-  runner-side `/bin/ps` (`EPERM`). After replacing that probe with exact-PID
-  app-side reap/absence state, the many-line arm passed, while the single-line
-  selection was redirected to two pre-existing developer windows. The ordinary
-  diff and textconv tests passed; an isolated local rerun remains required.
+- ✅ The delegated isolated no-retry Tier-1 run was **57/0/1 of 58** with no
+  capture-inactive/vacuous markers. Both large-diff cutoff shapes ran in fresh
+  app/controller lifecycles, published truncation, drove the real open button,
+  and reported their exact Git PID reaped and OS-absent; the textconv sentinel
+  test also passed non-vacuously. Earlier non-acceptance runs exposed and retired
+  two harness failures: same-bundle live-app interference and an XCUITest
+  runner-side `/bin/ps` denied with `EPERM`.
 
 ## 11. Reusable guidelines
 
@@ -354,4 +353,4 @@ KI-1 implementation verification:
 - **Tests inspected/added:** [`BoundedDiffOutputTests.swift`](../../XttyCore/Tests/XttyCoreTests/BoundedDiffOutputTests.swift), [`GitDiffTests.swift`](../../XttyCore/Tests/XttyCoreTests/GitDiffTests.swift), [`OSC133Tests.swift`](../../XttyCore/Tests/XttyCoreTests/OSC133Tests.swift), [`ShellResolverTests.swift`](../../XttyCore/Tests/XttyCoreTests/ShellResolverTests.swift), [`XttyConfigTests.swift`](../../XttyCore/Tests/XttyCoreTests/XttyConfigTests.swift), [`XttyMultiplexingUITests.swift`](../../AppUITests/XttyMultiplexingUITests.swift), and [`XttyGitReviewUITests.swift`](../../AppUITests/XttyGitReviewUITests.swift).
 - **Focused probe outputs:** zsh 5.9 `_xtty_url_encode`; Foundation via the active Xcode Swift toolchain (`removingPercentEncoding`, CR trimming/number parsing, and NaN propagation), executed 2026-07-25.
 - **KI-1 effect artifact:** [`research/artifacts/large-diff-memory/`](../artifacts/large-diff-memory/), executed 2026-07-26 against the implemented App path.
-- **KI-1 Tier-1 rig evidence:** `~/Downloads/xtty-vm-poc/artifacts/2026-07-26-fix-large-diff-memory-bound-{tier1,focused-redgreen,focused-app-census}/`; the final screenshot proves the shared-live-app collision.
+- **KI-1 Tier-1 acceptance:** `~/Downloads/xtty-vm-poc/artifacts/2026-07-26-fix-large-diff-memory-bound-task44-full-fresh-lifecycles/`; historical red evidence remains in the sibling `…-tier1`, `…-focused-redgreen`, `…-focused-app-census`, and `…-task44-isolated` directories.

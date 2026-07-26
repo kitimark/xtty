@@ -650,28 +650,22 @@ have masked.
 > **`fix-large-diff-memory-bound` adds 12 core tests and 2 Git-review
 > XCUITests (current totals: core 248 → 260; UI 56 → 58).** The deterministic
 > accumulator/parser envelope is **MEASURED `260/0/0`** (`make test-core`,
-> 2026-07-26). A no-retry local Tier-1 run executed all 58 methods but is
-> **not an acceptance envelope**: Codex was running inside an already-live
-> xtty instance with the same bundle identity, and XCUITest repeatedly attached
-> to/activated that shared process. Result: `46/11/1`; 10 reds were the shared
-> launcher reporting `Running Background`, while the initial large-diff
-> process-census assertion failed because the sandboxed XCUITest runner could
-> not launch `/bin/ps` (`EPERM`). The converter-suppression regression and the
-> ordinary complete-diff regression were green in that run. After replacing
-> `/bin/ps` with an app-side observation of the exact Git PID plus
-> `kill(pid, 0) == ESRCH`, the many-line arm passed cutoff/reap/absence; the
-> single-line arm then lost its fixture when automation switched to the two
-> pre-existing developer windows (screenshot-preserved live-app interference).
-> The independent built-App probe covered both shapes: 5/25/75 MiB many-line
-> growth stayed flat at 4.8–5.2 MiB, the 25 MiB single-line case grew 3.1 MiB,
-> all four published in under one second, and all four had zero matching Git
-> children. Evidence:
-> `~/Downloads/xtty-vm-poc/artifacts/2026-07-26-fix-large-diff-memory-bound-tier1/`,
-> `…-focused-redgreen/`, `…-focused-app-census/`, and
-> `research/artifacts/large-diff-memory/`. **The last accepted local UI envelope
-> remains `55/0/1` of 56; the current 58-test suite requires one isolated local
-> rerun (no other xtty instance) before it can be promoted to the expected
-> `57/0/1` of 58.**
+> 2026-07-26). **MEASURED no-retry local Tier-1: `57/0/1` of 58** (the lone
+> skip is the pre-existing opt-in benchmark e2e; 0 capture-inactive/vacuous
+> markers). The large-diff test gives each cutoff shape a fresh app/controller
+> lifecycle so an unrelated periodic refresh cannot overwrite the second
+> selection: many-line hit `physicalLines`, single-line hit
+> `currentLineBytes`, and both drove the real open button and reported their
+> exact Git PID reaped + OS-absent. The configured-textconv fixture stayed
+> binary, reaped its Git PID, and never wrote its sentinel. The independent
+> built-App probe corroborates the resource claim: 5/25/75 MiB many-line growth
+> stayed flat at 4.8–5.2 MiB, the 25 MiB single-line case grew 3.1 MiB, all four
+> published in under one second, and all four had zero matching Git children.
+> Evidence:
+> `~/Downloads/xtty-vm-poc/artifacts/2026-07-26-fix-large-diff-memory-bound-task44-full-fresh-lifecycles/`
+> and `research/artifacts/large-diff-memory/`. **Local-confirmed only for the 2
+> added methods; VM tiers retain the prior 56-test accepted envelope until a
+> future full matrix includes them.**
 
 ### Expected-difference matrix
 

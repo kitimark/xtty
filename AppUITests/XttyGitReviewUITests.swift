@@ -119,49 +119,59 @@ final class XttyGitReviewUITests: XCTestCase {
     /// fix-large-diff-memory-bound: exercise both independent producer cutoff
     /// shapes with the production limits through real Git, then drive the fixed,
     /// always-reachable truncated-preview button. Publication happens only after
-    /// GitRunner has reaped its child; the process-list assertion independently
-    /// checks that lifecycle boundary.
+    /// GitRunner has reaped its child; the exact-PID observation checks that
+    /// lifecycle boundary. Each shape gets a fresh app/controller lifecycle so a
+    /// periodic refresh from the first selection cannot overwrite the second.
     func testLargeDiffPreviewBoundsManyLinesAndSingleLine() {
         let tmp = NSTemporaryDirectory()
-        let selectPath = (tmp as NSString)
-            .appendingPathComponent("xtty-git-large-select-\(UUID().uuidString)")
-        addTeardownBlock { try? FileManager.default.removeItem(atPath: selectPath) }
+        let fixtures = [
+            (
+                path: "many.txt",
+                generate: "awk 'BEGIN { for (i=0; i<6000; i++) print \"changed-\" i }' > many.txt"
+            ),
+            (
+                path: "long.txt",
+                generate: "awk 'BEGIN { for (i=0; i<20000; i++) printf \"x\"; printf \"\\n\" }' > long.txt"
+            ),
+        ]
 
-        let app = launchConfigured(
-            config: "",
-            extraEnv: ["XTTY_TEST_GIT_SELECT": selectPath],
-            extraArgs: ["-UITestGitReview"]
-        )
-        guard StateDumpReader.waitForState(timeout: 10) != nil else {
-            attachScreenshot("no-state-dump (Release?)"); return
-        }
-        _ = GridDumpReader.waitForNonEmpty(timeout: 5)
-        type("true", into: app)
-        guard waitForCaptureActive(timeout: 8) else {
-            assertSemanticCaptureInactive("git-review-large-diff"); return
-        }
+        for fixture in fixtures {
+            let path = fixture.path
+            let selectPath = (tmp as NSString)
+                .appendingPathComponent("xtty-git-large-select-\(UUID().uuidString)")
+            addTeardownBlock { try? FileManager.default.removeItem(atPath: selectPath) }
 
-        let dir = "xtty-largediff-\(UUID().uuidString.prefix(8))"
-        type("cd ~ && rm -rf \(dir) && mkdir \(dir) && cd \(dir) && git init -q && " +
-             "printf 'base\\n' > many.txt && printf 'base\\n' > long.txt && " +
-             "git add many.txt long.txt && " +
-             "git -c user.email=t@e -c user.name=t commit -qm init && " +
-             "awk 'BEGIN { for (i=0; i<6000; i++) print \"changed-\" i }' > many.txt && " +
-             "awk 'BEGIN { for (i=0; i<20000; i++) printf \"x\"; printf \"\\n\" }' > long.txt && true",
-             into: app)
+            let app = launchConfigured(
+                config: "",
+                extraEnv: ["XTTY_TEST_GIT_SELECT": selectPath],
+                extraArgs: ["-UITestGitReview"]
+            )
+            guard StateDumpReader.waitForState(timeout: 10) != nil else {
+                attachScreenshot("no-state-dump (Release?)"); return
+            }
+            _ = GridDumpReader.waitForNonEmpty(timeout: 5)
+            type("true", into: app)
+            guard waitForCaptureActive(timeout: 8) else {
+                assertSemanticCaptureInactive("git-review-large-diff"); return
+            }
 
-        guard StateDumpReader.waitForState(timeout: 20, where: {
-            let gr = ($0["gitReview"] as? [String: Any]) ?? [:]
-            let files = (gr["changedFiles"] as? [[String: Any]]) ?? []
-            return (gr["isRepo"] as? Bool) == true
-                && files.contains { ($0["path"] as? String) == "many.txt" }
-                && files.contains { ($0["path"] as? String) == "long.txt" }
-        }) != nil else {
-            attachScreenshot("large-diff: repo never surfaced")
-            XCTFail("the large-diff fixture never surfaced in Git review"); return
-        }
+            let dir = "xtty-largediff-\(UUID().uuidString.prefix(8))"
+            type("cd ~ && rm -rf \(dir) && mkdir \(dir) && cd \(dir) && git init -q && " +
+                 "printf 'base\\n' > \(path) && git add -- \(path) && " +
+                 "git -c user.email=t@e -c user.name=t commit -qm init && " +
+                 "\(fixture.generate) && true",
+                 into: app)
 
-        for path in ["many.txt", "long.txt"] {
+            guard StateDumpReader.waitForState(timeout: 20, where: {
+                let gr = ($0["gitReview"] as? [String: Any]) ?? [:]
+                let files = (gr["changedFiles"] as? [[String: Any]]) ?? []
+                return (gr["isRepo"] as? Bool) == true
+                    && files.contains { ($0["path"] as? String) == path }
+            }) != nil else {
+                attachScreenshot("large-diff: \(path) repo never surfaced")
+                XCTFail("the \(path) fixture never surfaced in Git review"); return
+            }
+
             let started = Date()
             try? path.write(toFile: selectPath, atomically: true, encoding: .utf8)
             guard StateDumpReader.waitForState(timeout: 10, where: {
@@ -200,8 +210,12 @@ final class XttyGitReviewUITests: XCTestCase {
                 reaped,
                 "the exact Git preview PID must be absent after reap before \(path) publication"
             )
+
+            StateDumpReader.attach(self, name: "git-review-large-diff-\(path)")
+            app.terminate()
+            XCTAssertTrue(app.wait(for: .notRunning, timeout: 5),
+                          "\(path)'s app must terminate before the next fixture launches")
         }
-        StateDumpReader.attach(self, name: "git-review-large-diff")
     }
 
     /// `--no-ext-diff` alone still permits a configured textconv. The preview
