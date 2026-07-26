@@ -17,6 +17,20 @@
 .claude/agents/*
 !.claude/agents/xtty-*
 
+# Antigravity local files — ignored EXCEPT the version-controlled workflow tooling:
+.agent/*
+!.agent/workflows/
+.agent/workflows/*
+!.agent/workflows/xtty-*/
+!.agent/workflows/opsx-*
+!.agent/skills/
+.agent/skills/*
+!.agent/skills/xtty-*/
+!.agent/skills/openspec-*/
+!.agent/agents/
+.agent/agents/*
+!.agent/agents/xtty-*
+
 # Generated Xcode project (produced from project.yml via `xcodegen generate`)
 xtty.xcodeproj/
 
