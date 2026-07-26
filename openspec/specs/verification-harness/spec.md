@@ -147,7 +147,7 @@ The harness SHALL cover the spatial-block operations end-to-end by driving a rea
 - **THEN** the state dump shows the action no-opped (no jump target / no copied output) rather than acting on a misaligned row
 
 ### Requirement: Git-review end-to-end coverage
-The harness SHALL cover the git-review panel end-to-end by driving a real shell with shell-integration injection active inside a temporary git repository and asserting, via the DEBUG state dump, that the panel lists the repository's changed files with their status categories for a known repository state, that selecting a changed file yields the expected diff summary (including, for a partial single-line change, **non-empty intra-line emphasis spans**), that the open-in-editor action routes through the editor opener — asserted via the existing **resolved link-open action** field, not a real editor — that the changed-files list **layout** reported by the state dump reflects the configured default (flat vs directory tree), that the diff **wrap mode** reported by the state dump reflects the configured default and flips when the **real in-panel wrap control** is driven, and that the DEBUG diff **layout-geometry** signals confirm each mode's rendered layout (wrap fills the panel width without horizontal overflow; no-wrap overflows horizontally for a line longer than the panel). Coverage SHALL include the **non-repository** and **remote/unavailable** empty-state cases. The real editor SHALL NOT be required for assertions.
+The harness SHALL cover the git-review panel end-to-end by driving a real shell with shell-integration injection active inside a temporary git repository and asserting, via the DEBUG state dump, that the panel lists the repository's changed files with their status categories for a known repository state, that selecting a changed file yields the expected diff summary (including, for a partial single-line change, **non-empty intra-line emphasis spans**), that the open-in-editor action routes through the editor opener — asserted via the existing **resolved link-open action** field, not a real editor — that the changed-files list **layout** reported by the state dump reflects the configured default (flat vs directory tree), that the diff **wrap mode** reported by the state dump reflects the configured default and flips when the **real in-panel wrap control** is driven, and that the DEBUG diff **layout-geometry** signals confirm each mode's rendered layout (wrap fills the panel width without horizontal overflow; no-wrap overflows horizontally for a line longer than the panel). Coverage SHALL also select production-limit many-line and single-overlong-line diffs, assert that each publishes a truncated summary within a bounded time, and drive the real truncated-preview open-in-editor action. For a selected preview process, the DEBUG state dump SHALL expose the exact Git PID, selected path, xtty-owned cutoff reason, reap completion, and an OS-level post-reap absence check; the dump SHALL expose only this bounded process metadata, never diff text. Coverage SHALL include the **non-repository** and **remote/unavailable** empty-state cases. The real editor SHALL NOT be required for assertions.
 
 #### Scenario: Changed files are listed for a known repository state
 
@@ -168,6 +168,11 @@ The harness SHALL cover the git-review panel end-to-end by driving a real shell 
 
 - **WHEN** the tests invoke the open-in-editor action on a changed file
 - **THEN** the state dump's resolved link-open action reports the repository-resolved file path so the test can assert routing without launching a real editor
+
+#### Scenario: Large-diff cutoff and cleanup are observable
+
+- **WHEN** the tests select production-limit many-line and single-overlong-line fixtures in a `-UITestGridDump` DEBUG build
+- **THEN** each selected-diff summary reports truncation within a bounded time, the real truncated-preview action routes through the opener, and the preview-process observation reports the exact Git PID reaped and absent after xtty's owned cutoff
 
 #### Scenario: The configured list layout is reported
 

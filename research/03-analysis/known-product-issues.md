@@ -4,18 +4,18 @@
 >
 > **Source scope:** [`App/GitRunner.swift`](../../App/GitRunner.swift), [`App/GitReviewController.swift`](../../App/GitReviewController.swift), [`App/TerminalWindowController.swift`](../../App/TerminalWindowController.swift), [`XttyCore/GitDiff.swift`](../../XttyCore/Sources/XttyCore/GitDiff.swift), [`XttyCore/OSC133.swift`](../../XttyCore/Sources/XttyCore/OSC133.swift), [`XttyCore/XttyConfigLoader.swift`](../../XttyCore/Sources/XttyCore/XttyConfigLoader.swift), [`XttyCore/ShellResolver.swift`](../../XttyCore/Sources/XttyCore/ShellResolver.swift), the bundled [`xtty-integration`](../../App/Resources/shell-integration/zsh/xtty-integration), pinned SwiftTerm [`Pty.swift`](../../external/SwiftTerm/Sources/SwiftTerm/Pty.swift), established specs under [`openspec/specs/`](../../openspec/specs/), and the tests named in §10.
 >
-> **KI-1 implementation addendum (2026-07-26):** `fix-large-diff-memory-bound` implements and measures the producer-side fix described in §2. The implementation is complete locally and awaits the human-only cross-review/archive gate; it is not yet an archived established-spec claim.
+> **KI-1 implementation addendum (2026-07-27):** `fix-large-diff-memory-bound` implemented, measured, human-attested, and archived the producer-side fix described in §2. The bounded-preview behavior is now established in the `git-review` and `verification-harness` specs.
 
 ## 1. Headline and scope
 
 The audit found **seven product defects** that the original green build and
-unit-test envelope did not cover. KI-1 is fixed pending archive; **six remain
+unit-test envelope did not cover. KI-1 is fixed and archived; **six remain
 open**. Three affect core user behavior and three are lower-severity
 configuration/refresh correctness defects.
 
 | ID | Severity | Area | Finding | Evidence state |
 |---|---|---|---|---|
-| KI-1 | **High — fixed, pending archive** | Git review / memory | Per-file diff stdout is bounded while streaming; cutoff terminates and reaps Git | ✅ unit invariants + real-App RSS/process probe |
+| KI-1 | **High — fixed and archived** | Git review / memory | Per-file diff stdout is bounded while streaming; cutoff terminates and reaps Git | ✅ unit invariants + real-App RSS/process probe |
 | KI-2 | **Medium** | Split focus / Git review | Mouse-click focus omits the required Git-review refresh | ✅ source construction; ❓ dedicated two-repo XCUITest pending |
 | KI-3 | **Medium** | OSC 133 / Unicode | zsh command encoding corrupts every percent-encoded non-ASCII command | ✅ probe-reproduced |
 | KI-4 | **Medium** | Profiles / cwd | A regular file passes `cwd` validation; failed `chdir` is silently ignored | ✅ source + filesystem probe |
@@ -23,9 +23,10 @@ configuration/refresh correctness defects.
 | KI-6 | **Low** | Configuration | CRLF line endings leave `\r` in values and section headers | ✅ probe-reproduced |
 | KI-7 | **Low** | Configuration | `font-size = nan` survives parsing and range clamping | ✅ probe-reproduced |
 
-This document is a **known-issues ledger, not a priority commitment**. KI-1 now
-has the implemented OpenSpec change `fix-large-diff-memory-bound`; the other six
-issues have no change ID. Future non-trivial fixes should start from the
+This document is a **known-issues ledger, not a priority commitment**. KI-1's
+implemented change is archived at
+`openspec/changes/archive/2026-07-26-fix-large-diff-memory-bound/`; the other
+six issues have no change ID. Future non-trivial fixes should start from the
 established requirements and the verify-by-effect obligations in §8.
 
 ## 2. KI-1 — large-diff input is now bounded at the producer
