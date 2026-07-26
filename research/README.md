@@ -2,7 +2,7 @@
 
 Research library on terminal emulators — competitive landscape, internals, and design implications for building a macOS-native terminal (`xtty`).
 
-> **Provenance:** Generated 2026-06-27 from a 39-agent research workflow (10-terminal survey + adversarial fact-check + 8 architecture deep-dives + synthesis), 281 web lookups. Claims marked surprising/marketing-flavored were independently fact-checked (see [fact-checks](../03-analysis/fact-checks.md)).
+> **Provenance:** Generated 2026-06-27 from a 39-agent research workflow (10-terminal survey + adversarial fact-check + 8 architecture deep-dives + synthesis), 281 web lookups. Claims marked surprising/marketing-flavored were independently fact-checked (see [fact-checks](03-analysis/fact-checks.md)).
 
 ## How to navigate
 
@@ -34,6 +34,7 @@ Research library on terminal emulators — competitive landscape, internals, and
 
 ### 03 — Analysis
 - [Fact-checks](03-analysis/fact-checks.md) — verified/refuted/uncertain claims with corrections
+- [Known product issues](03-analysis/known-product-issues.md) — open post-P7 defect ledger: 7 source/probe-confirmed issues across Git-review memory and refresh, split focus, OSC 133 Unicode capture, profile cwd validation, and configuration edge cases; includes mechanisms, coverage gaps, theory fates, and verify-by-effect checks
 - [Opportunities & design implications](03-analysis/opportunities.md) — gaps and what they mean for `xtty`
 - [Agents & xtty](03-analysis/agents-and-xtty.md) — the integrated-agents vs agent-host fork, and OSC 133 as the foundation
 - [Adjacent tools](03-analysis/adjacent-tools.md) — agent multiplexers & terminal-layer tooling that xtty would host (Herdr, …)
