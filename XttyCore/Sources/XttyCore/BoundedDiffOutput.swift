@@ -84,6 +84,11 @@ public struct BoundedDiffOutputAccumulator: Sendable {
         var accepted = 0
         var nextReason: DiffOutputCutoffReason?
 
+        // Check order (retainedBytes, physicalLines, currentLineBytes) is a fixed
+        // priority for a byte that would cross more than one limit at once. Only
+        // `wasTruncated`/`sourceTruncated` (the boolean) reaches the parser and UI;
+        // the specific reason is DEBUG-log/observation-only, so this ordering never
+        // changes user-visible behavior — it only picks which reason is reported.
         chunk.withUnsafeBytes { rawBuffer in
             let bytes = rawBuffer.bindMemory(to: UInt8.self)
             for byte in bytes {

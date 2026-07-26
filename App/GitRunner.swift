@@ -227,7 +227,7 @@ enum GitRunner {
         // Per-file +/- badges for tracked changes vs HEAD (untracked files have no
         // tracked counts; a fresh repo with no HEAD just yields none).
         let numstat = run(["-C", root, "--no-optional-locks", "diff", "HEAD",
-                           "--no-textconv", "--numstat", "-z"])
+                           "--no-textconv", "--submodule=short", "--numstat", "-z"])
         if numstat.exitCode == 0 {
             let counts = NumstatParser.parse(numstat.stdout)
             files = files.map { file in
@@ -266,7 +266,8 @@ enum GitRunner {
         let unified = "--unified=\(max(0, diffContext))"
         if file.status == .untracked {
             let r = runDiff(["-C", root, "diff", "--no-ext-diff", "--no-textconv",
-                             "--no-color", unified, "--no-index", "--", "/dev/null", file.path])
+                             "--submodule=short", "--no-color", unified, "--no-index",
+                             "--", "/dev/null", file.path])
             // --no-index: 0 = identical, 1 = differs (the normal case), >1 = error.
             guard r.launched, r.wasTruncated || r.exitCode <= 1 else { return .empty }
             return DiffEmphasis.refine(
@@ -275,8 +276,8 @@ enum GitRunner {
         }
 
         let head = runDiff(["-C", root, "--no-optional-locks", "diff", "HEAD",
-                            "--no-ext-diff", "--no-textconv", "--no-color", unified,
-                            "--", file.path])
+                            "--no-ext-diff", "--no-textconv", "--submodule=short",
+                            "--no-color", unified, "--", file.path])
         if head.launched && (head.wasTruncated || head.exitCode == 0) {
             return DiffEmphasis.refine(
                 DiffParser.parse(head.stdout, sourceTruncated: head.wasTruncated)
@@ -284,8 +285,8 @@ enum GitRunner {
         }
         // No HEAD yet (fresh repo) → show what's staged.
         let staged = runDiff(["-C", root, "--no-optional-locks", "diff", "--staged",
-                              "--no-ext-diff", "--no-textconv", "--no-color", unified,
-                              "--", file.path])
+                              "--no-ext-diff", "--no-textconv", "--submodule=short",
+                              "--no-color", unified, "--", file.path])
         guard staged.launched, staged.wasTruncated || staged.exitCode == 0 else { return .empty }
         return DiffEmphasis.refine(
             DiffParser.parse(staged.stdout, sourceTruncated: staged.wasTruncated)

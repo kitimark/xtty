@@ -75,9 +75,34 @@ disable configured text-conversion drivers; a real-Git sentinel fixture killed
 that assumption. Snapshot/numstat also uses `--no-textconv`, preserving binary
 classification without executing the converter during panel refresh.
 
+All four commands (three preview invocations plus snapshot numstat) also now
+carry `--submodule=short` (cross-review round 1, 2026-07-27). Without it, a
+changed submodule with `diff.submodule=diff` configured — a value read from
+the user's own Git config, outside xtty's control — makes `git diff` recurse
+into the submodule's own nested content diff instead of the safe one-line
+`Subproject commit <old>..<new>` summary, defeating the "this preview shows
+exactly one file's own diff" scope assumption the bounded producer relies on.
+`--submodule=short` restores Git's own default and is a no-op for a repository
+that never sets `diff.submodule`. A real-Git fixture
+([`submodule-diff-recursion-probe.sh`](../artifacts/large-diff-memory/submodule-diff-recursion-probe.sh))
+confirms the recursion and its fix on Git 2.53; that same fixture did **not**
+reproduce a configured `textconv` driver executing during the recursed nested
+diff on this Git version — the recursion itself, not a textconv escape, is the
+confirmed effect. `--submodule=short` closes the recursion regardless, so no
+further textconv-specific mitigation is needed here.
+
 This bounds xtty's retained and subsequently materialized preview output. It
 does **not** bound allocations Git performs internally before writing stdout;
-that direct child remains the explicit residual.
+that direct child remains the explicit residual — which after this round now
+explicitly includes a configured Git filter driver (e.g. `git-lfs`'s
+`filter.lfs.process`) or `core.fsmonitor` auto-starting during a tracked/staged
+preview or snapshot numstat. Neither `--no-ext-diff` nor `--no-textconv` closes
+those paths; both are bounded consequences (a filter's own protocol pipe is not
+xtty's stdout write end, so an orphaned filter exits on protocol-pipe EOF, and
+`fsmonitor--daemon` is a normal long-lived Git-managed process, not one xtty's
+own process-census or cutoff-reap logic needs to track), not a memory-bound
+violation. A future change should name this explicitly if it ever needs to
+reason about Git-forked descendants beyond the direct preview child.
 
 ### Reproducible probes and evidence
 
@@ -107,8 +132,41 @@ Recorded 2026-07-26 result
 | single line | 25 MiB | 3,168 KiB | 455 ms | current-line bytes | 0 |
 
 The 15× many-line input increase changed peak growth by only 352 KiB, both
-cutoff shapes returned in under one second, and no preview child lingered. The
-RSS slope is corroborating by-effect evidence, not a stable threshold:
+cutoff shapes returned in under one second, and no preview child lingered.
+
+**This 2026-07-26 run never exercised the third cutoff (`retainedBytes`, the 4
+MiB ceiling)** — both fixtures' lines were either too short (100 bytes) or too
+long-and-singular to hit it first. Cross-review round 1 (2026-07-27) added a
+`wide` fixture shape (2,000-byte lines — long enough that 4 MiB retained bytes
+is reached at ~2,096 lines, well before the 5,008-line ceiling) at two total
+sizes, to both produce the missing measurement and confirm its plateau the
+same way the many-line shape's plateau was confirmed at 5/25/75 MiB:
+
+Recorded 2026-07-27 result
+([TSV](../artifacts/large-diff-memory/post-fix-2026-07-27.tsv), same DEBUG
+build, same probe, all six cases in one run):
+
+| Input shape | Input | Peak xtty RSS growth | Publication | Cutoff | Git children |
+| --- | ---: | ---: | ---: | --- | ---: |
+| many-line | 5 MiB | 4,880 KiB | 458 ms | physical lines | 0 |
+| many-line | 25 MiB | 4,528 KiB | 640 ms | physical lines | 0 |
+| many-line | 75 MiB | 4,880 KiB | 752 ms | physical lines | 0 |
+| single line | 25 MiB | 3,168 KiB | 422 ms | current-line bytes | 0 |
+| wide-line | 10 MiB | 20,480 KiB | 744 ms | retained bytes | 0 |
+| wide-line | 40 MiB | 20,544 KiB | 933 ms | retained bytes | 0 |
+
+The `retainedBytes` shape's peak growth (~20.5 MiB) is flat between 10 and 40
+MiB input (a 4× increase changed growth by 64 KiB), so the plateau claim holds
+for all three cutoff reasons — but the ceiling itself is markedly higher than
+the ~5 MiB the 2026-07-26 many-line/single-line figures implied, consistent
+with the design's own acknowledgment that peak footprint is a larger fixed
+multiple of the 4 MiB bound while `Data`, decoded `String`, the split
+`[String]`, and the parsed model transiently coexist. **Do not quote the ~5
+MiB many-line figure as xtty's bound for a large diff in general — the
+`retainedBytes`-cutoff shape (long-but-not-adversarially-long lines, the most
+Git-realistic large-diff shape) costs about 4× that.**
+
+The RSS slope is corroborating by-effect evidence, not a stable threshold:
 allocator pooling and WindowServer state vary, the 10 ms sampler can miss a
 shorter peak, and RSS includes shared pages. The deterministic proof is the
 accumulator unit matrix: exact/over-limit behavior, arbitrary chunk boundaries,
@@ -122,6 +180,7 @@ all three cutoff reasons, and invariants across increasing offered input.
 | Drain and discard after line cap | 25 MiB no-newline input still consumed about 26.9 MiB | ❌ failed the adversarial-record bound and delayed publication |
 | Stop reading, then wait | A child can block forever writing into its full pipe | ❌ deadlock-prone; close/terminate/reap is required |
 | `--no-ext-diff` alone | Configured textconv still ran and wrote its sentinel | ❌ textconv is a separate Git switch |
+| `--no-ext-diff --no-textconv` alone (no `--submodule=short`) | A changed submodule with `diff.submodule=diff` configured recursed into the submodule's own nested diff content instead of the safe one-line summary | ❌ found in cross-review round 1 (2026-07-27); `--submodule=short` added |
 
 ## 3. KI-2 — mouse-click focus does not refresh Git review
 
@@ -280,7 +339,7 @@ A future fix is not complete merely because a predicate or parser changed. Re-ch
 
 | ID | Required effect check |
 |---|---|
-| KI-1 | Run `research/artifacts/large-diff-memory/probe.sh` against a fresh DEBUG build; increasing total output must leave peak-growth slope flat, both cutoff reasons must publish `truncated == true`, and the matching preview-child count must be zero |
+| KI-1 | Run `research/artifacts/large-diff-memory/probe.sh` against a fresh DEBUG build; increasing total output must leave peak-growth slope flat **per shape** (many-line, single-line, and wide-line/`retainedBytes` all separately), all three cutoff reasons must each publish `truncated == true`, and the matching preview-child count must be zero. Separately, run `research/artifacts/large-diff-memory/submodule-diff-recursion-probe.sh`; the fixed invocation shape (with `--submodule=short`) must show the one-line `Subproject commit` summary, never the submodule's recursed nested-diff content |
 | KI-2 | In a two-repository split, click the other pane and assert `focusedPaneIndex` and `gitReview.repoRoot` move to the same pane without waiting for the poll |
 | KI-3 | Run a zsh command containing accented Latin, Thai, emoji, spaces, semicolons, and a newline-safe case; assert the block/sidebar command equals the original Unicode string |
 | KI-4 | Launch a profile whose `cwd` is a regular file; assert a warning and the documented fallback directory, then launch a real directory and assert the child shell's `pwd` |
@@ -303,6 +362,9 @@ A future fix is not complete merely because a predicate or parser changed. Re-ch
 | “`.whitespaces` removes a CRLF line's trailing `\r`.” | Foundation probe preserves `\r` | ❌ refuted |
 | “The numeric range clamp sanitizes every parsed `Double`.” | NaN survives both `Double` parsing and the min/max clamp | ❌ refuted |
 | “A green 248-test core envelope rules out these paths.” | The audit tests covered already-materialized diffs, keyboard focus, ASCII URLs, abstract cwd existence, LF config, and finite numbers | ❌ refuted — KI-1 needed producer tests; the post-fix core envelope is 260 |
+| “`--no-ext-diff --no-textconv` bounds a per-file preview to exactly that file's own diff.” | A changed submodule with `diff.submodule=diff` configured recurses into the submodule's own nested diff instead of the safe one-line summary (Git 2.53, real fixture) | ❌ refuted — `--submodule=short` added; the textconv-escape sub-hypothesis specifically did **not** reproduce on this Git version (see below) |
+| “The submodule recursion also lets a configured textconv execute nested, bypassing the outer `--no-textconv`.” | The same real fixture, with a `diff=xtty` attribute + configured `textconv` driver on the changed submodule file, never wrote its sentinel in the recursed output on Git 2.53 | ❓ not reproduced — recorded as an open question for a future Git-version re-check, not asserted as false in general |
+| “Peak growth is flat around 5 MiB regardless of large-diff shape.” | The 2026-07-26 evidence never exercised the `retainedBytes` (4 MiB) cutoff; a `wide`-line fixture that does reach it measured ~20.5 MiB, flat between 10 and 40 MiB input | ❌ refuted as stated — the plateau claim (flat vs. total input) holds per-shape, but the ~5 MiB figure understated the `retainedBytes`-cutoff shape by about 4× |
 
 ## 10. Coverage map and baseline
 
@@ -326,7 +388,8 @@ KI-1 implementation verification:
 
 - ✅ `make test-core`: **260 passed, 0 failed, 0 skipped**.
 - ✅ Full App and XCUITest bundle build-for-testing succeeded.
-- ✅ The real-App RSS/process probe produced the flat results in §2.
+- ✅ The real-App RSS/process probe produced the flat-per-shape results in §2
+  (2026-07-26 many-line/single-line + 2026-07-27 wide-line follow-up).
 - ✅ The delegated isolated no-retry Tier-1 run was **57/0/1 of 58** with no
   capture-inactive/vacuous markers. Both large-diff cutoff shapes ran in fresh
   app/controller lifecycles, published truncation, drove the real open button,
@@ -334,6 +397,14 @@ KI-1 implementation verification:
   test also passed non-vacuously. Earlier non-acceptance runs exposed and retired
   two harness failures: same-bundle live-app interference and an XCUITest
   runner-side `/bin/ps` denied with `EPERM`.
+- ✅ Cross-review round 1 (2026-07-27): the real-Git submodule-recursion fixture
+  ([`submodule-diff-recursion-probe.sh`](../artifacts/large-diff-memory/submodule-diff-recursion-probe.sh))
+  confirmed the recursion on Git 2.53 and confirmed `--submodule=short` closes
+  it; `make test-core` re-run clean after the `App/GitRunner.swift` edit (App
+  code is XCUITest-only, so `swift test` does not itself exercise `GitRunner` —
+  see the coverage gap noted in §2). No dedicated automated regression test was
+  added for the submodule fix — an escalated residual, not silently dropped;
+  see the cross-review ledger for this change.
 
 ## 11. Reusable guidelines
 
@@ -352,5 +423,5 @@ KI-1 implementation verification:
 - **Design intent:** [`p6-file-diff-decisions.md`](p6-file-diff-decisions.md), especially the visible/local/idle-gated refresh and large-diff cap decisions.
 - **Tests inspected/added:** [`BoundedDiffOutputTests.swift`](../../XttyCore/Tests/XttyCoreTests/BoundedDiffOutputTests.swift), [`GitDiffTests.swift`](../../XttyCore/Tests/XttyCoreTests/GitDiffTests.swift), [`OSC133Tests.swift`](../../XttyCore/Tests/XttyCoreTests/OSC133Tests.swift), [`ShellResolverTests.swift`](../../XttyCore/Tests/XttyCoreTests/ShellResolverTests.swift), [`XttyConfigTests.swift`](../../XttyCore/Tests/XttyCoreTests/XttyConfigTests.swift), [`XttyMultiplexingUITests.swift`](../../AppUITests/XttyMultiplexingUITests.swift), and [`XttyGitReviewUITests.swift`](../../AppUITests/XttyGitReviewUITests.swift).
 - **Focused probe outputs:** zsh 5.9 `_xtty_url_encode`; Foundation via the active Xcode Swift toolchain (`removingPercentEncoding`, CR trimming/number parsing, and NaN propagation), executed 2026-07-25.
-- **KI-1 effect artifact:** [`research/artifacts/large-diff-memory/`](../artifacts/large-diff-memory/), executed 2026-07-26 against the implemented App path.
+- **KI-1 effect artifact:** [`research/artifacts/large-diff-memory/`](../artifacts/large-diff-memory/), executed 2026-07-26 against the implemented App path; extended 2026-07-27 in cross-review round 1 with the `wide`-line `retainedBytes` fixture and the submodule-recursion probe.
 - **KI-1 Tier-1 acceptance:** `~/Downloads/xtty-vm-poc/artifacts/2026-07-26-fix-large-diff-memory-bound-task44-full-fresh-lifecycles/`; historical red evidence remains in the sibling `…-tier1`, `…-focused-redgreen`, `…-focused-app-census`, and `…-task44-isolated` directories.

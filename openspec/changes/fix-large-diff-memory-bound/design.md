@@ -131,6 +131,21 @@ with a converter that writes a sentinel proves the command is not run during
 either refresh or preview, while Git's binary-summary parsing proves the
 preview still degrades correctly.
 
+**Addendum (cross-review round 1, 2026-07-27):** `--no-ext-diff --no-textconv`
+alone do not bound a *submodule* preview to that one submodule's own summary.
+With `diff.submodule=diff` configured — a value read from the user's own Git
+config, outside xtty's invocation — a changed submodule recurses into the
+submodule's own nested content diff instead of the safe one-line `Subproject
+commit <old>..<new>` summary. All four commands (the three preview
+invocations plus snapshot numstat) now also carry `--submodule=short`,
+restoring Git's own default regardless of the user's config; this is a no-op
+for a repository that never sets `diff.submodule`. A real-Git fixture
+(`research/artifacts/large-diff-memory/submodule-diff-recursion-probe.sh`)
+confirms the recursion and its fix on Git 2.53, and separately confirms a
+`textconv` driver on the changed submodule file did **not** execute in the
+recursed output on that Git version — the recursion itself, not a textconv
+escape, is the confirmed effect this addendum closes.
+
 ### D6 — Verification combines hard invariants with by-effect probes
 
 The deterministic gate is a view-free accumulator test matrix:
@@ -162,6 +177,7 @@ A focused before/after RSS probe repeats increasing 5/25/75 MiB inputs and recor
 ## Risks / Trade-offs
 
 - **[Git may allocate heavily before emitting stdout]** → xtty's memory remains bounded and Git is stopped once the preview is full; `--no-textconv` removes the arbitrary converter process. A future Git-child resource policy or blob-size preflight is a separate change if measurement shows this residual matters.
+- **[A configured Git filter driver or `core.fsmonitor` forks beyond the direct preview child]** (cross-review round 1, 2026-07-27) → neither `--no-ext-diff` nor `--no-textconv` disables a clean/smudge filter (e.g. `git-lfs`'s `filter.lfs.process`) or `core.fsmonitor` auto-starting during a tracked/staged preview or snapshot numstat. Both are accepted, bounded residuals: a filter's own protocol pipe is not xtty's stdout write end (an orphaned filter exits on protocol-pipe EOF, not on xtty's cutoff signal), and `fsmonitor--daemon` is a normal long-lived Git-managed process outside xtty's process census by design, not a memory-bound violation. Named explicitly here rather than folded into the vaguer "Git may allocate heavily" framing above, per cross-review finding.
 - **[A legitimate broad or combining-heavy line truncates earlier than the old character clip]** → the limit is fixed and explicit, the preview is marked truncated, and open-in-editor preserves access to the complete file.
 - **[Termination races leave a direct child alive]** → cutoff is an owned state, the pipe closes, SIGTERM has a bounded grace period, SIGKILL is the fallback, and publication occurs after reap.
 - **[A partial final UTF-8 scalar renders a replacement character]** → only the final truncated fragment can be affected and the model/action clearly reports truncation.

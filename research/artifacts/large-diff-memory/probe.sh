@@ -80,6 +80,17 @@ generate_payload() {
       while ($remaining >= 101) { print $line; $remaining -= 101; }
       print "x" x $remaining;
     ' "$bytes" >"$path"
+  elif [[ "$kind" == "wide" ]]; then
+    # 2,000-byte lines: long enough that the 4 MiB retained-byte ceiling fires
+    # (after ~2,096 lines) well before the 5,008-line record ceiling, and
+    # short enough (well under 16 KiB) that no line trips the per-line cap.
+    # This is the shape the many/single cases above never exercise.
+    /usr/bin/perl -e '
+      $remaining = shift;
+      $line = ("x" x 2000) . "\n";
+      while ($remaining >= 2001) { print $line; $remaining -= 2001; }
+      print "x" x $remaining;
+    ' "$bytes" >"$path"
   else
     /usr/bin/perl -e 'print "x" x shift' "$bytes" >"$path"
   fi
@@ -167,5 +178,7 @@ run_case many-5m many 5
 run_case many-25m many 25
 run_case many-75m many 75
 run_case single-25m single 25
+run_case wide-10m wide 10
+run_case wide-40m wide 40
 
 echo "report: $REPORT"
