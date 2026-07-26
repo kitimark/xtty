@@ -17,7 +17,7 @@
 
 - [x] 3.1 Update `GitReviewView` so a truncated diff with no complete hunk presents “Diff too large — open in editor” and invokes the existing opener, while a complete no-hunk diff still presents “No textual changes” and binary files retain their summary.
 - [x] 3.2 Extend the existing ordinary real-Git XCUITest to assert its selected diff is complete (`truncated == false`) so the bounded path cannot silently truncate normal input.
-- [x] 3.3 Add parameterized real-Git XCUITest coverage using production limits for a many-line file and a single overlong line: select each through the real Git-review seam, assert bounded-time publication with `selectedDiff.truncated == true`, drive the open-in-editor escape hatch, and assert no matching preview Git child remains after publication.
+- [x] 3.3 Add parameterized real-Git XCUITest coverage using production limits for a many-line file and a single overlong line: select each through the real Git-review seam, assert bounded-time publication with `selectedDiff.truncated == true`, drive the open-in-editor escape hatch, and assert the DEBUG observation's exact preview PID is reaped and OS-absent after publication.
 - [x] 3.4 Add a real repository fixture with a configured textconv driver that writes a sentinel; select its binary file and assert the sentinel is absent and `selectedDiff.isBinary == true`.
 
 ## 4. Verify + capture the settled mechanism

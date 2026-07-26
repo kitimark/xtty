@@ -8,7 +8,7 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 
 ## Current status
 
-**Snapshot (2026-07-20):**
+**Snapshot (2026-07-26):**
 
 - **Milestone:** P0–P7 implemented and archived — xtty is a daily-drivable native terminal: tabs/splits/windows, quake terminal, profiles, OSC 7+133 semantic capture on auto-injected zsh, session + block sidebars, file-link open, spatial block navigation, git review panel (flat/tree), and the perf harness that settled the renderer question (**keep CoreGraphics**, skip Phase 8).
 - **Test envelope (authoritative — see `packer/README.md` → Acceptance):** `XttyCore` **260/0/0** unit tests; XCUITest now has **58** methods, with the last isolated accepted local envelope still **55/0/1 of 56** (the expected `57/0/1 of 58` needs an isolated rerun; the current session is inside a conflicting live xtty instance). The prior 56-test envelope was identical across all 5 environments.

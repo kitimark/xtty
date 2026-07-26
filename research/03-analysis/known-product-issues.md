@@ -8,7 +8,10 @@
 
 ## 1. Headline and scope
 
-The audit found **seven open product defects** that the green build and unit-test envelope do not cover. Four affect core user behavior or the lean-memory requirement; three are lower-severity configuration/refresh correctness defects.
+The audit found **seven product defects** that the original green build and
+unit-test envelope did not cover. KI-1 is fixed pending archive; **six remain
+open**. Three affect core user behavior and three are lower-severity
+configuration/refresh correctness defects.
 
 | ID | Severity | Area | Finding | Evidence state |
 |---|---|---|---|---|

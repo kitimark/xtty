@@ -150,6 +150,13 @@ Real-Git coverage then selects generated many-line and single-line fixtures thro
 - no matching Git preview child remains; and
 - an ordinary small diff remains complete.
 
+The cleanup assertion observes the exact preview PID in the DEBUG state dump,
+including the xtty-owned cutoff reason, reap completion, and an App-side
+`kill(pid, 0) == ESRCH` absence check. This reaches the process-lifecycle claim
+directly without trusting `Process.isRunning`. A runner-side `/bin/ps` probe was
+measured unusable (`EPERM` under the XCUITest runner sandbox), so it is retired;
+the separate real-App RSS probe retains an external command-line child census.
+
 A focused before/after RSS probe repeats increasing 5/25/75 MiB inputs and records peak xtty footprint. The acceptance property is a plateau independent of total output, not an allocator-sensitive exact byte threshold; therefore RSS is preserved as by-effect evidence rather than a noisy CI hard gate. The configured-textconv sentinel fixture is a separate real-Git regression.
 
 ## Risks / Trade-offs
@@ -158,6 +165,7 @@ A focused before/after RSS probe repeats increasing 5/25/75 MiB inputs and recor
 - **[A legitimate broad or combining-heavy line truncates earlier than the old character clip]** → the limit is fixed and explicit, the preview is marked truncated, and open-in-editor preserves access to the complete file.
 - **[Termination races leave a direct child alive]** → cutoff is an owned state, the pipe closes, SIGTERM has a bounded grace period, SIGKILL is the fallback, and publication occurs after reap.
 - **[A partial final UTF-8 scalar renders a replacement character]** → only the final truncated fragment can be affected and the model/action clearly reports truncation.
+- **[The XCUITest runner cannot spawn a process census]** → observe the exact PID's reap/absence through bounded DEBUG state, and independently census matching command lines in the real-App probe.
 - **[Generic status output remains complete-buffered]** → this change does not claim otherwise. Status and numstat need record-aware limits and honest incomplete-state UX before they can be bounded.
 - **[The fixed header allowance does not preserve exactly 5,000 content rows for an unusually fragmented diff]** → total physical records are strictly bounded and the user-visible contract promises a bounded preview, not an exact row count.
 
