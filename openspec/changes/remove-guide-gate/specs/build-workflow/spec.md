@@ -4,7 +4,7 @@
 
 **Reason**: The repository-managed guide-gate hook and its installer are retired.
 
-**Migration**: Routine `make` commands no longer install or update a repository pre-push hook. Existing clones should remove only a verified byte-identical xtty-owned copy.
+**Migration**: Routine `make` commands no longer install or update a repository pre-push hook. `git config --unset xtty.guide-gate` alone disarms an already-installed hook; see the `agent-guide-budget` migration note for the full version-proof file-removal sequence, including the local `core.hooksPath` override case.
 
 ### Requirement: Continuous integration verifies the hook installer
 

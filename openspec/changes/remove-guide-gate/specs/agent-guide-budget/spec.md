@@ -34,7 +34,7 @@
 
 **Reason**: The hook installer and repository identity stamp are removed.
 
-**Migration**: Existing clones should remove only a byte-identical xtty-owned installed hook and clear the `xtty.guide-gate` configuration keys.
+**Migration**: `git config --unset xtty.guide-gate` alone fully disarms an already-installed hook — its identity guard exits 0 without that stamp, regardless of the hook file's content or vintage. To also remove the installed file itself, verify ownership by version-proof comparison — `git hash-object "$(git rev-parse --git-common-dir)/hooks/pre-push"` against that clone's own recorded `xtty.guide-gate-hook-sha`, **not** byte-identity to the now-deleted tracked source (the hook had 8 tracked revisions, so a legitimately-owned older install will not match the final one and would otherwise be misclassified as foreign) — then delete only a match and run `git config --unset xtty.guide-gate-hook-sha`. If `core.hooksPath` was ever set locally to point at this repository's own hooks directory (the installer's global-`core.hooksPath` accommodation), also restore or remove that local override.
 
 ### Requirement: The ceiling is a measured ratchet
 
