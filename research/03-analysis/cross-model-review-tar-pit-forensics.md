@@ -1,5 +1,11 @@
 # Cross-Model Review — The Mechanical-Airtightness Tar Pit
 
+> **Status (2026-07-27): historical.** The mechanism this document forensically examines — the
+> `cross-model-review` worker and its mechanical archive gate — was retired in full by
+> `remove-cross-model-review`. The tar-pit / diminishing-returns finding (G-TARPIT-1..7) remains a
+> valid lesson about adversarial review against a repo-controlling model, but the gate it was
+> measured on no longer exists.
+
 **Provenance:** 2026-07-12, produced during the `add-cross-model-design-review` proposal work as the forensic record of an in-session *convergence experiment* — a Workflow that ran the proposal's own cross-model review loop **on the proposal itself** (Claude fixing, `gpt-5.6-sol` adversarial-verifying, a Claude adjudicator calling convergence), plus the ~16 adversarial-review rounds across the whole session that preceded it. Time-sensitive: model IDs and the codex plugin version (`1.0.6`) are current as of this date.
 
 **Headline:** *Iterating cross-model review "until both models agree" does not terminate when the thing being hardened is a **mechanical git-provenance gate** and the adversary is **the model running the tool**. The unbounded set of git-history-manipulation bypasses all reduce to the one accepted residual (a repo-controlling model performing a forbidden act). The correction is to **thin the claim** — scope the mechanical checks to accident-catching + human-legibility, and route adversarial resistance through the human + that residual — and, more broadly, to **validate dev tooling by building and using it, not by reviewing its spec forever.***

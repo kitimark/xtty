@@ -1,5 +1,11 @@
 # Cross-model seat assignment — reframing the Fable/GPT role split
 
+> **Status (2026-07-27): historical.** The `cross-model-review` worker and archive gate this
+> document reframes were retired in full by `remove-cross-model-review`. The attestation-fragility
+> finding (a reviewed-state digest scoped to the whole repo, not just the change, is fragile to any
+> unrelated commit) remains a useful record; `cross-review-digest.sh` and the seat-assignment
+> mechanism it describes no longer exist.
+
 ## Provenance
 
 Generated 2026-07-19 from a two-stage investigation: (1) a 6-agent Workflow fan-out (5 parallel Fable-5 research angles — one per stated Fable-5 strength — plus a Fable-5 synthesis pass) evaluating a user-proposed model-role split against xtty's live tooling; (2) a human-driven `/opsx:explore` session pressure-testing the synthesis's three candidate changes against the actual `cross-review.md`/`spec.md` text and git history, followed by an independent Fable-5 critique pass of that pressure-testing. All git/file claims below were re-verified directly against repo state before being written down here, not taken on an agent's citation alone.

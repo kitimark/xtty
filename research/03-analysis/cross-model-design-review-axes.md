@@ -1,5 +1,10 @@
 # Cross-model design review — the complementary-axes finding + the two-layer architecture
 
+> **Status (2026-07-27): historical.** The worker and the human-attestation archive gate this
+> document describes were retired in full by `remove-cross-model-review`. The complementary-axes
+> reasoning and the self-certification refutation remain valid findings, but `/xtty:cross-review`,
+> its archive gate, and the two deterministic scripts it names no longer exist.
+
 **Provenance.** 2026-07-12, written during `/opsx:apply add-cross-model-design-review` (the build of the cross-model-review worker + the human-attestation archive gate). Distilled from the change's `proposal.md`/`design.md`, two worked exemplars from this and the prior session, and the live Fable-5 + `gpt-5.6-sol` fan-out that re-architected the proposal. This doc captures **why two differently-modeled reviewers are complementary** and **why the design splits into an authority-free worker + a human gate**. The *non-termination / thin-claim / content-floor* mechanics are a **separate** finding — see [`cross-model-review-tar-pit-forensics.md`](cross-model-review-tar-pit-forensics.md) — and are not repeated here.
 
 ## Sources

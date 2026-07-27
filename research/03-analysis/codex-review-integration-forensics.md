@@ -1,5 +1,10 @@
 # Integrating gpt-5.6-sol as a Review Pass — Why Pass B Was Blind, and the Minimal Fix
 
+> **Status (2026-07-27): historical.** `/xtty:cross-review` and its Pass B/A' briefing mechanism were
+> retired in full by `remove-cross-model-review`. The briefing lesson (a read-only reviewer's
+> bottleneck is under-briefing, not sandbox restrictions) remains a useful general finding, but the
+> worker and integration it describes no longer exist.
+
 **Provenance:** 2026-07-12, produced by cloning `openai/codex-plugin-cc` (HEAD `db52e28`, the source of the installed `codex/1.0.6` companion) to `/tmp`, reading it across four angles via a fan-out, and **reproducing both integration modes by effect** against the real `codex-companion.mjs` in throwaway workspaces. The live xtty repo was never mutated (verified `HEAD` unchanged at `8f7803d` before/after every codex call). Motivated by three `/xtty:cross-review` rounds in which Pass B (Codex `gpt-5.6-sol`) under-performed and once **endorsed a claim two other reviewers refuted**.
 
 **Headline:** *`/xtty:cross-review`'s Pass B was blind for a fixable reason: **it was never given a brief**, only an auto-collected git diff — and for a large diff, not even that (the plugin inlines the diff only for ≤2 files / ≤256 KiB; beyond that it sends a summary and tells Codex to self-collect). The read-only sandbox was **not** the bottleneck: a fully-briefed **read-only** Codex found this session's two biggest gate defects by **reading**. The fix is **A'** — pass a brief as the trailing positional on the existing `adversarial-review` call (verified by effect: the brief survives verbatim, Codex engages it precisely, the validated `review-output` schema is preserved, read-only + safe). A drilling Codex (`task --write`) is real and safe but **rejected**: it loses the schema, adds a write-safety surface, and OpenAI's content-safety filter aborts security-flavoured drills mid-run.*

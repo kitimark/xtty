@@ -1,5 +1,11 @@
 # The Cross-Review Archive Gate — Defects Found by *Using* It
 
+> **Status (2026-07-27): historical.** The archive gate this document audits was retired in full by
+> `remove-cross-model-review`, unfixed — the `exit 0` under-inclusion hole and the other three
+> measured defects (G-GATE-1..9) were never closed; the gate was removed instead. The measurement
+> methodology and the defects themselves remain a useful record; `scripts/cross-review-scope.sh` and
+> `scripts/cross-review-digest.sh` no longer exist.
+
 **Provenance:** 2026-07-12, produced by **using** the archive gate shipped one day earlier (`add-cross-model-design-review`, archived 2026-07-12) on the next real change — not by reviewing its spec. Every claim below was **measured by effect** against the **real committed scripts** (`scripts/cross-review-scope.sh`, `scripts/cross-review-digest.sh`) in **throwaway `mktemp -d` repos**; the live repository was never mutated. Time-sensitive: file counts are **HEAD-dependent by construction** (that is finding **F6**) and are stamped at `HEAD = f1f9edc`.
 
 **Headline:** *Four measured defects in the shipped gate — a **re-attestation deadlock**, a scope classifier that **answers a prospective question with a confident false negative**, a **verified bypass** (uncommitted implementation ⇒ the entire precondition is **skipped**), and **HEAD-dependent range pollution**. ⚠️ **This doc deliberately prescribes NO fix for check (4).** Its prescription flipped **three times** under review — the last flip proving that deleting the counter also deletes the gate's **principal accident tripwire** (silent re-attestation), and that the counter's value and its liveness cost are **the same property**. That oscillation is itself the finding (**G-TARPIT-1/3**). Take the measurements into an explore; do not propose a check-(4) change from this document. This is **G-TARPIT-4 in action** — none of it was visible from the spec; all of it appeared on first use.*
