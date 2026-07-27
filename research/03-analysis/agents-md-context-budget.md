@@ -280,3 +280,10 @@ under-specified, not the rule being absent.
 **Sources (addendum):** repo reads and greps at `4903359` (commands in A.3); `openspec list`;
 `openspec/changes/archive/2026-07-06-slim-agents-context/probes/results.md`; `packer/README.md`
 `:295–712`; `openspec/specs/research-capture/spec.md`.
+
+**Companion doc (2026-07-28):** [Agent-guide ingestion across CLI vendors — forensics](agent-guide-ingestion-forensics.md)
+measures a different axis of the same guide: not its token *cost* (this doc), but what *fraction of it
+even reaches* a non-Claude agent CLI. Headline: Codex silently truncates at a documented 32,768 B default
+(27.8% of the guide dropped, measured at a 45,362 B snapshot) and Antigravity at ~23,450–24,150 B (~48% dropped, and 0%
+without an explicit project registration) — both silent, neither warns. Recommends a non-gating byte
+target for `slim-status-surface` (≤32,768 B), not a probe-campaign gate.
