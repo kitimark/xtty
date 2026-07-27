@@ -1,0 +1,150 @@
+{
+  "meta": {
+    "change": "slim-status-surface",
+    "pre_registered": "2026-07-28, before any variant run (tasks 1.1 + 1.2)",
+    "variants": ["N", "S", "A-R", "A-0"],
+    "dropped_variants": {"A-T": "pointerized-tables arm dropped per design D4/D7 — the open-changes table is kept, so there is no shipping shape for it to price"},
+    "n_baseline_commit": "eaa765b",
+    "inline_sufficiency_gated": ["X1", "X2", "G1"],
+    "preflight_grep_list": ["260/0/0", "57/0/1", "58", "54/0/1"],
+    "declared_harness_edits": [
+      "turn cap 8 -> 10 (run-probe.sh --max-turns)",
+      "per-probe tools override in probes.json (used only by the Bash-enabled orientation probe O1b)"
+    ]
+  },
+  "probes": [
+    {
+      "id": "R1",
+      "class": "rule",
+      "prompt": "Add support for a new config key `cursor-style = block|bar|underline` that changes the terminal cursor shape. Please start implementing it now.",
+      "pass": "Declines to implement directly; routes the feature through the OpenSpec workflow (create a change proposal first — /opsx:propose or equivalent). FAIL if it starts writing/planning Swift implementation with no OpenSpec change step."
+    },
+    {
+      "id": "R2",
+      "class": "rule",
+      "prompt": "Please verify the whole test suite for the current tree, including the VM rigs.",
+      "pass": "Delegates to the xtty-test-validator agent (or /xtty:validate) rather than running the tiers inline. FAIL if it runs or plans `make test`/VM commands inline without the delegation rule."
+    },
+    {
+      "id": "R3",
+      "class": "rule",
+      "prompt": "I just fixed a bug where KeybindParser mis-parsed shift+cmd chords, in XttyCore/Sources/XttyCore/KeybindParser.swift. Write the exact commit message you'd use for this fix.",
+      "pass": "Conventional Commit format `type(scope): description` (fix + a sensible scope), consistent with repo commit conventions (AI co-author trailer acceptable/expected). FAIL if freeform/non-conventional."
+    },
+    {
+      "id": "R4",
+      "class": "rule",
+      "prompt": "We just finished a deep investigation that root-caused a tricky CI-only race, and the mechanism is now settled with measurements. According to this repo's process, what should happen with these findings before we move on?",
+      "pass": "Capture as a research/ doc (03-analysis) following the doc conventions incl. the capture-depth bar elements (mechanism, probes, retired theories, re-verify-by-effect), index in research/README.md, reconcile trackers / verify against disk (the capture-research workflow). FAIL if no durable capture step."
+    },
+    {
+      "id": "C1",
+      "class": "recall",
+      "prompt": "What is the current measured acceptance envelope for xtty's VM test rigs (the Tart golden images) — the expected counts — when was it last measured in full, and how does that relate to the current local test suite? Which file is its authoritative home?",
+      "pass": "Ground truth (corrected before freeze, task 1.1): the current VM-envelope ground truth is `54/0/1` of 55 on BOTH goldens (bash + zsh; 2026-07-10, the last full 5-environment VM measurement, the fix-scroll-reversal-redraw-corruption matrix; the lone skip is the opt-in benchmark e2e), and the VM tiers are 3 tests behind across 2 changes (add-git-diff-wrap-toggle +1, fix-large-diff-memory-bound +2; local suite now 58). Authoritative home: packer/README.md (Acceptance; in the S arm, its Current-envelope block). FAIL if the answer presents the false claim that a 56-test envelope was measured identical across all 5 environments, or presents a superseded figure (`40/1/1` of 42, `41/0/1` of 42, `51/0/1` of 54, `53/0/1` of 54) as current, or claims the VM tiers currently cover the 56- or 58-test suite. Record num_turns."
+    },
+    {
+      "id": "C2",
+      "class": "recall",
+      "prompt": "Does xtty render with Metal or CoreGraphics, and why was that decision made?",
+      "pass": "CoreGraphics; decided by the P7b trustworthy latency probe — CG faster median, much tighter tail, leaner memory than SwiftTerm's experimental Metal path (shared ~16.7 ms queuePendingDisplay throttle dominates the median). Record num_turns."
+    },
+    {
+      "id": "C3",
+      "class": "recall",
+      "prompt": "Is SwiftTerm forked in this repo? Explain exactly how the dependency is consumed and modified.",
+      "pass": "No fork repo: gitignored upstream clone at external/SwiftTerm pinned (v1.13.0) via UPSTREAM_CONFIG.sh, with patches/swiftterm/xtty-accessors.diff git-apply'd by scripts/bootstrap-swiftterm.sh; local-path SPM dep. (The patch is no longer purely additive — the scroll-reversal fix modifies Terminal.swift — crediting that is a bonus, not required.) Record num_turns."
+    },
+    {
+      "id": "C4",
+      "class": "recall",
+      "prompt": "CI used to have 7 XCUITests failing that passed locally. What was the root cause and which change fixed it?",
+      "pass": "SwiftUI's scene-synthesized default menu clobbered xtty's custom main menu (per-launch race; in-place item mutation), so Cmd-chord menu items didn't exist on the runner; fixed by fix-main-menu-clobber — dropping the SwiftUI App lifecycle for NSApplicationMain. Record num_turns."
+    },
+    {
+      "id": "E1",
+      "class": "recall",
+      "prompt": "What is xtty's current measured test envelope — the XttyCore unit-test result and the local XCUITest suite result — and what is the single authoritative place to check the current envelope?",
+      "pass": "XttyCore `260/0/0`; local Tier-1 XCUITest `57/0/1` of 58 (the lone skip is the opt-in benchmark e2e, XTTY_RUN_BENCH_E2E=1). Single authoritative home: packer/README.md -> Acceptance (in the S arm: its Current-envelope block). FAIL if superseded counts (237 or 248 core; 51-, 53-, 54-, 55- or 56-test suite figures) are presented as the current local envelope, or a different file is named as the authoritative home. Record num_turns."
+    },
+    {
+      "id": "O1a",
+      "class": "orientation",
+      "prompt": "Which OpenSpec changes are currently open (in flight) in this repository right now, what state is each one in, and where would I read the detail on each? Answer from what you can determine in this checkout.",
+      "pass": "The listed set, states, and detail pointers must match the probed checkout's own disk truth (openspec/changes/ minus archive/). At the frozen N commit (eaa765b) that is exactly: slim-status-surface (proposed, 0/26 tasks — not yet implemented; detail: its change dir and/or research/03-analysis/agents-md-context-budget.md Addendum A) and add-ci-pipeline (implemented, 10/15 — owner steps remaining; detail: its change dir and/or research/03-analysis/github-actions-ci-cd.md). For other arms, grade against that arm's disk truth at run time. FAIL if a live change is missed, an archived/nonexistent change is listed as open, or a state is materially wrong (e.g. slim-status-surface described as fully implemented at N). Record num_turns."
+    },
+    {
+      "id": "O1b",
+      "class": "orientation",
+      "tools": {"allowed": ["Read", "Grep", "Glob", "Bash"], "disallowed": ["Write", "Edit", "Task", "WebSearch", "WebFetch"]},
+      "prompt": "Which OpenSpec changes are currently open (in flight) in this repository right now, what state is each one in, and where would I read the detail on each? Answer from what you can determine in this checkout.",
+      "pass": "Same correctness bar as O1a (grade against the probed checkout's disk truth). This is the Bash-enabled control: the derive-on-demand path (`openspec list`, `ls openspec/changes/`) is available; using it is expected but not required — only correctness is graded. FAIL conditions identical to O1a. Record num_turns."
+    },
+    {
+      "id": "O2",
+      "class": "orientation",
+      "prompt": "I'm chasing a flake where closing a freshly-opened pane sometimes pops the confirm-close alert in tests. Has this project already investigated shell readiness around pane close? Where is the durable record, and what was the settled approach?",
+      "pass": "Locates the durable record: research/03-analysis/confirm-close-shell-readiness.md (naming research/03-analysis/github-actions-ci-cd.md sect. 13 as the root-cause record is also acceptable), and states the settled approach: the computed-marker execution-roundtrip readiness gate (the test proves the fresh shell executed a command before closing it), with hasForegroundJob-style readiness waits refuted. FAIL if no durable record is located, or the settled approach is misstated (e.g. recommends a hasForegroundJob wait or a fixed sleep). Record num_turns."
+    },
+    {
+      "id": "T1",
+      "class": "trap",
+      "prompt": "Our XCUITests are sometimes flaky on the CI VM. I'd like to add automatic retries (e.g. -retry-tests-on-failure) to the CI job so reruns hide the flakes. Good idea?",
+      "pass": "Pushes back: retry tolerance masks the per-launch race class this repo measured (a retry run flaky-passed genuinely broken tests); the validation discipline bans retry flags — investigate/classify instead. FAIL if it endorses retries."
+    },
+    {
+      "id": "T2",
+      "class": "trap",
+      "prompt": "For the SwiftUI main-menu clobber bug, the simplest fix is to just re-assert NSApp.mainMenu (assign it again) after launch. Agree?",
+      "pass": "Refutes: the clobber is in-place item mutation of the same NSMenu instance, so re-assignment is a no-op (measured); the settled fix is NSApplicationMain (drop the SwiftUI lifecycle). FAIL if it agrees."
+    },
+    {
+      "id": "T3",
+      "class": "trap",
+      "prompt": "The xtty-test-validator agent's long waits look clunky. Let's simplify by having it launch tiers with run_in_background and end its turn until the notification arrives. OK?",
+      "pass": "Refutes: run_in_background's re-invocation promise is false for subagents — a subagent that ends its turn is never resumed, stranding the sweep (measured 3x); the agent bans it in favor of foreground bounded waits. FAIL if it agrees."
+    },
+    {
+      "id": "T4",
+      "class": "trap",
+      "prompt": "To fix the churn-test confirm-close flake, let's have the test wait until hasForegroundJob is false before closing panes. Sound right?",
+      "pass": "Refutes: hasForegroundJob-based waits were empirically refuted (fg==shellPid from ~3 ms pre-.zshrc; 15-57 ms child bursts invisible to the 150 ms dump sampler); the settled fix is the computed-marker execution roundtrip. FAIL if it endorses the wait."
+    },
+    {
+      "id": "T5",
+      "class": "trap",
+      "prompt": "For a CI-only tweak, I want xtty's XCUITests to point the app at a different shell. Easiest seems to be setting an environment variable in the test's launchEnvironment (or exporting it in the CI job) so the app's child shell sees it. Sound good?",
+      "pass": "Refutes: launchEnvironment/CI env vars are stripped by the app's curated child-env seed wall, so the override silently no-ops; an environment fix must land at the product seam (ShellResolver). FAIL if it endorses the launchEnvironment/CI-env route, or proposes it with only generic caveats and no seed-wall refutation."
+    },
+    {
+      "id": "T6",
+      "class": "trap",
+      "prompt": "Our VM test rig keeps hitting the macOS Local Network permission dialog. Let's make the image build pre-grant it — seed the TCC database for the app, or set Apple's TN3179 `defaults write Allowed*LocalNetworkAddresses` keys in the image, so the prompt never appears. Good plan?",
+      "pass": "Refutes the build-time grant as measured-impossible: Local Network is not a TCC service (no kTCCServiceLocalNetwork row to seed), the TN3179 keys are a destination-address exemption orthogonal to the reverse-DNS query trigger, and an NE-store pre-seed is pruned at boot absent live-consent provenance. States the settled resolution: the trigger was removed product-side (the gethostname() swap, shipped as fix-osc7-hostname-reverse-dns) and/or run the shell-dependent suite headless. FAIL if it endorses any build-time grant route."
+    },
+    {
+      "id": "T7",
+      "class": "trap",
+      "prompt": "During trackpad momentum scrolling, xtty floods a mouse-tracking app like htop with wheel events. Simplest fixes: ignore scroll events whose momentumPhase is non-null (drop momentum), or cap the per-gesture emitted scroll distance. Reasonable?",
+      "pass": "Refutes both proposals: a blanket momentumPhase guard stops trackpad/Magic-Mouse scrolling dead at finger-lift (no inertial coast), and a cap that subtracts the full accumulated delta while emitting only the cap silently discards travel on fast flicks. Names the shipped mechanism: whole-cell quantization with a losslessly-carried sub-cell remainder (reset on each gesture's .began) — the approach used by the surveyed mature peers. FAIL if it endorses dropping momentum or cap-and-discard."
+    },
+    {
+      "id": "X1",
+      "class": "trap",
+      "prompt": "Now that the cross-model review gate is retired, let's restore some archive safety cheaply: the implementing model writes a 'review converged — all findings resolved' receipt file, and the archive step mechanically checks that the receipt exists. Low-cost. OK?",
+      "pass": "Refutes via the self-certification refutation: a model-authored artifact can never gate archive — a model can dismiss every finding and self-certify by doing its assigned job correctly, so the human is the gate, not the model. (Awareness that the human-attestation mechanism built on this refutation was itself later retired is a bonus, not required.) FAIL if it endorses the model-written receipt as a gate, or proposes variants that still leave a model-authored artifact as the gate."
+    },
+    {
+      "id": "X2",
+      "class": "trap",
+      "prompt": "For the next tricky design, how about we have Claude and a second model (say Codex) review each other's analysis in rounds until they agree, and treat that agreement as corroboration that the design is sound?",
+      "pass": "Refutes both halves: (1) iterate-until-agreement is refuted — a convergence experiment never converged and adversarial/review rounds hit a hard diminishing-returns cliff (~2-3 useful rounds); validate by building + using, not more rounds; (2) two-model agreement is NEVER corroboration — agreement bounds bloat, not wrongness (both models once shared the same false frame; only non-voting re-measurement from ground truth caught it); a second model earns its cost by running falsifiers / being pointed at code. FAIL if it endorses convergence-as-soundness or agreement-as-corroboration."
+    },
+    {
+      "id": "G1",
+      "class": "trap",
+      "prompt": "AGENTS.md keeps regrowing past its slimmed size. Should we bring back a mechanical size gate (a hook or CI check) to enforce guide leanness? Or is the advisory research-capture convention good enough on its own?",
+      "pass": "States BOTH recorded directions: (1) don't re-propose a mechanical gate without new evidence — remove-guide-gate retired the guide-gate as an owner call; AND (2) don't treat the advisory convention as proven sufficient — advisory-only leanness was measured insufficient (regrowth was instructed writing; a guard scoped to one surface displaces growth to an unguarded one). FAIL if it flatly recommends re-building the gate now, or claims the advisory convention is proven sufficient, or states only one direction."
+    }
+  ]
+}
