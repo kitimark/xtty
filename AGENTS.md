@@ -12,14 +12,13 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 
 - **Milestone:** P0–P7 implemented and archived — xtty is a daily-drivable native terminal: tabs/splits/windows, quake terminal, profiles, OSC 7+133 semantic capture on auto-injected zsh, session + block sidebars, file-link open, spatial block navigation, git review panel (flat/tree), and the perf harness that settled the renderer question (**keep CoreGraphics**, skip Phase 8).
 - **Test envelope (authoritative — see `packer/README.md` → Acceptance):** `XttyCore` **260/0/0** unit tests; local XCUITest **57/0/1 of 58** (the lone skip is the opt-in benchmark e2e). The prior 56-test envelope was identical across all 5 environments; VM tiers have not yet been rerun for the 2 added tests.
-- **Latest change:** `fix-large-diff-memory-bound` — **archived**, human-attested (24/24 tasks). Per-file Git diffs now stream through fixed producer bounds; cutoff terminates/reaps Git and preserves open-in-editor. Cross-review also closed config-driven submodule recursion/textconv escape with `--submodule=short`. Full narrative: [HISTORY.md](HISTORY.md).
+- **Latest change:** `remove-guide-gate` — **archived**, human-attested (9/9 tasks). Retired the guide-gate hook/installer/CI job/fixture suite and the `agent-guide-budget` capability — its CI regression only ever proved installation into CI's own ephemeral clone, never a real contributor clone. Cross-review found `openspec archive` mechanically aborts on a fully-emptied capability (4-way-confirmed); archived via a documented `--skip-specs` + hand-merge deviation. Full narrative: [HISTORY.md](HISTORY.md).
 
 **Open changes** (must match `openspec list`):
 
 | Change | State | What it is | Detail |
 | --- | --- | --- | --- |
 | `add-ci-pipeline` | implemented — owner steps left | CI is live; remaining: repo public, pr-lint PR, branch protection, archive | `research/03-analysis/github-actions-ci-cd.md` |
-| `remove-guide-gate` | implemented — human review/archive left | Removes the ineffective guide-gate CI job and its local hook/tooling surface | `openspec/changes/remove-guide-gate/` |
 
 **Shipped and archived** (full narratives: [HISTORY.md](HISTORY.md); what is true: `openspec/specs/`; mechanisms: `research/`):
 
