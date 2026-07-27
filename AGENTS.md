@@ -19,6 +19,7 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 | Change | State | What it is | Detail |
 | --- | --- | --- | --- |
 | `add-ci-pipeline` | implemented — owner steps left | CI is live; remaining: repo public, pr-lint PR, branch protection, archive | `research/03-analysis/github-actions-ci-cd.md` |
+| `remove-cross-model-review` | proposed | Full removal of the cross-model-review capability (`/xtty:cross-review` worker + the human-attestation archive gate) — owner judged the gate's cost not worth its disclaimed "accident tripwire" assurances | `openspec/changes/remove-cross-model-review/proposal.md` |
 
 **Shipped and archived** (full narratives: [HISTORY.md](HISTORY.md); what is true: `openspec/specs/`; mechanisms: `research/`):
 
