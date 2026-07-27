@@ -26,7 +26,12 @@ final class XttyMouseWheelUITests: XCTestCase {
     // Calibrated against a local run (task 4.1): XCUITest's `scroll(byDeltaX:
     // deltaY:)` with a POSITIVE deltaY delivers a wheel-UP gesture (NSEvent.deltaY
     // > 0 → button 64 / Up arrow); a NEGATIVE deltaY is wheel-DOWN (button 65 /
-    // Down arrow). Magnitude 3 → ~3 whole rows, bounded by whole-cell quantization
+    // Down arrow). The sign convention is channel-specific: a raw `CGEvent`
+    // `wheel1` sign is the *inverse* of this automation-channel convention
+    // (rehomed from AGENTS.md's learned-refutations entry — moot for gestures in
+    // this runner, where a raw HID post is silently dropped anyway, but load-
+    // bearing for anyone comparing against a `CGEvent`-driving tool like
+    // peekaboo). Magnitude 3 → ~3 whole rows, bounded by whole-cell quantization
     // — NOT a fixed per-gesture cap (smooth-scroll-wheel-momentum D2 removed the
     // `min(cap, whole)` this comment used to describe; see testInjectedFastPrecise-
     // GestureDoesNotLoseDistance for the lossless-carry regression guard).
