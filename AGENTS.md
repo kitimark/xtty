@@ -18,6 +18,7 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 
 | Change | State | What it is | Detail |
 | --- | --- | --- | --- |
+| `slim-status-surface` | proposed — 0/26 tasks, not yet implemented | Restore `## Current status` to its bounded shape: 31→24 refutations, packer Current-envelope single-truth block (corrects the false 56-test-envelope claim), envelope pointer-not-cache + 3 `research-capture` ratchet clauses | `research/03-analysis/agents-md-context-budget.md` (Addendum A) |
 | `add-ci-pipeline` | implemented — owner steps left | CI is live; remaining: repo public, pr-lint PR, branch protection, archive | `research/03-analysis/github-actions-ci-cd.md` |
 
 **Shipped and archived** (full narratives: [HISTORY.md](HISTORY.md); what is true: `openspec/specs/`; mechanisms: `research/`):

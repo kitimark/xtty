@@ -41,6 +41,11 @@ mechanically: all 43 original lines ≥200 chars survive byte-identical in the u
 "Keep progress current" rule now bounds status updates to a table row + snapshot refresh, with narratives
 appended to HISTORY.md — without the rule amendment the file re-inflates at measured ~2.5k tokens/day.
 
+> **Forward pointer (2026-07-28):** the amended rule bounded *narratives* but not the status surface
+> itself — `## Current status` regrew to 22,613 B (50.3% of the guide) within 22 days, concentrated in
+> the Learned-refutations tier. The measured record, the regrowth mechanism, and the resulting
+> `slim-status-surface` proposal are in **Addendum A** at the end of this file.
+
 ## 3. Reproducible probes (and what each can/cannot prove)
 
 1. **Startup-cost instrument:** in a variant worktree, `claude -p "Reply with exactly: OK"
@@ -129,3 +134,149 @@ the refutation, not endorse the trap.
   probes/results.md = graded tables, design.md D1–D8)
 - Prior art this builds on: `claude-code-subagent-execution-forensics.md` (in-context probe technique;
   transcripts-lack-system-prompts dead instrument)
+
+---
+
+## Addendum A (2026-07-28) — the Current-status regrowth, measured; `slim-status-surface` proposed
+
+**Provenance:** 2026-07-28, produced by a multi-pass research fan-out — five read-only research passes
+(refutation-compression audit · spec-delta/tooling enumeration · packer-acceptance redesign · probe plan ·
+Current-status redesign) plus a change-assembly pass and a **non-voting audit** that re-derived every
+disputed load-bearing claim from the repo before judging (per this repo's G-CONSULT re-measurement rule).
+All byte figures below were re-measured against the tree at commit `4903359`
+(`docs(openspec): propose slim-status-surface`). The fan-out's per-pass outputs lived in the session's
+`/tmp` scratchpad — **ephemeral workflow output, not a durable record**; the durable record is this
+addendum plus the change artifacts in `openspec/changes/slim-status-surface/`. Status at capture time:
+**proposal only** (0/26 tasks — nothing has been implemented, and the live defects named below are still
+live in the repo).
+
+### A.1 What happened
+
+Net trajectory: AGENTS.md 28,132 B (the 2026-07-06 §2 slim endpoint) → **44,996 B** (2026-07-28), +16,864 B
+in 22 days ≈ 0.77 KB/day *net of two intervening diet/regrow cycles* (recorded in
+`agents-md-structural-best-practices.md` §A — this is at least the third regrowth of this file). The
+regrowth is concentrated in exactly one section, sliced at `4903359`:
+
+| Slice (AGENTS.md lines) | Bytes | Share |
+| --- | --- | --- |
+| `## Current status` (L9–69) | 22,613 | 50.3% of the file |
+| Learned refutations (L36–69, 31 entries avg ~88 words) | 17,367 | 38.6% of the file |
+| — of which the cross-model/guide-gate cluster (L60–69, 10 entries) | 7,212 | 41.5% of the list |
+| Shipped table (L23–32) | 3,074 | — of which the `Tooling` row (L32) = 1,773 B (58%) |
+| Snapshot (L11–15) | 1,716 | |
+| Open-changes table (L17–21) | **298** | 1.3% of the section |
+
+✅ The ratified bound already forbids most of this: `openspec/specs/research-capture/spec.md:48` requires
+refutations as "inline **one-line** statements" (20 of 31 entries exceed it) and perpetual rows
+category-keyed (the Tooling row is a per-change mini-index). The regrowth is the rule's *shape* being
+under-specified, not the rule being absent.
+
+### A.2 Mechanism — why it regrew (three shapes, each with a live exhibit)
+
+1. **Append-on-retirement, with no in-place-edit rule.** When `remove-cross-model-review` retired the
+   mechanism a refutation was measured on, it *appended* a retirement entry instead of editing the entry it
+   retired — `AGENTS.md:60` ⊃ `:69` are near-verbatim (805 B recoverable at zero information loss), and the
+   whole 10-entry cluster restates one saga. Nothing today forbids the append, so every retirement *grows*
+   the index.
+2. **A perpetual row that became a mini-index.** The shipped table's `Tooling` row accreted a per-change
+   clause + doc pointer on every archive — 1,773 B, 58% of its table — despite the category-keyed bound.
+   (Same shape `agents-md-structural-best-practices.md` diagnosed in 2026-07-11; the guard shipped there
+   held for the row it watched while growth moved to the refutations tier — displacement, again.)
+3. **Cached state with no rule forbidding the cache — and it silently went false.** The snapshot transcribes
+   the measured test envelope. At capture time **three copies carry the same wrong claim**: `AGENTS.md:14`
+   ("the prior 56-test envelope was identical across all 5 environments"), `HISTORY.md:64` ("their prior
+   56-test envelope remains the cross-environment baseline"), and `packer/README.md:667` ("VM tiers retain
+   the prior 56-test accepted envelope"). ❌ False: `packer/README.md:644–648` records that the change adding
+   the 56th test (`add-git-diff-wrap-toggle`) **never ran the VM tiers**. The last genuinely
+   5-environment-identical measurement is the **55**-test `54/0/1` (2026-07-10), so the VM tiers are **3
+   tests behind across 2 changes** (`add-git-diff-wrap-toggle` + `fix-large-diff-memory-bound`), not 2
+   behind across 1. The duplication detected nothing — all three copies drifted *together*. Worse, the
+   nominal pointer home is itself unusable: `packer/README.md` → `### Acceptance` *leads* with a figure six
+   supersessions stale (`Envelope: 40/1/1 of 42`, `:299`), the current figures sit in a blockquote ~350
+   lines down (`:650–668`), and the only string reading "current authoritative envelope" (`:603`) points at
+   a superseded figure.
+
+### A.3 Reproducible probes (what each proves and cannot prove)
+
+- **Byte slicing** (all re-run for this addendum; line ranges valid at `4903359`):
+  `wc -c AGENTS.md` → 44,996; `sed -n '9,69p' AGENTS.md | wc -c` → 22,613; `sed -n '36,69p' … | wc -c` →
+  17,367; `sed -n '60,69p'` → 7,212; `sed -n '17,21p'` → 298; `sed -n '32p'` → 1,773; `sed -n '11,15p'` →
+  1,716. Proves sizes objectively (and corrected one pass's 357 B table figure to the measured 298 B);
+  proves **nothing** about whether content is safe to remove.
+- **"Safe to compress" is not byte-derivable — it was cross-checked entry-by-entry, not assumed.** For each
+  of the 31 refutation entries, the named pointer target was opened and confirmed to (a) exist and
+  (b) actually contain the mechanism the compression drops (28 distinct file pointers + section anchors;
+  per-entry verdicts in the compression audit, spot re-derived by the non-voting audit). This is the step
+  that found two pointer defects a byte-only pass would have shipped: the "instructed writing" claim cited
+  `agents-md-structural-best-practices.md`, which has **0** occurrences of "instructed" (real home
+  `HISTORY.md:121`), and the `env-seed-wall` entry's only other home is one blockquote inside a 96 KB doc.
+- **Orphan checks by grep:** `grep -rn wheel1 AGENTS.md HISTORY.md packer/README.md research/ AppUITests/`
+  → exactly `AGENTS.md:56` + `App/PaneController.swift:578` (an *undocumented use*), confirming the
+  `CGEvent` sign-inverse fact is documented nowhere but the guide (so it must be rehomed before its entry
+  compresses). The same instrument *refuted* a sibling claim — see the fates table.
+- **Planned (not yet run) verification instrument:** the archived
+  `openspec/changes/archive/2026-07-06-slim-agents-context/probes/` harness (`measure-context.sh`,
+  `run-probe.sh`, `run-batch.sh`), reused with two declared arm-symmetric edits (turn cap 8→10; a per-probe
+  tools override) plus a new **inline-sufficiency** instrument — did the refutation land at turn 1 with
+  zero file reads — because the archived `results.md:89–91` proved traps can pass off *secondary doc
+  homes*, so a bare PASS no longer evidences the spec's "not as bare pointers" clause. Pre-registered
+  envelope: ≥3,000-token floor, zero trap regressions, 2-iteration fix cap. ❓ Results do not exist yet —
+  the change is proposal-only; they belong in a future addendum when its §4 tasks execute.
+
+### A.4 Fates table — retired options and corrected claims
+
+| Theory / claim | Fate | Killed by |
+| --- | --- | --- |
+| "The shipped table is fully redundant with `research/04-design/02-milestones.md` — delete it" | ❌ | The milestones file is 51 KB, stale and self-contradictory on later items, and misses post-P7 work entirely; the 5 phase rows are the *useful compression of it*, and deleting the table would leave `coherence-review`'s category-keyed check (`:30–33`) with nothing to police. Kept; only the Tooling row collapses. |
+| "The open-changes table should become a derive-on-demand pointer (`openspec list`)" | ❌ deferred, not adopted | The one cross-pass fork the audit had to resolve: two parallel passes committed to opposite arms (change-assembly drafted a SHALL-NOT-transcribe spec delta + a restore-the-table contingency; the redesign kept the table and measured the entire draft spec-compliant *as-is*). Pointerizing is the only element requiring both a spec-requirement change and a never-tested probe class (O1 orientation) — to save 298 B. Resolution: keep the table; revisit only on observed friction (the O1 probes stay designed). |
+| "`smkx` is orphaned — AGENTS.md is its only home" (compression-audit risk R3) | ❌ | `grep`: `HISTORY.md:318` and `AppUITests/XttyMouseWheelUITests.swift:213` both carry it. The error was made by one research pass, caught by a later pass, and confirmed by the non-voting audit's own re-grep. (Contrast: the sibling `wheel1` sign-inverse orphan claim **survived** the identical re-check — the verification discriminated rather than blanket-judging.) |
+| Probe C1's drafted pass criterion (`41/0/1` of 42 as the current VM envelope) | ❌ | The packer figure inventory: `41/0/1` is the 2026-07-08 figure, superseded by 2026-07-10's `54/0/1` of 55 — C1 as drafted would have **failed a correct answer**. Fixed at assembly: the shipped `tasks.md` 1.1 orders the correction before the baseline freeze. |
+| Predicted saving "13–15 KB / 5.2–6.0k tokens" (probe plan) | ❌ | Re-derived byte math: −10,275 B measured on the paste-ready draft ≈ 4.2k tokens at 2.46 B/token. Still clears the pre-registered ≥3,000-token floor with ~39% headroom — the estimate was wrong, the decision it fed survives. |
+| "Duplicating the envelope across AGENTS.md/HISTORY.md/packer is a drift detector" | ❌ | A.2 exhibit 3: all three copies drifted together into the same false 56-test claim; the redundancy detected nothing. |
+| "The compressed refutations still inoculate" | ❓ unmeasured | Gated, not assumed: the archived V3 arm's T1 0/2 regression is exactly the risk; the pre-registered trap probes + inline-sufficiency criterion decide it when the change's §4 runs. |
+
+### A.5 Re-verify by effect
+
+- **Now (pre-implementation):** `grep -n "56-test" AGENTS.md HISTORY.md packer/README.md` still returns the
+  false claim at all three sites — the defect is live until `slim-status-surface` task 2.3 lands. If that
+  grep comes back clean, the correction shipped.
+- **Once the change lands:** (1) `wc -c AGENTS.md` should read ≈10.3 KB below the 44,996 B recorded here,
+  with the `## Current status` section at ≈12.3 KB vs the recorded 22,613 B; (2) re-run the archived
+  harness's `measure-context.sh` (3 reps) against a `4903359` worktree — the Δ must satisfy the
+  pre-registered `0.85 ×` formula and the ≥3,000-token floor; (3) the graded trap probes (T1 retries; the
+  merged cross-model cluster under the turn-1 zero-read criterion) must be ≥ the frozen N baseline;
+  (4) `packer/README.md` → Acceptance must open with the Current-envelope table carrying per-tier
+  `CURRENT | STALE (n behind)` tokens and the corrected 3-tests-behind statement. Never grade this by
+  reading the diff — the headline claims are token and behavior deltas, and (2)–(3) are the only
+  instruments that measure them.
+
+### A.6 Reusable guidelines (continuing §7)
+
+7. **N cached copies of one measurement drift together, not apart — a cache is a drift-detector only if at
+   least one copy is independently re-measured.** Three copies of the envelope claim agreed on the same
+   wrong answer for three tracker generations; nothing re-measured, so nothing disagreed. Keep exactly one
+   measured home that states its current answer plainly and up front; every other surface points at it and
+   caches nothing.
+8. **An always-loaded curated index needs an edit-in-place rule for retirement, not just a size bound.**
+   Retiring a mechanism by *appending* a retirement entry grows the index precisely when the system shrinks
+   — 41.5% of the refutations tier was one saga restated by successive appends, each individually
+   compliant with a bound that only capped entry length, never entry count per finding.
+
+### A.7 Artifacts
+
+- **The resulting proposal:** `openspec/changes/slim-status-surface/` (proposal.md · design.md ·
+  `specs/research-capture/` delta · tasks.md, 26 tasks), committed at `4903359`
+  (`docs(openspec): propose slim-status-surface`). The proposal's Why/What sections restate the A.1–A.2
+  measurements as the change's motivation; its tasks 2.2–2.6 build the packer Current-envelope block, 3.1–3.2
+  the compressed section, 1.1–1.3 + 4.1–4.3 the probe gate.
+- **Precedent + harness:** `openspec/changes/archive/2026-07-06-slim-agents-context/` (the probes/ directory
+  this plan reuses; its `results.md` V2/V3 arms are the evidence base for compress-don't-delete).
+- **Companion regrowth record:** `research/03-analysis/agents-md-structural-best-practices.md` §A (the
+  second regrowth + the surface-scoped-guard-displaces-growth finding; historical).
+- The fan-out's working files (per-pass outputs + audit) were session-scratchpad `/tmp` artifacts and are
+  **not** durable; every load-bearing number from them was re-verified against the repo before entering
+  this addendum, which supersedes them.
+
+**Sources (addendum):** repo reads and greps at `4903359` (commands in A.3); `openspec list`;
+`openspec/changes/archive/2026-07-06-slim-agents-context/probes/results.md`; `packer/README.md`
+`:295–712`; `openspec/specs/research-capture/spec.md`.
