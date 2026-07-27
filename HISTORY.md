@@ -29,6 +29,14 @@ bounded table-row update. Not loaded at session start.
 
 ## Change log, later era (formerly embedded in AGENTS.md → OpenSpec workflow)
 
+### 2026-07-27 — remove-guide-gate (P-tooling / simplification) — implemented 7/9, coherence COHERENT, pending human-attested archive
+
+**Why.** The owner judged the guide-gate ineffective for its maintenance cost: the GitHub Actions job only regression-tested an installation into CI's own ephemeral clone and could not establish that a contributor clone was armed, while the feature carried a large pre-push hook, installer, fixture suite, mutation matrix, three specification surfaces, and extensive dedicated artifacts.
+
+**What changed.** The `guide-gate` CI job, `make hooks`/`make test-guide-gate`, every routine Makefile hook-install prerequisite, `.githooks/pre-push`, the installer/tests, and `research/artifacts/guide-gate/` were removed. Current-facing AGENTS/CI documentation no longer presents the gate as live. The broader guide-structure research remains as historical evidence with a retirement note; archived OpenSpec changes and the earlier HISTORY narrative remain intact. This clone's installed hook was removed only after its object ID matched both the tracked source and the installer-recorded ownership hash; the two repository-local config stamps were then cleared.
+
+**Spec state.** `remove-guide-gate` carries retirement deltas for all of `agent-guide-budget`, the two hook-related `build-workflow` requirements, and the mechanical-backstop requirement in `research-capture`. Those deltas remain in the active change until the required human archive eligibility check permits archive; the advisory rule keeping AGENTS.md status bounded and narratives in HISTORY remains.
+
 ### 2026-07-27 — fix-large-diff-memory-bound (P6 / product fix) — implemented 24/24 tasks, human-attested, archived (`git-review` +1 requirement, `verification-harness` 1 requirement modified)
 
 **Why.** The git-review panel limited its returned model to 5,000 lines, but only *after* `GitRunner` had read the child pipe to EOF, decoded the complete `Data` into a `String`, and split it into another array of strings. Peak xtty growth therefore scaled with total diff output despite the visible row cap: a disposable reproduction measured about 23.3, 111.8, and 321.6 MiB for 5, 25, and 75 MiB inputs. A no-newline line was a distinct adversary — draining and discarding after a record cap still consumed roughly 26.9 MiB for one 25 MiB physical line. KI-1 in `known-product-issues.md` captured the defect and the producer seam.

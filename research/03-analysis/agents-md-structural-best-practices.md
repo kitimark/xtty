@@ -1,5 +1,10 @@
 # AGENTS.md structural best practices — external survey for a future revamp
 
+> **Status (2026-07-27): historical.** The guide-structure measurements and refutations in this
+> document remain useful, but the later mechanical guide-gate implementation was retired by
+> `remove-guide-gate`. The hook, installer, CI job, fixture suite, and dedicated proof bundle no
+> longer describe the current workflow.
+
 **Provenance:** 2026-07-10, produced via `/xtty:research` (a 5-reader `sonnet` fan-out → synthesis
 `opus·high` → adversarial critic `opus·xhigh` → verify-by-effect, workflow `wf_087ea17f-8f6`), plus two
 follow-up probes the orchestrator ran directly after two verify-stage agents hit transient API errors.

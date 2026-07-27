@@ -51,7 +51,7 @@ VERSION         := $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^
 VERSION         := $(or $(VERSION),$(PROJECT_VERSION),0.0.1)
 BUILD           := $(shell git rev-list --count HEAD 2>/dev/null || echo 1)
 
-.PHONY: help doctor setup build run install restart test test-core build-core bench audit-leaks image image-zsh bootstrap generate clean reset hooks test-guide-gate
+.PHONY: help doctor setup build run install restart test test-core build-core bench audit-leaks image image-zsh bootstrap generate clean reset
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -68,23 +68,8 @@ doctor: ## Check prerequisites it can't auto-install (advises; never runs sudo)
 	if [ "$$ok" = 1 ]; then echo "All prerequisites satisfied."; \
 	else echo "Some prerequisites are missing (see above)."; exit 1; fi
 
-setup: doctor $(SWIFTTERM_SENTINEL) $(XCODEPROJ) | hooks ## First-time setup: check prereqs, bootstrap SwiftTerm, generate the project
+setup: doctor $(SWIFTTERM_SENTINEL) $(XCODEPROJ) ## First-time setup: check prereqs, bootstrap SwiftTerm, generate the project
 	@echo "Setup complete. Run 'make build' or 'make run'."
-
-# --- guide gate (bound-the-agents-md-guide) -----------------------------------
-# `make hooks` arms this clone against an eagerly-injected-guide regrowth past
-# the ratchet ceiling (research/03-analysis/agents-md-structural-best-practices.md).
-# Cannot fail (scripts/install-hooks.sh always exits 0). Wired below as an
-# unconditional, order-only prerequisite of every routine entry point — order-only
-# so it never marks a target out of date, and phony so it re-copies (and re-arms
-# an already-bootstrapped clone) on every invocation.
-
-hooks: ## Install the guide-gate git pre-push hook into this clone (arms xtty-guide-gate)
-	@scripts/install-hooks.sh .githooks/pre-push
-
-test-guide-gate: ## Run the guide-gate fixture suite (47 arms) + its mutation matrix
-	@bash scripts/test-guide-gate.sh
-	@bash scripts/test-guide-gate-mutants.sh
 
 # --- file-targets: re-run a setup step only when its tracked inputs change ----
 
@@ -96,13 +81,13 @@ $(XCODEPROJ): project.yml
 
 # --- build / run / test ------------------------------------------------------
 
-build: $(SWIFTTERM_SENTINEL) $(XCODEPROJ) | hooks ## Build the app (auto-bootstraps + generates if stale)
+build: $(SWIFTTERM_SENTINEL) $(XCODEPROJ) ## Build the app (auto-bootstraps + generates if stale)
 	@xcodebuild -project xtty.xcodeproj -scheme $(SCHEME) -derivedDataPath $(DERIVED) build $(SIGN_FLAGS)
 
-run: build | hooks ## Build then launch the app
+run: build ## Build then launch the app
 	@open $(APP)
 
-install: | $(SWIFTTERM_SENTINEL) $(XCODEPROJ) hooks ## Install an optimized, version-stamped Release build into INSTALL_DIR (default /Applications)
+install: | $(SWIFTTERM_SENTINEL) $(XCODEPROJ) ## Install an optimized, version-stamped Release build into INSTALL_DIR (default /Applications)
 	@echo "Building Release (version $(VERSION), build $(BUILD))…"
 	@xcodebuild -project xtty.xcodeproj -scheme $(SCHEME) -configuration $(RELEASE_CONFIG) -derivedDataPath $(DERIVED) build $(SIGN_FLAGS) MARKETING_VERSION="$(VERSION)" CURRENT_PROJECT_VERSION="$(BUILD)"
 	@if [ -d "$(INSTALL_DIR)/xtty.app" ]; then \
@@ -117,10 +102,10 @@ restart: ## Quit any running xtty and relaunch the installed app
 	@pkill -x xtty 2>/dev/null || true
 	@open "$(INSTALL_DIR)/xtty.app"
 
-test: $(SWIFTTERM_SENTINEL) $(XCODEPROJ) | hooks ## Run the app UI tests (XCUITests)
+test: $(SWIFTTERM_SENTINEL) $(XCODEPROJ) ## Run the app UI tests (XCUITests)
 	@xcodebuild test -project xtty.xcodeproj -scheme $(SCHEME) -destination 'platform=macOS' -derivedDataPath $(DERIVED) $(SIGN_FLAGS)
 
-test-core: $(SWIFTTERM_SENTINEL) | hooks ## Run the fast XttyCore unit tests (no app build)
+test-core: $(SWIFTTERM_SENTINEL) ## Run the fast XttyCore unit tests (no app build)
 	@swift test --package-path XttyCore
 
 bench: build ## Measure latency+memory (P7a regression baseline); writes a JSON report
@@ -134,7 +119,7 @@ bench: build ## Measure latency+memory (P7a regression baseline); writes a JSON 
 	@echo "      is frame-quantized (~one refresh interval). Pin the display refresh for the steadiest cadence."
 	@echo "      Renderer verdict (2026-06-29, gate closed): CoreGraphics — see research/03-analysis/p7-measurement-methodology.md."
 
-build-core: $(SWIFTTERM_SENTINEL) | hooks ## Build XttyCore only
+build-core: $(SWIFTTERM_SENTINEL) ## Build XttyCore only
 	@swift build --package-path XttyCore
 
 audit-leaks: build ## P7c leak/allocation DIAGNOSTIC (leaks+vmmap; NOT a gate — the census churn test is)
