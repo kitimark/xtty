@@ -15,7 +15,7 @@
 
 ## 4. Reconcile and verify against disk
 
-- [ ] 4.1 Grep AGENTS.md and `.claude/agents/` for any other stale reference to "the open-changes table" beyond the ones already identified, and fix or intentionally leave historical narrative untouched (HISTORY.md and archived-change docs are historical record, not live trackers — not edited)
+- [ ] 4.1 Grep AGENTS.md, `.claude/agents/`, and other open changes' `tasks.md` files (currently just `add-ci-pipeline/tasks.md` task 6.2, whose archive-ritual line names "Current-status row + snapshot") for any other stale reference to "the open-changes table" beyond the ones already identified. For `add-ci-pipeline` specifically: confirm task 6.2's phrasing still resolves correctly once this change lands (it can still mean "add a Shipped-and-archived row" — that table is untouched — so it isn't strictly broken, just worth a precision check at that change's own archive time; not edited now, as it's a different change's file). Fix any other stale reference found, or intentionally leave historical narrative untouched (HISTORY.md and archived-change docs are historical record, not live trackers — not edited)
 - [ ] 4.2 `openspec validate --all --type spec` passes with no regressions elsewhere
 
 ## 5. Standard change tail

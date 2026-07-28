@@ -19,6 +19,7 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 | Change | State | What it is | Detail |
 | --- | --- | --- | --- |
 | `add-ci-pipeline` | implemented — owner steps left | CI is live; remaining: repo public, pr-lint PR, branch protection, archive | `research/03-analysis/github-actions-ci-cd.md` |
+| `pointerize-open-changes-table` | proposed — all artifacts done | Replace this table with a derive-on-demand pointer to `openspec list`; the Shipped-and-archived table is untouched | `openspec/changes/pointerize-open-changes-table/proposal.md` |
 
 **Shipped and archived** (full narratives: [HISTORY.md](HISTORY.md); what is true: `openspec/specs/`; mechanisms: `research/`):
 
