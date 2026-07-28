@@ -33,9 +33,9 @@
 - [x] 4.2 Run `make design-link` against the running app; confirm from its output the link resolves to the repo path, the catalogue reports the package published, and token coverage is complete
 - [x] 4.3 Create the project in the app (human step — native folder picker at `design/mockups/`), then verify the import wrote zero bytes into the repo
 - [x] 4.4 Set the project's design system to the xtty package (human step), then verify the stored id — recording that this is a precondition, not proof
-- [ ] 4.5 **Close the loop by effect**: change one token value, run one generation, grep the produced HTML for the new value. Record the `metadata.json` write-back diff and commit or discard it deliberately
+- [x] 4.5 **Close the loop by effect**: change one token value, run one generation, grep the produced HTML for the new value. Record the `metadata.json` write-back diff and commit or discard it deliberately
 - [ ] 4.6 Verify teardown: `make design-unlink` removes the app-side reference only — the committed package directory untouched, the app's own delete API never invoked — then `make design-link` re-registers cleanly
-- [ ] 4.7 Record in `design/README.md` what the interface actually exposed — whether the symlink-install route and the picker were reachable through the GUI at all (design.md Open Questions)
+- [x] 4.7 Record in `design/README.md` what the interface actually exposed — whether the symlink-install route and the picker were reachable through the GUI at all (design.md Open Questions)
 
 ## 5. Baseline mockups
 

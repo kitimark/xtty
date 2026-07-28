@@ -85,4 +85,25 @@ That last line is not redundant. `.gitignore` hides that file, so `git status` c
 
 ## What the interface actually exposed
 
-*(To be filled in after the first live setup — whether the symlink-install route and the design-system picker were reachable through the GUI at all, or whether the script is the only path. Recorded here because it is the highest-value unknown in this setup.)*
+*Settled 2026-07-29 by driving the GUI (peekaboo) and reading `app.sqlite` after each step.*
+
+**Use "Open folder". It is the only route that puts mockups in this repo.** The New project dialog offers three storage-ish affordances and they produce three different project shapes — only one is folder-backed:
+
+| Route | `metadata_json` | Where artifacts land |
+|---|---|---|
+| **New project → "Open folder"** | `baseDir`, `importedFrom:"folder"`, `entryFile`, `fromTrustedPicker:true` | **The folder — in this repo.** ✅ |
+| New project → "Local storage" | `userWorkingDir` | App's data dir. Recorded as a preference; does not become the agent's cwd. |
+| Home composer → "Select working directory" | `linkedDirs` | App's data dir. Its own tooltip says it: *"Let the agent read this local folder (not imported into Design Files)."* |
+
+Two of the three look like what you want and are not. Verify after creating: the project's `metadata_json` must contain `baseDir`.
+
+Other findings from that first run:
+
+- **The design-system picker is exposed**, both on the home composer and per-project (the palette chip above the prompt box). `xtty` appears under **YOUR SYSTEMS**, above the bundled presets, with our `manifest.json` description as its subtitle. Selecting it set `design_system_id = user:xtty`.
+- **The symlink-install route is not exposed in the UI** as far as could be found — `make design-link` is the path. The UI's "Import from folder" for design systems remains the destructive scanner; do not use it.
+- **`index.html` pinned `entryFile` at import**, as intended. Create it before importing.
+- **Import wrote zero bytes** into the repo, confirmed by checksum before/after.
+- **The channel was proven by effect**: a sentinel token value edited in `tokens.css` appeared in the generated HTML minutes later, and the agent's own summary cited our `DESIGN.md` sections by number.
+- **`metadata.json`'s `provenance` must be an object** (`notes`, `localCodeFiles`, `sourceUrls`, …), not a string. A string is silently dropped on the app's write-back.
+- Deleting a project via the app never touches `baseDir` — verified by checksum, and in source (`removeProjectDir` resolves the app's own project dir only).
+- A Finder panel can leave a `.DS_Store` in the project folder; it is ignored repo-wide already.

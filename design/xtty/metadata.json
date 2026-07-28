@@ -6,5 +6,13 @@
   "artifactMode": "agent-managed",
   "createdAt": "2026-07-29T00:00:00.000Z",
   "updatedAt": "2026-07-29T00:00:00.000Z",
-  "provenance": "Hand-authored from xtty's shipped Swift source; see manifest.json and DESIGN.md."
+  "provenance": {
+    "localCodeFiles": [
+      "App/*.swift",
+      "XttyCore/Sources/XttyCore/XttyConfig.swift",
+      "XttyCore/Sources/XttyCore/XttyProfile.swift"
+    ],
+    "notes": "Hand-authored by reading xtty's shipped Swift source. Not derivable by any Open Design importer (they scan CSS/Tailwind/React-family files only). NEVER run 'Import from folder' against this package - it regenerates DESIGN.md from a source scan and destroys the authored prose."
+  },
+  "projectId": "ds-xtty"
 }
