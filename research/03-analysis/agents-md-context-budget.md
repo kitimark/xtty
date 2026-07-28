@@ -317,6 +317,13 @@ regrowth of this file, again concentrated in `## Current status` (A.2's three me
 append-on-retirement cluster, the Tooling mini-index row, and the cached envelope whose three copies
 drifted together into one false claim — the last fixed at the source by commit 1's single-truth block).
 
+**Ceiling check** (the re-check the guide's ingestion-forensics rule mandates after any guide edit):
+the reconciled guide is **37,854 B** (37,373 shipped + the commit-3 refutation one-liner) — still past
+Codex's 32,768 B default, which now silently drops the trailing 5,086 B (`## Conventions` +
+`## Key references`; materially better than N, whose cut landed inside `## How to work here` and
+dropped the delegation table), and past Antigravity's ~23.5–24 KB band. The companion forensics doc's
+≤32,768 B target stays open and non-gating, as recorded there.
+
 Shipped shape (measured on `main` at `38c9af1`): file **37,373 B** (−8,861); `## Current status`
 23,851 → **14,250 B**; the refutations list 32 → **26 bounded entries** (11 kept byte-for-byte incl.
 the frozen retry-ban entry, 10 compressed to conclusion + applicability + pointer, 10 merged to 3,
