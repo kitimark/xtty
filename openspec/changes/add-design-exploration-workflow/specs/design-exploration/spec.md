@@ -72,7 +72,7 @@ Anything not explicitly classified SHALL remain visible to version control on pu
 
 ### Requirement: The design base reaches the agent only when the package is selected
 
-The project SHALL record that pasting the design base into the design agent's prompt requires the package to be both **registered** and **selected** for the project, and that a package failing either condition produces output that may still look correct by coincidence. The recorded verification SHALL therefore be **by effect** — confirming a value unique to the committed design base appears in generated output — and SHALL NOT rely solely on reading configuration state.
+The project SHALL record that pasting the design base into the design agent's prompt requires the package to be **registered, published, and selected** for the project, and that a package failing any of these conditions produces output that can still look correct by coincidence. The recorded verification SHALL therefore be **by effect** — confirming a value unique to the committed design base appears in generated output — and SHALL NOT rely solely on reading configuration state.
 
 #### Scenario: Linkage is proven by generated output
 

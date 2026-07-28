@@ -8,7 +8,7 @@ The command SHALL be **idempotent** — re-running it against an already-registe
 
 The command SHALL require the design tool to already be running and SHALL NOT launch it. When the tool is not running the command SHALL fail with a message that says so plainly, distinguishing that case from a genuine registration failure.
 
-The command SHALL verify its own result against the filesystem and the tool's own catalogue rather than trusting the response of the call it made, and SHALL report what remains for a human to do that cannot be automated.
+The command SHALL verify its own result against the filesystem and the tool's own catalogue rather than trusting the response of the call it made, and SHALL report what remains for a human to do that cannot be automated. It SHALL also report whether the committed design base binds every token name the design tool's schema requires, reporting any shortfall as a warning that names the missing tokens.
 
 #### Scenario: First registration succeeds and is verified independently
 

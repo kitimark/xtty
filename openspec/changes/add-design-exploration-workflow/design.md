@@ -77,7 +77,7 @@ Registration, verification, status, and teardown are scripted. Project creation 
 
 Additive; nothing existing changes behavior. Rollback is `make design-unlink` plus deleting `design/`, `scripts/design-link.sh`, and the Makefile targets — the app-side symlink is the only external state, and removing it leaves the tool as it was.
 
-Ordering matters in one place: the package must be authored and committed **before** linkage, since the symlink resolves a real directory; and linkage must precede project creation, since the picker can only select a registered, published package.
+Ordering matters in one place: the package must be authored and committed **before** linkage, since the symlink resolves a real directory; and linkage must precede the project's design-system selection, since the picker can only offer a registered, published package. (Project creation itself — the folder picker — has no linkage dependency; it merely sits between the two in the task order.)
 
 ## Open Questions
 

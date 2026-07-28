@@ -1,6 +1,6 @@
 ## 1. Design-system package (`design/xtty/`)
 
-> Drafted ahead of this proposal and present uncommitted in the working tree — these tasks verify and finish that draft rather than starting from nothing. Raw material for the prose: the recovered prior draft at `/tmp/od-poc-salvage/recovered/` (scratch; will not survive a reboot).
+> Drafted ahead of this proposal and parked in `git stash` (`design/xtty/{tokens.css,manifest.json,metadata.json}`, `scripts/design-link.sh`, the Makefile targets — see `git stash list`); restore it when applying. These tasks verify and finish that draft rather than starting from nothing. Raw material for the prose: the recovered prior draft at `/tmp/od-poc-salvage/recovered/` (scratch; will not survive a reboot).
 
 - [ ] 1.1 `tokens.css` — bind all 56 schema tokens plus namespaced `--xtty-*` extensions, each declaration carrying an `M`/`P`/`D` provenance tag per design.md D3
 - [ ] 1.2 Verify token coverage mechanically: every schema name present, no unprefixed non-schema name (a diff against `packages/contracts/src/design-systems/token-schema.ts`)
@@ -25,7 +25,7 @@
 - [ ] 3.2 Confirm the script is committed executable (`git ls-files -s` shows mode `100755`) — the Makefile recipes invoke it directly
 - [ ] 3.3 `Makefile` — `design-link`, `design-status`, `design-unlink` targets with `##` descriptions, added to `.PHONY`; `design-status` prefixed so an unlinked repo does not read as a build failure
 - [ ] 3.4 Verify `make` with no target lists all three new entry points with their descriptions (the self-documenting requirement)
-- [ ] 3.5 Verify the not-running path: with the design tool quit, the linkage command fails naming that cause and does not attempt to launch it
+- [ ] 3.5 Verify the not-running path: with the design tool quit, the linkage command fails naming that cause and does not attempt to launch it — and `make design-status` reports the state as indeterminate (cannot-determine), not as "not linked"
 
 ## 4. Live linkage and verification
 
@@ -34,7 +34,8 @@
 - [ ] 4.3 Create the project in the app (human step — native folder picker at `design/mockups/`), then verify the import wrote zero bytes into the repo
 - [ ] 4.4 Set the project's design system to the xtty package (human step), then verify the stored id — recording that this is a precondition, not proof
 - [ ] 4.5 **Close the loop by effect**: change one token value, run one generation, grep the produced HTML for the new value. Record the `metadata.json` write-back diff and commit or discard it deliberately
-- [ ] 4.6 Record in `design/README.md` what the interface actually exposed — whether the symlink-install route and the picker were reachable through the GUI at all (design.md Open Questions)
+- [ ] 4.6 Verify teardown: `make design-unlink` removes the app-side reference only — the committed package directory untouched, the app's own delete API never invoked — then `make design-link` re-registers cleanly
+- [ ] 4.7 Record in `design/README.md` what the interface actually exposed — whether the symlink-install route and the picker were reachable through the GUI at all (design.md Open Questions)
 
 ## 5. Baseline mockups
 
