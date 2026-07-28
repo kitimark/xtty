@@ -51,7 +51,7 @@ VERSION         := $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^
 VERSION         := $(or $(VERSION),$(PROJECT_VERSION),0.0.1)
 BUILD           := $(shell git rev-list --count HEAD 2>/dev/null || echo 1)
 
-.PHONY: help doctor setup build run install restart test test-core build-core bench audit-leaks image image-zsh bootstrap generate clean reset
+.PHONY: help doctor setup build run install restart test test-core build-core bench audit-leaks design-link design-status design-unlink image image-zsh bootstrap generate clean reset
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -124,6 +124,17 @@ build-core: $(SWIFTTERM_SENTINEL) ## Build XttyCore only
 
 audit-leaks: build ## P7c leak/allocation DIAGNOSTIC (leaks+vmmap; NOT a gate — the census churn test is)
 	@scripts/audit-leaks.sh
+
+# --- Open Design linkage (research/03-analysis/open-design-integration-forensics.md) ---
+
+design-link: ## Register design/xtty with the running Open Design app (symlink; idempotent)
+	@scripts/design-link.sh
+
+design-status: ## Report Open Design linkage (read-only; 0=linked+published, 2=app not running, 1=not linked)
+	-@scripts/design-link.sh --status
+
+design-unlink: ## Remove the Open Design symlink by hand (never via the app's delete route)
+	@scripts/design-link.sh --uninstall
 
 # --- local VM test image (packer/README.md) -----------------------------------
 

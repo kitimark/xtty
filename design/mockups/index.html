@@ -1,0 +1,98 @@
+<!doctype html>
+<!--
+  Hand-authored gallery for the xtty mockups project. NOT agent-generated —
+  the design agent is instructed never to modify this file.
+
+  Two jobs:
+   1. Index the mockups, showing at a glance which reproduce shipped UI
+      (baseline) and which propose something new (proposal).
+   2. Pin Open Design's entry-file detection. The daemon detects the project's
+      entry file once, at import, and never recomputes it — so this file must
+      exist BEFORE the project folder is imported.
+
+  Add a card per scenario as it is accepted. Authored against xtty @ 3bc40c7.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xtty — UI mockups</title>
+<style>
+  :root {
+    --bg: #1d1f21; --surface: #1e1e1e; --fg: #c5c8c6;
+    --muted: rgba(255,255,255,.549); --meta: rgba(255,255,255,.247);
+    --border: rgba(255,255,255,.098); --accent: #007aff;
+    --success: #30d158; --warn: #ff9230;
+    --mono: "SF Mono", ui-monospace, Menlo, monospace;
+    --sys: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 24px 64px;
+    background: var(--bg); color: var(--fg);
+    font: 13px/1.35 var(--sys);
+  }
+  main { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 6px; }
+  .note {
+    color: var(--meta); font-size: 11px; margin: 0 0 28px;
+    padding-bottom: 20px; border-bottom: 1px solid var(--border);
+  }
+  h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--muted);
+    margin: 28px 0 10px;
+  }
+  .grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  .card {
+    display: block; padding: 12px; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--surface);
+    text-decoration: none; color: inherit;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card h3 { font-size: 13px; font-weight: 500; margin: 0 0 4px; }
+  .card p { margin: 0; font-size: 11px; color: var(--muted); }
+  .card code { font-family: var(--mono); font-size: 10px; color: var(--meta); }
+  .badge {
+    display: inline-block; font-size: 9px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .05em;
+    padding: 1px 5px; border-radius: 9999px; margin-bottom: 6px;
+  }
+  .badge.baseline { background: rgba(48,209,88,.18); color: var(--success); }
+  .badge.proposal { background: rgba(255,146,48,.18); color: var(--warn); }
+  .empty {
+    padding: 24px; border: 1px dashed var(--border); border-radius: 8px;
+    color: var(--meta); font-size: 12px; text-align: center;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ffffff; --surface: #f5f5f5; --fg: #1d1f21;
+      --muted: rgba(0,0,0,.549); --meta: rgba(0,0,0,.4);
+      --border: rgba(0,0,0,.12);
+    }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>xtty — UI mockups</h1>
+  <p class="sub">HTML drafts of xtty's interface. Hand-translated into SwiftUI separately; nothing here ships.</p>
+  <p class="note">
+    <strong>Baseline</strong> reproduces what xtty ships today, citing the source that implements it.
+    <strong>Proposal</strong> is a candidate change. A proposal with no baseline counterpart means the
+    feature does not exist in xtty at all. Authored against <code>3bc40c7</code>.
+  </p>
+
+  <h2>Baselines — what ships today</h2>
+  <div class="grid">
+    <div class="empty">No baselines yet. First up: <code>app-shell.baseline.html</code>.</div>
+  </div>
+
+  <h2>Proposals</h2>
+  <div class="grid">
+    <div class="empty">None yet.</div>
+  </div>
+</main>
+</body>
+</html>

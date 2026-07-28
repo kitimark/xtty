@@ -1,0 +1,10 @@
+{
+  "title": "xtty",
+  "category": "Developer Tools",
+  "surface": "web",
+  "status": "published",
+  "artifactMode": "agent-managed",
+  "createdAt": "2026-07-29T00:00:00.000Z",
+  "updatedAt": "2026-07-29T00:00:00.000Z",
+  "provenance": "Hand-authored from xtty's shipped Swift source; see manifest.json and DESIGN.md."
+}

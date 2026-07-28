@@ -2,30 +2,30 @@
 
 > Drafted ahead of this proposal and parked in `git stash` (`design/xtty/{tokens.css,manifest.json,metadata.json}`, `scripts/design-link.sh`, the Makefile targets — see `git stash list`); restore it when applying. These tasks verify and finish that draft rather than starting from nothing. Raw material for the prose: the recovered prior draft at `/tmp/od-poc-salvage/recovered/` (scratch; will not survive a reboot).
 
-- [ ] 1.1 `tokens.css` — bind all 56 schema tokens plus namespaced `--xtty-*` extensions, each declaration carrying an `M`/`P`/`D` provenance tag per design.md D3
-- [ ] 1.2 Verify token coverage mechanically: every schema name present, no unprefixed non-schema name (a diff against `packages/contracts/src/design-systems/token-schema.ts`)
-- [ ] 1.3 Re-verify every `M`-tagged value against current xtty source at HEAD — flag any drift from the values the prior draft carried, and correct rather than inherit
-- [ ] 1.4 `manifest.json` — id, files map, and a `source.origin` recording that no importer can regenerate this package
-- [ ] 1.5 `metadata.json` — the app's own 9-key set minus the key it supplies, with `status: "published"` and `artifactMode: "agent-managed"` (design.md D6)
-- [ ] 1.6 `DESIGN.md` — 9 sections; the colour-palette section authored to the swatch extractor's literal shape (bare labels, flat hex immediately after the bold label, no earlier line naming a background/surface/canvas)
-- [ ] 1.7 Probe the authored `DESIGN.md` against a port of the swatch extractor (`design-systems/index.ts:3775-3865`) — expect the four intended values and all slots filled. **The failure is silent; do not skip.**
-- [ ] 1.8 `USAGE.md` — the rules expected to iterate, since this file stays fresh through the symlink while `DESIGN.md` does not
+- [x] 1.1 `tokens.css` — bind all 56 schema tokens plus namespaced `--xtty-*` extensions, each declaration carrying an `M`/`P`/`D` provenance tag per design.md D3
+- [x] 1.2 Verify token coverage mechanically: every schema name present, no unprefixed non-schema name (a diff against `packages/contracts/src/design-systems/token-schema.ts`)
+- [x] 1.3 Re-verify every `M`-tagged value against current xtty source at HEAD — flag any drift from the values the prior draft carried, and correct rather than inherit
+- [x] 1.4 `manifest.json` — id, files map, and a `source.origin` recording that no importer can regenerate this package
+- [x] 1.5 `metadata.json` — the app's own 9-key set minus the key it supplies, with `status: "published"` and `artifactMode: "agent-managed"` (design.md D6)
+- [x] 1.6 `DESIGN.md` — 9 sections; the colour-palette section authored to the swatch extractor's literal shape (bare labels, flat hex immediately after the bold label, no earlier line naming a background/surface/canvas)
+- [x] 1.7 Probe the authored `DESIGN.md` against a port of the swatch extractor (`design-systems/index.ts:3775-3865`) — expect the four intended values and all slots filled. **The failure is silent; do not skip.**
+- [x] 1.8 `USAGE.md` — the rules expected to iterate, since this file stays fresh through the symlink while `DESIGN.md` does not
 
 ## 2. Project folder and repository policy
 
-- [ ] 2.1 `design/.gitignore` — per-entry annotated rules, placed one level above the agent's working directory (design.md D5)
-- [ ] 2.2 `design/mockups/README.md` — the project brief the design agent reads, including the baseline-first instruction and the never-touch list
-- [ ] 2.3 `design/mockups/index.html` — hand-authored gallery shell, zero JS, pinning entry-file detection; cards added per accepted scenario
-- [ ] 2.4 `design/README.md` — the human contract: the two halves, the naming contract, the promote-and-delete ritual, the per-machine vs portable split, the update lifecycle including the design-document cache freeze, and the safety posture with its post-run checklist
-- [ ] 2.5 Confirm the ignore rules classify correctly against a real run's output — and that any marker hidden by a rule is covered by an explicit existence test in the checklist
+- [x] 2.1 `design/.gitignore` — per-entry annotated rules, placed one level above the agent's working directory (design.md D5)
+- [x] 2.2 `design/mockups/README.md` — the project brief the design agent reads, including the baseline-first instruction and the never-touch list
+- [x] 2.3 `design/mockups/index.html` — hand-authored gallery shell, zero JS, pinning entry-file detection; cards added per accepted scenario
+- [x] 2.4 `design/README.md` — the human contract: the two halves, the naming contract, the promote-and-delete ritual, the per-machine vs portable split, the update lifecycle including the design-document cache freeze, and the safety posture with its post-run checklist
+- [x] 2.5 Confirm the ignore rules classify correctly against a real run's output — and that any marker hidden by a rule is covered by an explicit existence test in the checklist
 
 ## 3. Linkage tooling
 
-- [ ] 3.1 `scripts/design-link.sh` — register by symlink, idempotent, stale-link repair, by-effect verification, status and by-hand uninstall modes, and a printed list of what remains human-only
-- [ ] 3.2 Confirm the script is committed executable (`git ls-files -s` shows mode `100755`) — the Makefile recipes invoke it directly
-- [ ] 3.3 `Makefile` — `design-link`, `design-status`, `design-unlink` targets with `##` descriptions, added to `.PHONY`; `design-status` prefixed so an unlinked repo does not read as a build failure
-- [ ] 3.4 Verify `make` with no target lists all three new entry points with their descriptions (the self-documenting requirement)
-- [ ] 3.5 Verify the not-running path: with the design tool quit, the linkage command fails naming that cause and does not attempt to launch it — and `make design-status` reports the state as indeterminate (cannot-determine), not as "not linked"
+- [x] 3.1 `scripts/design-link.sh` — register by symlink, idempotent, stale-link repair, by-effect verification, status and by-hand uninstall modes, and a printed list of what remains human-only
+- [x] 3.2 Confirm the script is committed executable (`git ls-files -s` shows mode `100755`) — the Makefile recipes invoke it directly
+- [x] 3.3 `Makefile` — `design-link`, `design-status`, `design-unlink` targets with `##` descriptions, added to `.PHONY`; `design-status` prefixed so an unlinked repo does not read as a build failure
+- [x] 3.4 Verify `make` with no target lists all three new entry points with their descriptions (the self-documenting requirement)
+- [x] 3.5 Verify the not-running path: with the design tool quit, the linkage command fails naming that cause and does not attempt to launch it — and `make design-status` reports the state as indeterminate (cannot-determine), not as "not linked"
 
 ## 4. Live linkage and verification
 

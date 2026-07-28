@@ -1,0 +1,74 @@
+# design/.gitignore — Open Design daemon residue.
+#
+# This file lives at design/, ONE LEVEL ABOVE the agent's working directory
+# (design/mockups/). That placement is deliberate: the design agent runs with
+# --permission-mode bypassPermissions, so rules kept inside its cwd could be
+# rewritten as an ordinary in-scope edit. From here, the same rewrite requires
+# leaving project scope — a loud, reviewable event rather than a silent one.
+#
+# RULE: ignore machine-local regenerable residue; COMMIT agent-produced content.
+# Anything not listed below stays visible in `git status` ON PURPOSE — an
+# unrecognized file should surface for investigation, not disappear.
+#
+# NOTE ON FORMAT: gitignore has NO inline comments — a `#` only starts a comment
+# at the start of a line. Every reason below therefore sits ABOVE its pattern.
+# (An earlier draft used trailing comments and silently matched nothing; the
+# patterns were literally "<pattern>   # reason". Verified with `git check-ignore -v`.)
+#
+# Citations are into the Open Design source clone @ f52fda2.
+
+# ── confirmed to land in the project folder ──────────────────────────────────
+
+# Per-turn staging copy of the active skill, replaced wholesale every call
+# (cwd-aliases.ts). Build-cache class — reproducible from the app's own install.
+.od-skills/
+
+# finalize-design flow lock; operators remove it by hand (finalize-design.ts).
+.finalize.lock
+
+# finalize's atomic-write temp file (finalize-design.ts).
+DESIGN.md.tmp.*
+
+# App-side rename temp (projects.ts).
+.od-rename-*.tmp
+
+# ── lands in the package dir (design/xtty/) ──────────────────────────────────
+
+# Revision-accept staging; removed in a finally block, but survives a crash.
+.tmp-revision-accept-*/
+
+# Scaffold fingerprint. Should NEVER appear for an agent-managed package — its
+# presence means artifactMode was lost and the app is about to scaffold over our
+# authored files. Ignored because its BODY is review noise, but its EXISTENCE is
+# the signal — and `git status` is now blind to it. So design/README.md's
+# post-run checklist tests for it explicitly, and scripts/design-link.sh warns
+# on it every run. Do not remove that test on the assumption git will show it.
+.od-generated.json
+
+# ── defensive ────────────────────────────────────────────────────────────────
+# These resolve app-side today, but this exact bare-project-dir bug class has
+# shipped before, so the insurance is free.
+
+.live-artifacts/
+.file-versions/
+.transcript.jsonl
+.transcript.lock
+.od-prompt-*.md
+
+# ── DELIBERATELY NOT IGNORED — tripwires. Investigate, don't delete blindly ───
+#
+#   *-v2.html, *-v3.html    Agent revision copies. Promote the winner over the
+#                           canonical name and delete the rest BEFORE committing.
+#                           Ignoring them would let the good revision hide in an
+#                           invisible file while `git status` reads clean.
+#   brand-spec.md           A brand source was attached and OUTRANKED our tokens.
+#   .mcp.json               The daemon misclassified our working directory.
+#   code/ plan/ review/     Plugin-atom output; we do not use those flows.
+#   mockups/DESIGN.md       A real document if "finalize" ever runs here.
+#
+# COMMITTED ON PURPOSE: *.html, *.artifact.json (provenance sidecars),
+#   index.html, README.md, assets/**, and all of design/xtty/**.
+#
+# NEVER name a subfolder any of: build out dist debug target vendor .build
+#   .swiftpm .cache coverage node_modules — the app's own ignore list hides
+#   them, so a mockup placed in one would be invisible to the tool.

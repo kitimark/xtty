@@ -1,0 +1,195 @@
+/* ───────────────────────────────────────────────────────────────────────────
+ * xtty — Open Design token binding
+ *
+ * Authored by hand against xtty's shipped source. No tool can derive this:
+ * Open Design's importers scan CSS/Tailwind/React-family files only, and
+ * xtty is a native Swift app (see research/03-analysis/open-design-integration-forensics.md).
+ *
+ * /!\ NEVER run Settings > Design Systems > "Import from folder" against this
+ *     package. That path is import-local, a CSS/JS scanner: it REGENERATES
+ *     DESIGN.md from a scan of a directory that contains no CSS, destroying the
+ *     authored prose. Register with `make design-link` (symlink) instead.
+ *     The PROJECT folder import used for design/mockups/ is a different, safe
+ *     mechanism — do not confuse the two.
+ *
+ * This file is pasted VERBATIM into the design agent's system prompt whenever
+ * this package is the project's selected design system, and the prompt forbids
+ * inventing colors outside :root. So every value an xtty mockup needs must be
+ * here — including the full ANSI palette, since every scenario has a terminal.
+ *
+ * The 56 names below are the complete Open Design token schema
+ * (packages/contracts/src/design-systems/token-schema.ts @ f52fda2). All are
+ * bound; none may be renamed or dropped. Non-schema additions are namespaced
+ * --xtty-* in Layer C at the bottom, so their non-standard status is evident.
+ *
+ * PROVENANCE TAGS — the point of this file is that you can tell the three apart:
+ *   M  measured — this literal appears in xtty's Swift source, cited path:line
+ *   P  platform — AppKit/SwiftUI resolves it; probe-measured on macOS 26
+ *                 darkAqua with the default accent. xtty sets no such value.
+ *   D  derived  — xtty has no equivalent. A judgement call to fill a required
+ *                 schema slot. Do not cite these back as facts about xtty.
+ * Rule: a flat hex may carry M only if that hex is in xtty's source. A named
+ * SwiftUI color resolved to hex is P for the value, M for the role.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── A1 identity ─────────────────────────────────────────────────────── */
+  --bg:            #1d1f21;  /* M XttyConfig.swift:62 — the terminal canvas; xtty's one authored color */
+  --surface:       #1e1e1e;  /* P windowBackgroundColor. Three points from --bg: that near-identity IS the design */
+  --fg:            #c5c8c6;  /* M XttyConfig.swift:61,63 — foreground AND cursor are the same value */
+  --muted:         rgba(255,255,255,0.549);  /* P Color.secondary */
+  --border:        rgba(255,255,255,0.098);  /* P separatorColor. xtty draws no border of its own */
+  --accent:        #007aff;  /* P controlAccentColor, DEFAULT ONLY — reference, never a brand.
+                              * xtty always uses Color.accentColor, i.e. whatever the user picked
+                              * in System Settings. Mockups may render blue; never call it xtty's color. */
+  --font-display:  -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;  /* P — xtty sets no chrome typeface */
+  --font-body:     -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;     /* P — no display/body split exists */
+
+  /* ── B slots ─────────────────────────────────────────────────────────── */
+  --surface-warm:  var(--surface);  /* alias — xtty has no third surface tier */
+  --fg-2:          rgba(255,255,255,0.847);  /* P Color.primary */
+  --meta:          rgba(255,255,255,0.247);  /* P tertiaryLabelColor */
+  --border-soft:   var(--border);   /* alias — one divider weight only (.thin) */
+
+  /* ── A2 color ────────────────────────────────────────────────────────── */
+  --accent-on:     #ffffff;  /* D — no filled accent surfaces exist in xtty */
+  --accent-hover:  color-mix(in srgb, var(--accent) 92%, black);   /* D — no hover states */
+  --accent-active: color-mix(in srgb, var(--accent) 86%, black);   /* D */
+  --success:       #30d158;  /* P Color.green darkAqua. Roles M SessionSidebar.swift:262 (done), GitReviewView.swift:205 (added) */
+  --warn:          #ff9230;  /* P Color.orange darkAqua. Role M GitReviewView.swift:204 (modified) */
+  --danger:        #ff4245;  /* P Color.red darkAqua. Roles M SessionSidebar.swift:264 (error), GitReviewView.swift:209 (conflicted) */
+  --font-mono:     "SF Mono", ui-monospace, Menlo, Monaco, monospace;
+                             /* M TerminalConfigurator.swift:19 requests the monospaced system font.
+                              * SF Mono is not web-available, so cell metrics in a browser are
+                              * approximate — say so in any mockup that measures columns. */
+
+  /* ── A1 structure — type ─────────────────────────────────────────────── */
+  --text-xs:       9px;   /* M SessionSidebar.swift:127 (block-status caption) */
+  --text-sm:       10px;  /* P .caption and .caption2 are both 10.0pt; only weight differs */
+  --text-base:     11px;  /* M .system(size:11) appears 8× — the glyph/diff workhorse.
+                           * CAVEAT: an unmodified SwiftUI Text (the sidebar pane label,
+                           * SessionSidebar.swift:207) is default body = 13.0pt → bind --text-xl there,
+                           * NOT --text-base. Kept at 11 rather than rebinding base=13, which would
+                           * evict the measured 11/12 anchors from the scale entirely. */
+  --text-lg:       12px;  /* M SpatialToast.swift:16; P .callout = 12.0 */
+  --text-xl:       13px;  /* M XttyConfig.swift:124 (terminal); P systemFontSize = SwiftUI default body */
+  --text-2xl:      16px;  /* D — xtty has no heading tier */
+  --text-3xl:      20px;  /* D */
+  --text-4xl:      24px;  /* M GitReviewView.swift:89 (empty-state glyph) */
+  --leading-body:  1.35;  /* D — AppKit computes line height; no literal exists */
+  --leading-tight: 1.15;  /* D */
+  --tracking-display: 0;  /* D, and asserted: zero kerning anywhere in the app. This 0 is a guardrail */
+
+  /* ── A2 space — xtty's real 2px-dense rhythm, not the schema's 4/8 default ─
+   * Cites: SessionSidebar.swift:121,167,203,212;
+   *        GitReviewView.swift:40,61-62,87,95,171,311,327,466,519,530;
+   *        SpatialToast.swift:43-44.
+   * (The schema has no --space-7. These seven names are exactly the set.) */
+  --space-1:       2px;   /* M */
+  --space-2:       4px;   /* M */
+  --space-3:       6px;   /* M */
+  --space-4:       8px;   /* M */
+  --space-5:       10px;  /* M */
+  --space-6:       12px;  /* M */
+  --space-8:       16px;  /* M */
+  --space-12:      24px;  /* D — covers the 18/28pt outliers */
+
+  /* ── A1 structure — sections ─────────────────────────────────────────── */
+  --section-y-desktop: 0px;  /* D, asserted — xtty has no scrolling marketing sections. Guardrail */
+  --section-y-tablet:  0px;  /* D */
+  --section-y-phone:   0px;  /* D */
+
+  /* ── A2 shape, elevation, motion ─────────────────────────────────────── */
+  --radius-sm:     6px;    /* D */
+  --radius-md:     8px;    /* M SpatialToast.swift:25 — the ONLY custom corner radius in the app */
+  --radius-lg:     10px;   /* D */
+  --radius-pill:   9999px; /* D */
+  --elev-flat:     none;   /* M-by-absence: grep for shadow/blur/vibrancy/NSVisualEffectView → 0 hits */
+  --elev-ring:     0 0 0 1px var(--border);  /* D — the CSS analogue of a .thin divider */
+  --elev-raised:   none;   /* Deliberate override of the schema's shadow fallback.
+                            * xtty has zero shadows; a raised tier would be a lie. */
+  --focus-ring:    0 0 0 3px rgba(26,169,255,0.5);  /* P keyboardFocusIndicatorColor */
+  --motion-fast:   250ms;  /* M SpatialToast.swift:51 */
+  --motion-base:   350ms;  /* M SpatialToast.swift:56 — with the above, the app's only animation */
+  --ease-standard: ease-in-out;  /* D */
+
+  /* ── A1 structure — container ────────────────────────────────────────── */
+  --container-max:              900px;  /* M TerminalWindowController.swift:92 (default content width) */
+  --container-gutter-desktop:   10px;   /* M GitReviewView.swift:61 (git-panel header gutter) */
+  --container-gutter-tablet:    8px;    /* D — xtty has no responsive tiers. Borrowed from a diff-row */
+  --container-gutter-phone:     6px;    /* D — gutter (GitReviewView.swift:519) and a notice padding
+                                         * (:466), purely to fill required slots. Not breakpoints. */
+
+  /* ═══ Layer C — xtty extensions (NOT schema tokens) ═══════════════════════
+   * Namespaced so their non-standard status is self-evident. These carry the
+   * measurements a faithful xtty mockup actually needs. */
+
+  /* Window + panels — all M unless noted */
+  --xtty-content-w:          900px;  /* M TerminalWindowController.swift:92 — the CONTENT rect.
+                                      * The titlebar sits ABOVE this (.titled styleMask, :97).
+                                      * Named content-* so no mockup draws chrome inside the 560. */
+  --xtty-content-h:          560px;  /* M :92 */
+  --xtty-sidebar-w:          220px;  /* M TerminalWindowController.swift:68 */
+  --xtty-sidebar-min-w:      180px;  /* M SessionSidebar.swift:114 (SwiftUI content floor) */
+  --xtty-git-panel-w:        280px;  /* M TerminalWindowController.swift:79 — the AppKit panel width */
+  --xtty-git-panel-min-w:    240px;  /* M GitReviewView.swift:30 — the SwiftUI content minimum.
+                                      * DIFFERENT LAYER from the 280. Label both; never conflate. */
+  --xtty-panel-collapsed-w:  0px;    /* M TerminalWindowController.swift:222 */
+  --xtty-git-filelist-max-h: 220px;  /* M GitReviewView.swift:131 — list clamps to this once a diff shows */
+  --xtty-scroller-w:         17px;   /* P NSScroller.scrollerWidth(for:.regular, scrollerStyle:.legacy)
+                                      * = 17.0 on macOS 26. Runtime-computed — re-run the probe on OS
+                                      * updates. It is NOT 15. */
+  --xtty-quake-h:            40vh;   /* D-ish: source is 0.4 × screen.visibleFrame.height
+                                      * (QuickTerminalController.swift:30,125-129), which EXCLUDES the
+                                      * menu bar and Dock. CSS vh is viewport-relative, so a
+                                      * full-viewport mockup runs ~5–10% tall. Annotate it. */
+
+  /* Terminal */
+  --xtty-term-font-size:     13px;    /* M XttyConfig.swift:124 */
+  --xtty-term-bg-light:      #ffffff; /* M XttyConfig.swift:71 */
+  --xtty-term-fg-light:      #1d1f21; /* M XttyConfig.swift:70,72 — foreground and cursor share one value */
+
+  /* Sidebar rows */
+  --xtty-row-indent:         18px;  /* M SessionSidebar.swift:177 */
+  --xtty-icon-slot:          14px;  /* M SessionSidebar.swift:129 */
+  --xtty-icon-slot-sm:       12px;  /* M SessionSidebar.swift:168 */
+  --xtty-row-dim:            0.55;  /* M SessionSidebar.swift:179 — inactive-pane dimming */
+
+  /* Tints — alphas are M, hues are P (at runtime the hue is the USER's accent) */
+  --xtty-tint-selection:     rgba(0,122,255,0.18);  /* M SessionSidebar.swift:137, GitReviewView.swift:229 */
+  --xtty-tint-hunk-header:   rgba(0,122,255,0.12);  /* M GitReviewView.swift:610 */
+  --xtty-tint-emphasis:      rgba(0,122,255,0.30);  /* M GitReviewView.swift:591 */
+
+  /* Diff tinting — alphas M GitReviewView.swift:608,609,589,590; hues P */
+  --xtty-diff-add-bg:        rgba(48,209,88,0.18);
+  --xtty-diff-del-bg:        rgba(255,66,69,0.18);
+  --xtty-diff-add-emph:      rgba(48,209,88,0.40);
+  --xtty-diff-del-emph:      rgba(255,66,69,0.40);
+
+  /* Git status letters — roles M GitReviewView.swift:204-209 */
+  --xtty-git-modified:       var(--warn);
+  --xtty-git-added:          var(--success);
+  --xtty-git-deleted:        var(--muted);   /* deliberately MUTED, not red — "the zed tweak" (:206) */
+  --xtty-git-untracked:      var(--muted);
+  --xtty-git-conflicted:     var(--danger);
+  --xtty-git-renamed:        #0091ff;        /* role M :207 (.blue); value P Color.blue darkAqua */
+
+  /* Session status vocabulary — roles M SessionSidebar.swift:250-268 */
+  --xtty-status-blocked:     #db34f2;  /* role M :266 (.purple); value P Color.purple darkAqua */
+
+  /* Toast — the app's only bespoke component */
+  --xtty-toast-bg:           rgba(0,0,0,0.78);  /* M SpatialToast.swift:24 */
+  --xtty-toast-fg:           #ffffff;           /* M SpatialToast.swift:17 */
+
+  /* ANSI palette — M XttyConfig.swift:38-55 (standardAnsi, shared by BOTH built-in themes).
+   * Required: every scenario contains a terminal pane, and the injected prompt bans raw
+   * hex outside :root, so a faithful prompt / ls / git status has nowhere else to get these. */
+  --xtty-ansi-0:  #000000;  --xtty-ansi-8:  #7f7f7f;   /* M */
+  --xtty-ansi-1:  #cd0000;  --xtty-ansi-9:  #ff0000;   /* M */
+  --xtty-ansi-2:  #00cd00;  --xtty-ansi-10: #00ff00;   /* M */
+  --xtty-ansi-3:  #cdcd00;  --xtty-ansi-11: #ffff00;   /* M */
+  --xtty-ansi-4:  #0000ee;  --xtty-ansi-12: #5c5cff;   /* M */
+  --xtty-ansi-5:  #cd00cd;  --xtty-ansi-13: #ff00ff;   /* M */
+  --xtty-ansi-6:  #00cdcd;  --xtty-ansi-14: #00ffff;   /* M */
+  --xtty-ansi-7:  #e5e5e5;  --xtty-ansi-15: #ffffff;   /* M */
+}
