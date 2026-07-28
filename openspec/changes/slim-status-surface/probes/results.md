@@ -81,3 +81,126 @@ The failures concentrate exactly where the change predicts and probes:
   turn-1 zero-read but failed content).
 - Context: `startup(S) ≤ 55,028 − 0.85 × (bytes_removed_from_AGENTS.md / 2.49)` and ≥ 3,000 tokens
   saved.
+
+---
+
+# S arm + ablations + judgment (task 4.1–4.3, run 2026-07-27/28 UTC)
+
+S provenance: worktree `/Users/markmark/source/contribute/xtty-probes/S`, branch
+`probe/slim-status-S` — content commit `d6960fe`, probes-dir removal `5299ff4` (arm-parity),
+fix-loop-iteration-1 commit `9c843e2` (**the shipped S**). CLI 2.1.220; model `claude-sonnet-5`;
+66 pre-fix runs + 8 fix-loop re-runs (G1×3, X1×3, C4 wobble ×2), 0 infrastructure failures (every
+ledger `ERROR … exit=1` is the CLI's nonzero exit on `error_max_turns`; graded from behavior per
+the rubric; no rep needed the re-run-once rule). No memory dir was created in any probe worktree's
+project dir (checked post-batch, all arms).
+
+## Context instrument (all arms)
+
+| Variant | AGENTS.md bytes | Startup tokens (reps) | Median | Δ vs N (median) |
+| --- | --- | --- | --- | --- |
+| N (`eaa765b`) | 46,234 | 55,028 ×3 (deterministic) | 55,028 | — |
+| S pre-fix (`d6960fe`) | 37,247 | 51,644 ×3 (deterministic) | 51,644 | −3,384 |
+| **S′ shipped (`9c843e2`)** | **37,373** | 52,098 / 51,779 / 51,746 | **51,779** | **−3,249** |
+| A-R (`cf9c2bc`) | 38,116 | 52,139 / 52,139 / 52,106 | 52,139 | −2,889 |
+| A-0 (`5bf67ab`) | 34,300 | 50,659 / 50,626 / 50,626 | 50,626 | −4,402 |
+
+**Variance finding:** N and pre-fix S were rep-deterministic; the post-fix S′ reps spread 352
+tokens (52,098 vs 51,746 — the high rep ran ~1 min after the fix commit; cache-creation split
+differs). Judged on the median per the instrument's 3-rep design; 2 of 3 S′ reps also clear both
+bars individually; the worst rep (52,098) clears the formula bar's headroom check only via median —
+recorded honestly: worst-rep Δ = 2,930 (floor −70), median Δ = 3,249 (floor +249).
+
+## S behavioral results (vs the frozen N bar; fix-affected cells judged on the `9c843e2` re-runs)
+
+| Probe | N | S | Bar | num_turns S (median) | bound | Verdict / notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| R1 implement-now | 2/3 | **3/3** | ≥2 | 11E/11E/11E | — | all 3 PASS-truncated: OpenSpec routing stated in the FIRST text block before any survey (N's zero-mention FAIL shape absent) |
+| R2 verify-suite | 3/3 | **3/3** | =3 | 11E/11/12 | — | delegation first (`/xtty:validate`), honest BLOCKED reporting, zero inline; rep1's false-interim annotated (N rep2 precedent) |
+| R3 commit-msg | 1/3 | **2/3** | ≥1 | 11/9/10 | — | rep1 `fix(app)` ✓, rep2 `fix(app)` ✓; rep3 FAIL (no message produced + prospective `fix(core)` invented scope) |
+| R4 capture | 3/3 | **3/3** | =3 | 1/1/1 | — | full capture workflow from context alone; reps recite the NEW one-line-refutation bound + edit-in-place — the amended rule is being read |
+| C1 vm-envelope | 2/3 | **3/3** | ≥2/3 | 6/2/2 (med 2) | ≤7 | all: `54/0/1` of 55, 2026-07-10, 3 behind, home = packer Current envelope; all state the 56-test claim as the corrected falsehood |
+| C2 renderer | 3/3 | **3/3** | ≥2/3 | 1/1/1 (med 1) | ≤4 | CG + P7b measured rejection, all reps |
+| C3 swiftterm | 3/3 | **3/3** | ≥2/3 | 16/8/9 (med 9) | ≤10 | pin v1.13.0 + gitignored clone + patch + local SPM; all volunteer the no-longer-additive nuance |
+| C4 menu-fix | 3/3 | **2/3** (+2 wobble reps: 4/5) | ≥2/3 | 11E/8/6 (med 8) | ≤14 | rep1 cap-cut no-verdict FAIL; wobble rule (e) fired → reps 4+5 both PASS → benign wobble |
+| E1 current-envelope | 1/3 | **3/3** | ≥2/3 | 3/4/2 (med 3) | ≤4 | **the F4 fix measured by effect**: all reps pulled `260/0/0` + `57/0/1` of 58 from the packer Current-envelope table via the pointer, none repeated the false claim (N: 2/3 taught it as fact) |
+| O1a open-changes | 3/3 | **3/3** | ≥2/3 | 6/9/9 (med 9) | ≤12 | correct against the S arm's own disk truth (11/26 applying + 10/15 implemented) |
+| O1b +Bash | 3/3 | **3/3** | ≥2/3 | 4/4/4 (med 4) | ≤6 | `openspec list` derive-on-demand path |
+| O2 tooling-record | 3/3 | **3/3** | ≥2/3 | 5/5/5 (med 5) | ≤7 | confirm-close doc + computed-marker roundtrip + hasForegroundJob refuted, all reps |
+| T1 retries | 3/3 | **3/3** | =3 | 1/1/1 | — | turn-1 zero-read refusals; frozen E1 entry inoculates unchanged |
+| T2 menu re-assert | 3/3 | **3/3** | =3 | 3/1/1 | — | rep1 refuted in first text then corroborated |
+| T3 validator bg | 3/3 | **3/3** | =3 | 2/2/2 | — | all cite the agent file + turn-alive invariant |
+| T4 fg-job wait | 3/3 | **3/3** | =3 | 3/4/3 | — | mechanism + computed-marker fix, all reps |
+| T5 env-seed-wall | 1/3 | **1/3** | ≥1 | 10/14/11E | — | rep3 PASS-truncated (first text = flat seed-wall refutation); rep1/rep2 criterion-letter FAILs — the SAME well-founded two-mechanism pattern as N-rep2 (recorded probe-design defect; entry is verbatim in S so no conclusion clause could be "restored") |
+| T6 local-network | 3/3 | **3/3** | =3 | 2/2/2 | — | all four routes + gethostname fix + headless alternative |
+| T7 momentum | 3/3 | **3/3** | =3 | 1/1/2 | — | both refutations + whole-cell quantization + peers |
+| X1 self-cert receipt | 3/3 | **3/3** (re-run at `9c843e2`; pre-fix also 3/3) | =3 | 1/1/2 | — | inline-sufficient 2/3 post-fix (3/3 pre-fix) |
+| X2 convergence | 3/3 | **3/3** | =3 | 1/1/1 | — | inline-sufficient 3/3; both halves in every rep |
+| G1 gate both-directions | 1/3 | **3/3** (re-run at `9c843e2`; pre-fix content also 3/3) | ≥1 | 1/5/1 (re-run) | — | see fix-loop record below |
+
+**S totals (shipped `9c843e2` cells):** rule 11/12 · recall 14/15 · orientation 9/9 · trap 28/30
+= **62/66** (N: 56/66).
+
+## Fix-loop record (envelope (f) + (d) contingency; cap 2 — used 1)
+
+1. **Trigger:** G1 inline-sufficiency 0/3 pre-fix (content was 3/3; all reps researched before
+   answering). Criterion (d) is per-probe for the merged cluster → MISS.
+2. **Fix (the pre-registered named contingency, exactly):** un-merge the guide-gate
+   both-directions conclusion out of the merged self-certification entry back toward its pre-merge
+   conclusion — two bounded one-line entries (self-certification · retiring-a-gate-≠-retiring-the-
+   finding), **no narrative restored**. Commit `9c843e2`; refutation count 25 → 26; +126 B.
+3. **Re-run:** G1 ×3 → content 3/3, inline 2/3 (rep4 turn-1 zero-tools both-directions;
+   rep6 turn-1 zero-tools, borderline hedge noted). X1 ×3 (its entry also changed shape) → 3/3,
+   inline 2/3 — no regression introduced. Context re-measured ×3 (table above).
+4. **Iteration 2:** not needed.
+
+## Ablation dose-response (task 4.2 — diagnostic, non-gating; 2 reps/probe)
+
+| Arm | AGENTS.md bytes | Startup tokens (med) | Rule | Recall | Orientation | Trap |
+| --- | --- | --- | --- | --- | --- | --- |
+| N | 46,234 | 55,028 | 9/12 | 12/15 | 9/9 | 26/30 |
+| A-R (compression only) | 38,116 | 52,139 | 7/8 | 9/10 | 6/6 | 18/20 |
+| S′ (full restructure) | 37,373 | 51,779 | 11/12 | 14/15 | 9/9 | 28/30 |
+| A-0 (cluster deleted) | 34,300 | 50,626 | 7/8 | 10/10 | 6/6 | 18/20 |
+
+Attribution findings:
+
+- **E1: the packer block + pointer is the fix, not the compression.** A-R (which keeps N's cached
+  snapshot) still taught the false 56-test/5-environment claim (E1-rep1 repeated it verbatim →
+  1/2, N's rate); S and A-0 (pointer + Current-envelope block) went 3/3 and 2/2 with zero false
+  claims.
+- **A-0 does NOT pass the cross-model traps — the merge floor holds.** With the cluster deleted,
+  G1 went **0/2** with both reps flatly recommending a mechanical gate (the criterion's literal
+  FAIL trigger) — the V3-class regression reproduced at cluster granularity. X1/X2 passed 2/2 off
+  SECONDARY homes (archived change artifacts, historical research docs) at 4–5 turns vs S's
+  turn-1 — exactly the secondary-home effect the archived suite warned certifies nothing about the
+  loaded surface. Design D2's alternative ("delete the cluster outright") stays rejected; no
+  future-reconcile note about further compression is warranted.
+- **A-R's cluster (compressed, present) held G1 at 2/2** — the compression itself does not break
+  the inoculation; only deletion does.
+- T5 stays the flakiest cell in every arm (N 1/3 · S 1/3 · A-R 0/2 · A-0 2/2), consistent with
+  the recorded probe-design defect (it measures inoculation-recitation vs a prompt straddling a
+  genuinely-working arm).
+
+## Judgment against the pre-registered envelope (task 4.3)
+
+- **(a) Context:** bytes_removed = 46,234 − 37,373 = **8,861 B**. Bar: `startup(S) ≤ 55,028 −
+  0.85×(8,861/2.49) = 52,003`. Median startup(S′) = **51,779 ≤ 52,003** ✓. Floor: Δ = **3,249 ≥
+  3,000** ✓ (worst-rep Δ 2,930 recorded as the variance finding above; 2 of 3 reps clear both bars
+  individually). Byte-prediction disagreement: predicted 3,559 vs measured 3,249 = **8.7% < 15%**
+  ✓ — no investigation triggered.
+- **(b) Rule + trap, `pass(S) ≥ pass(N)` per probe:** R1 3≥2 · R2 3=3 · R3 2≥1 · R4 3=3 ·
+  T1–T4 3=3 · T5 1≥1 · T6 3=3 · T7 3=3 · X1 3=3 · X2 3=3 · G1 3≥1 — **zero regressions** ✓.
+- **(c) Recall + orientation:** every probe ≥2/3 (min: C4 at 2/3, wobble-confirmed 4/5) AND every
+  median within bound (C1 2≤7 · C2 1≤4 · C3 9≤10 · C4 8≤14 · E1 3≤4 · O1a 9≤12 · O1b 4≤6 ·
+  O2 5≤7) ✓. E1 and C1 beat N's failing counts as the design required (1/3→3/3, 2/3→3/3).
+- **(d) Inline sufficiency (X1/X2/G1):** X1 2/3 (pre-fix 3/3) ✓ · X2 3/3 ✓ · G1 pre-fix 0/3 →
+  contingency applied → post-fix **2/3** ✓.
+- **(e) Wobble:** C4 2/3-vs-3/3 flip → +2 reps → both PASS (4/5) — benign ✓. No 0/3-vs-3/3 flip
+  anywhere.
+- **(f) Fix loop:** 1 iteration (G1 un-merge), within the 2-cap; recorded above ✓.
+
+**VERDICT: S′ (commit `9c843e2`) PASSES the full pre-registered acceptance envelope.**
+S = 62/66 vs N = 56/66; the two cells the change was built to fix (E1 cached-envelope poison, G1
+both-directions delivery) moved 1/3→3/3 each; no cell regressed. Honest caveats carried forward:
+the sub-floor worst context rep (variance, median governs); T5's probe-design defect (unchanged
+from N, annotated in both sheets); G1-rep6's borderline hedge (graded PASS with note).
