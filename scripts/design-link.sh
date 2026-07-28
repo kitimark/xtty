@@ -50,12 +50,15 @@ OD_APP="${OD_APP:-/Applications/Open Design.app}"
 DEFAULT_DATA_DIR="$HOME/Library/Application Support/Open Design/namespaces/release-stable/data"
 MODE=install
 SELECT_PROJECT=""
+# Single target on purpose — see the platform note in the `select` branch.
+PLATFORM="desktop-app"
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --status)          MODE=status ;;
     --uninstall)       MODE=uninstall ;;
     --select-project)  MODE=select; SELECT_PROJECT="${2:?--select-project needs a project id or name}"; shift ;;
+    --platform)        PLATFORM="${2:?--platform needs a slug (default: desktop-app)}"; shift ;;
     --package-dir)     PKG_DIR="${2:?--package-dir needs a path}"; shift ;;
     -h|--help)         sed -n '2,/^set -euo/p' "$0" | sed 's/^# \{0,1\}//;$d'; exit 0 ;;
     *) echo "unknown option: $1 (try --help)" >&2; exit 1 ;;
@@ -242,6 +245,40 @@ verify_catalog() {
 }
 
 advisories() {
+  # 0a. Duplicate folder-imports. Open Design does NOT dedupe: the import route
+  # has no existing-project check, and `projects` constrains only `id` — not
+  # `name`, not metadata.baseDir (db.ts:58-67). So importing design/mockups
+  # twice yields two independent projects writing into the SAME directory,
+  # each with its own design-system setting. Observed for real: a double-fired
+  # click produced two `mockups` rows, one configured and one not, which then
+  # made `--select-project mockups` ambiguous. Names are not identity here —
+  # always resolve by baseDir.
+  if [ -n "$BASE" ]; then
+    dups="$(od_get /api/projects 2>/dev/null | "$py" -c '
+import json,sys,os
+try: d=json.load(sys.stdin)
+except Exception: raise SystemExit
+want=os.path.realpath(sys.argv[1])
+hits=[]
+for p in (d.get("projects") or []):
+    b=((p.get("metadata") or {}).get("baseDir")) or ""
+    if b and os.path.realpath(b)==want:
+        hits.append((p.get("id",""), p.get("name",""), p.get("designSystemId")))
+if len(hits)>1:
+    for i,n,ds in hits: print("%s|%s|%s"%(i,n,ds))' "$MOCKUPS_DIR" 2>/dev/null || true)"
+    if [ -n "$dups" ]; then
+      warn "DUPLICATE PROJECTS: more than one project has baseDir $MOCKUPS_DIR."
+      warn "  Open Design does not dedupe folder imports (no uniqueness on name or baseDir),"
+      warn "  so these are independent projects writing into the same directory — one may"
+      warn "  have the design system attached and another not, and a generation run in the"
+      warn "  wrong one silently skips your tokens. Delete the extras IN THE APP (deleting"
+      warn "  a project never touches baseDir), keeping the one that reports user:xtty:"
+      printf '%s\n' "$dups" | while IFS='|' read -r i n ds; do
+        warn "    id=$i  name=$n  designSystem=$ds"
+      done
+    fi
+  fi
+
   # 0. Artifact-mode tripwire — the one marker design/.gitignore hides from git status.
   if [ -e "$PKG_REAL/.od-generated.json" ]; then
     warn "TRIPWIRE: $PKG_REAL/.od-generated.json exists — artifactMode was lost; the scaffold"
@@ -421,6 +458,35 @@ print("OK %s %s"%(p["id"], p.get("designSystemId")))' "$SELECT_PROJECT" "$ROOT" 
   now="$(od_get "/api/projects/$pid" | "$py" -c 'import json,sys; d=json.load(sys.stdin); print((d.get("project") or d).get("designSystemId"))')"
   [ "$now" = "$DS_ID" ] || die "re-read says design_system_id=$now, expected $DS_ID"
   say "  verified: design_system_id = $now"
+
+  # Target platform. The folder-import route sets NO platform at all, which
+  # leaves the prompt carrying "platform: (unknown — ask …)" (prompts/system.ts
+  # :1626) so the agent re-asks every session. Worse is the WRONG value:
+  # `responsive` injects a contract demanding no horizontal scroll at 360px and
+  # verification across ten breakpoints (:1631) — which flatly contradicts this
+  # design base (DESIGN.md §8: no breakpoints; panels collapse to zero, they do
+  # not reflow). `desktop-app` as a SINGLE target avoids both, and also avoids
+  # the >1-target rule that would demand one file per platform (:1636).
+  # Slug per apps/web NewProjectPanel.tsx:119. Metadata is replaced wholesale,
+  # so re-send the whole object; the route re-stamps baseDir/fromTrustedPicker
+  # itself (routes/project/index.ts:2100-2145), which the re-read below proves.
+  meta="$(od_get "/api/projects/$pid" | "$py" -c '
+import json,sys
+d=json.load(sys.stdin); m=((d.get("project") or d).get("metadata")) or {}
+m["platform"]=sys.argv[1]; m["platformTargets"]=[sys.argv[1]]
+m.pop("fromTrustedPicker", None)   # immutable; the route rejects any change
+print(json.dumps({"metadata": m}))' "$PLATFORM")"
+  code="$(od_json PATCH "/api/projects/$pid" "$meta" "$tmp")"
+  [ "$code" = 200 ] || die "platform PATCH failed ($code): $(api_err <"$tmp")"
+  od_get "/api/projects/$pid" | "$py" -c '
+import json,sys
+m=((json.load(sys.stdin).get("project") or {}).get("metadata")) or {}
+want=sys.argv[1]
+if m.get("platform")!=want: raise SystemExit("platform re-read=%s, expected %s"%(m.get("platform"),want))
+if not m.get("baseDir"):    raise SystemExit("baseDir LOST by the platform patch — folder link broken")
+print("  verified: platform = %s, targets = %s"%(m["platform"], m.get("platformTargets")))
+print("  verified: baseDir still %s"%m["baseDir"])' "$PLATFORM" \
+    || die "platform verification failed"
   say ""
   say "This proves the DB field. It does NOT prove tokens reach a prompt — for"
   say "that: change one value in design/xtty/tokens.css, generate a mockup, and"
