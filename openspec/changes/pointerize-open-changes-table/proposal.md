@@ -10,6 +10,7 @@ The owner has weighed the tradeoff explicitly and prefers updating AGENTS.md les
 - Delete AGENTS.md's "Open changes" table and replace it with a one-line pointer in the same idiom as the existing "Established specs" line.
 - Update AGENTS.md's "Keep progress current" checklist bullet: drop the instruction to update "the change's row in the Current-status table," and drop the verify-against-disk clause that compares `openspec list` against the open-changes table (there is no longer a row to keep in sync or check).
 - Update the committed `xtty-openspec-critic` agent, which currently runs a disk-drift check comparing `openspec list` against the AGENTS.md open-changes table (and references that table generically as a ground-truth tracker) — this check is removed/rewritten since the table it checks against no longer exists. Bump the agent's version, matching the precedent set when `slim-status-surface` last changed the guide's status-surface shape.
+- Update the committed `xtty-capture-research` skill the same way: its verify-against-disk snippet annotates `openspec list` with "must match the Current-status open-changes table", and its reconcile step (and frontmatter description) restate the per-change table-row update — rewritten to the derive-on-demand shape, with the skill's `version` metadata bumped.
 
 ## Capabilities
 
@@ -25,5 +26,5 @@ The owner has weighed the tradeoff explicitly and prefers updating AGENTS.md les
 
 - **Docs:** `AGENTS.md` (Current status section: table removed, "Keep progress current" bullet reworded), `CLAUDE.md` (symlink, no separate edit).
 - **Spec:** one `## MODIFIED Requirement` delta in `research-capture` (the full existing requirement block pasted, with the status-surface paragraph's open-changes clause changed).
-- **Tooling:** `.claude/agents/xtty-openspec-critic.md` — the open-changes-vs-disk check removed/rewritten, version bumped.
+- **Tooling:** `.claude/agents/xtty-openspec-critic.md` — the open-changes-vs-disk check removed/rewritten, version bumped; `.claude/skills/xtty-capture-research/SKILL.md` — the row-update step and the open-changes-table verify line rewritten to derive-on-demand, version bumped.
 - **No application code, no other spec.** The one currently-open change (`add-ci-pipeline`) loses its AGENTS.md row as a direct consequence; its own progress continues to be tracked in its own `tasks.md` and via `openspec list`/`openspec show`, unaffected by this change.
