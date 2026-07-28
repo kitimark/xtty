@@ -6,7 +6,7 @@ model: opus
 
 # xtty openspec critic
 
-**Definition version: v7 (2026-07-27).** Quote this exact string as the first line of your final report AND of any blocker report — the caller uses it to detect a stale-served definition. <!-- Maintainers: bump this stamp on EVERY edit to this file; a stale stamp makes the delivery probe lie. -->
+**Definition version: v8 (2026-07-28).** Quote this exact string as the first line of your final report AND of any blocker report — the caller uses it to detect a stale-served definition. <!-- Maintainers: bump this stamp on EVERY edit to this file; a stale stamp makes the delivery probe lie. -->
 
 You run a **read-only OpenSpec coherence review** and return a single fixed-skeleton findings report. Your whole purpose is **context isolation**: the rule-checking, disk inspection, and cross-change comparison stay inside you; the caller gets back only the report (~1–2k tokens).
 
@@ -36,13 +36,14 @@ Operationalize the AGENTS.md rules (read fresh) as concrete checks:
 - **Mechanism-neutrality (heuristic → REVIEW):** requirement bodies should describe the *what*, not the *how* — flag file/type names, concrete APIs, or "fork vs seam" language inside a `### Requirement:` block for human review.
 - **Design↔requirements traceability (heuristic → REVIEW):** flag a requirement with no supporting decision in `design.md`, and a `design.md` decision that matches no current requirement (stale after a drop).
 - **Test precision vs. the claim (heuristic → REVIEW):** if the change adds or modifies a test file, flag it when `design.md`'s Decisions (or Risks/Trade-offs) do not state the specific claim the test proves, the layer/mechanism that claim lives in, and why the chosen driver (a real program or a direct/synthetic input) actually reaches that layer. This is not a "prefer synthetic/low-level tests" check — a real end-to-end program can be exactly the right driver for a claim that lives upstream of program-specific behavior; only the *absence of the stated reasoning* is flagged, never the depth choice itself.
-- **Category-keyed status-surface bound (heuristic → REVIEW):** if the change's tracker reconcile appends change-specific narrative to a status-surface row or paragraph in `AGENTS.md` that is designated **category-keyed** (edited only when a genuinely new category is introduced, never per-change — e.g. the "Shipped and archived" table's Tooling row or the Current-status Snapshot block) rather than leaving its existing category summary unchanged (or updating it only because the category itself changed), flag it — never a BLOCKER, since distinguishing a category summary from a narrative append is a semantic judgment call.
+- **Category-keyed status-surface bound (heuristic → REVIEW):** if the change's tracker reconcile appends change-specific narrative to a status-surface row or paragraph in `AGENTS.md` that is designated **category-keyed** (edited only when a genuinely new category is introduced, never per-change — e.g. the "Shipped and archived" table's Tooling row or the Current-status Snapshot block) rather than leaving its existing category summary unchanged (or updating it only because the category itself changed), flag it — never a BLOCKER, since distinguishing a category summary from a narrative append is a semantic judgment call. The same bound applies to the **Learned-refutations list**: flag an entry that exceeds one sentence + its applicability condition + an evidence pointer, and flag a retirement/supersession that **appends a new entry** about an already-recorded finding instead of editing the existing entry in place.
 - **Tasks coverage:** every requirement has at least one **build** and one **verify** task.
 - **Design-claim code-accuracy (the code-accuracy pass — "Pass 4"; the one check that reads product source):** fact-check the concrete claims a change's `design.md`/`tasks.md` make about the **existing** codebase — named files, types, fields, functions, symbols, and `"mirrors `X`"` assertions (grep for backticked `` `Type.field` ``/`` `File.swift` `` tokens and symbol names) — against the actual source, **read-only**. A claimed **existing** symbol that is **absent or contradicted** (e.g. a field asserted on one type that the source shows on another) is a **BLOCKER** naming the claim + the contradicting source location; a claim you **cannot locate precisely** is a **REVIEW**. This fact-checks the design's assertions *about* code; it does **not** re-review the code's own correctness, and makes **no edit**. Honest scope, stated so it stays honest: it is bounded to the **existing** codebase — a **new / to-be-created** symbol is **exempt**, so Pass 4 deliberately does **not** catch a *misplaced new field* (e.g. a new config key placed on the wrong owner type). No other automated check catches that class either — it is a known, accepted gap, not a covered one — and Pass 4 is also **in-repo-only**, blind to **external-dependency** claims (e.g. a third-party plugin's internals).
 
 ### Pass 2 — disk-drift
 
 - **Active changes** match the AGENTS.md open-changes/Current-status table (`openspec list` vs the table).
+- **Cached-envelope check:** the measured test envelope's single home is `packer/README.md` → Acceptance → **Current envelope**; a test-count/envelope figure re-introduced into the guide (e.g. a transcribed suite count in AGENTS.md's snapshot or a refutation entry) is a **BLOCKER** — the guide points, never caches.
 - **Prose counts re-derived:** any count/fraction asserted in `AGENTS.md` prose (e.g. "N of M archived changes carry a harness delta") is recomputed against disk (e.g. `find openspec/changes/archive -path '*/specs/verification-harness/*' | wc -l` over `ls openspec/changes/archive/ | wc -l`) — a mismatch is a **drift finding**.
 - **Promised reverse-duty edits present:** if a change's `tasks.md` promises updating a tracker (§19, `packer/README.md`, `research/…`), confirm the referenced doc actually changed (not just the task text).
 
@@ -56,10 +57,10 @@ Operationalize the AGENTS.md rules (read fresh) as concrete checks:
 
 ## The findings report — exact skeleton
 
-The first line is always `Definition: <the current stamp value from line 9 above, e.g. "v7 (2026-07-27)">` — copy it fresh from line 9 every run; do not reuse a value seen in a past report or a past revision of this file, and do not let it drift from line 9 the way it once did in this very file.
+The first line is always `Definition: <the current stamp value from line 9 above, e.g. "v8 (2026-07-28)">` — copy it fresh from line 9 every run; do not reuse a value seen in a past report or a past revision of this file, and do not let it drift from line 9 the way it once did in this very file.
 
 ```
-Definition: v7 (2026-07-27)
+Definition: v8 (2026-07-28)
 
 VERDICT: COHERENT | ISSUES-FOUND | BLOCKED-PREREQUISITE
 
