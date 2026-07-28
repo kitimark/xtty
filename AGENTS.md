@@ -12,13 +12,12 @@ Guidance for AI agents (and humans) working in this repository. This is the cano
 
 - **Milestone:** P0–P7 implemented and archived — xtty is a daily-drivable native terminal: tabs/splits/windows, quake terminal, profiles, OSC 7+133 semantic capture on auto-injected zsh, session + block sidebars, file-link open, spatial block navigation, git review panel (flat/tree), and the perf harness that settled the renderer question (**keep CoreGraphics**, skip Phase 8).
 - **Test envelope:** never cached here — the single measured home is `packer/README.md` → Acceptance → **Current envelope** (per-tier figures with `CURRENT | STALE` status tokens, the not-yet-covered list, and the evidence paths, stated plainly up front).
-- **Latest change:** `remove-cross-model-review` — **archived** (9/10 tasks; task 4.3's own tick was the last act). Fully retired the `cross-model-review` capability — both the `/xtty:cross-review` worker (Opus conformance + Codex soundness + inline Fable-5 soundness passes) and the mechanical human-attestation archive gate (the scope classifier + digest tool + fail-closed step-0 precondition) — plus the coupled `coherence-review` cross-review-gate-task check. Owner judged the ceremony's cost (re-attestation deadlocks, digest fragility, an unsettled exempt-by-act question) not worth its disclaimed "accident tripwire" assurances. No self-review dogfood (explicit decision — the mechanism would have had to bless its own deletion); archived via the same `--skip-specs` + hand-merge deviation `remove-guide-gate` established. The self-certification refutation that motivated the gate still holds; there is simply no gate at all now. Full narrative: [HISTORY.md](HISTORY.md).
+- **Latest change:** `slim-status-surface` — **archived.** Restored this section to its bounded shape (refutations compressed to bounded one-liners, the measured envelope de-cached to the packer Current-envelope pointer, the Tooling row category-keyed) and ratified three `research-capture` ratchet clauses against recurrence; probe-gated (S′ 62/66 vs N 56/66, zero regressions). Details: `research/03-analysis/agents-md-context-budget.md` (Addendum B); narrative: [HISTORY.md](HISTORY.md).
 
 **Open changes** (must match `openspec list`):
 
 | Change | State | What it is | Detail |
 | --- | --- | --- | --- |
-| `slim-status-surface` | implemented — probe gate passed (S′ 62/66 vs N 56/66, zero regressions); archive tail remaining | Restore `## Current status` to its bounded shape: refutations compressed (32→26), envelope pointer-not-cache, 3 `research-capture` ratchet clauses | `research/03-analysis/agents-md-context-budget.md` (Addenda A+B) |
 | `add-ci-pipeline` | implemented — owner steps left | CI is live; remaining: repo public, pr-lint PR, branch protection, archive | `research/03-analysis/github-actions-ci-cd.md` |
 
 **Shipped and archived** (full narratives: [HISTORY.md](HISTORY.md); what is true: `openspec/specs/`; mechanisms: `research/`):

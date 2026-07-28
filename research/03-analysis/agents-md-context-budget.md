@@ -318,9 +318,10 @@ append-on-retirement cluster, the Tooling mini-index row, and the cached envelop
 drifted together into one false claim — the last fixed at the source by commit 1's single-truth block).
 
 **Ceiling check** (the re-check the guide's ingestion-forensics rule mandates after any guide edit):
-the reconciled guide is **37,854 B** (37,373 shipped + the commit-3 refutation one-liner) — still past
-Codex's 32,768 B default, which now silently drops the trailing 5,086 B (`## Conventions` +
-`## Key references`; materially better than N, whose cut landed inside `## How to work here` and
+the guide measured **37,854 B** at commit 3 (37,373 shipped + the refutation one-liner) and
+**37,015 B** after the archive reconcile (active row removed, Latest bullet re-bounded) — still past
+Codex's 32,768 B default, which now silently drops the trailing ~4.2 KB (the cut lands inside
+`## OpenSpec workflow`; materially better than N, whose cut landed inside `## How to work here` and
 dropped the delegation table), and past Antigravity's ~23.5–24 KB band. The companion forensics doc's
 ≤32,768 B target stays open and non-gating, as recorded there.
 
