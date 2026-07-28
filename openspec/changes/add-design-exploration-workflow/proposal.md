@@ -1,0 +1,32 @@
+## Why
+
+xtty's UI has been built feature-by-feature with no place to try a visual direction before writing SwiftUI. The owner wants to draft UI in Open Design (a local-first agent design tool, already installed), starting from a faithful reproduction of what ships today so proposed changes are diffable against a real baseline rather than against memory.
+
+Three prior investigations plus a hands-on POC settled the mechanism (`research/03-analysis/open-design-integration-forensics.md`). The POC also proved the naive approach silently fails: it produced a good-looking mockup whose fidelity came from the agent *opportunistically reading a sibling file*, not from any supported channel — its design system was never registered, and its package was not even selectable. Nothing recorded that, so the run looked like a success. This change makes the working path the committed, reproducible one.
+
+## What Changes
+
+- Add a committed `design/` tree: a hand-authored Open Design **design-system package** (`design/xtty/`) describing xtty's real visual language from its Swift source, and a **project folder** (`design/mockups/`) that is the design agent's working directory.
+- Add `scripts/design-link.sh` — registers the package with the installed Open Design app **by symlink** (repo bytes == app bytes, so drift is impossible), idempotently, and verifies the registration **by effect** rather than by trusting API responses. Includes status and by-hand uninstall paths.
+- Add three self-documenting `make` entry points: `design-link`, `design-status`, `design-unlink`.
+- Establish a **baseline-vs-proposal naming contract** for mockups: `<scenario>.baseline.html` reproduces shipped UI (fidelity-only edits, each citing `App/*.swift:line`); `<scenario>.proposal-<slug>.html` is a candidate change. A proposal with no baseline sibling means the feature does not exist in xtty at all — the exact trap the POC fell into with a settings-pane mockup for an app that has no settings UI.
+- Establish the **safety posture** as a written contract: the design agent runs `--permission-mode bypassPermissions` with no OS sandbox, so folder scope bounds blast radius without enforcing it. Clean pushed tree before every run; repo-wide `git status`/`diff`/`reflog` after; explicit-path staging only; content telemetry off.
+- Record the **linkage lifecycle**, including the one silent failure mode: `tokens.css` propagates live through the symlink but `DESIGN.md` does not — its workspace copy freezes after first sync, so a stale-prose/fresh-tokens state is reachable and invisible.
+
+Not in scope: any change to xtty's shipped UI. Mockups are HTML; Open Design cannot and must not edit Swift. Translation of an accepted direction into SwiftUI is separate work under its own change.
+
+## Capabilities
+
+### New Capabilities
+- `design-exploration`: the contract for drafting xtty UI outside the app — what the committed design base must contain and stay true to, how mockups are named and classified (baseline vs proposal), what is committed vs machine-local, the linkage lifecycle, and the safety posture required of an unsandboxed design agent operating inside the repo.
+
+### Modified Capabilities
+- `build-workflow`: adds the design-linkage entry points to the documented single-command surface (parallel to how `make install`/`make restart` were added by `add-install-workflow`), including their idempotency, read-only status reporting, and the requirement that teardown never routes through the app's own delete path.
+
+## Impact
+
+- **New**: `design/` (design-system package, project folder, `.gitignore`, two READMEs, mockup gallery), `scripts/design-link.sh`.
+- **Modified**: `Makefile` (three targets + `.PHONY`).
+- **External state, not version-controlled**: a symlink at `<Open Design data>/design-systems/xtty` → `design/xtty`, one app-side project row, and one `metadata.json` write-back (the app owns that file's key set and rewrites it wholesale on first run).
+- **Depends on**: the installed Open Design desktop app running (the daemon is its sidecar on an ephemeral port; the script never launches it). No new build or test dependencies — the script uses `curl` and the Xcode-provided `/usr/bin/python3`.
+- **No effect on**: the app target, `XttyCore`, CI, or any test tier. `design/` is documentation-class content.

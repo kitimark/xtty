@@ -1,0 +1,87 @@
+## Context
+
+Open Design (nexu-io/open-design) is a local-first design tool, installed as a desktop app (cask `open-design`, v0.16.1). Its generation runtime is the literal `claude` CLI spawned with `--permission-mode bypassPermissions`; its daemon is the app's packaged sidecar on an ephemeral port. It emits **HTML only** — the prompt charter binds the entire preview/export pipeline to HTML, so a `.swift` file the agent wrote would be invisible to it.
+
+Full mechanism, probes, and the retired-theory record: `research/03-analysis/open-design-integration-forensics.md`. The load-bearing findings this design rests on:
+
+- **Only a *selected, published* design system reaches the prompt.** The daemon gates the verbatim paste of the design document and tokens on a non-null, non-draft design-system id (`server.ts:3889-3915`, `prompts/system.ts:1129-1155`). The POC's package had no `metadata.json`, so it was `draft` and not even selectable; its fidelity came from the agent reading a sibling file on its own initiative.
+- **`tokens.css` answers to a 56-token schema** (`packages/contracts/src/design-systems/token-schema.ts`) across four layers. Only three font slots exist. The POC bound a `--font-chrome` that is not a token, and its status colours were iOS values, wrong for macOS darkAqua.
+- **No OS sandbox.** `OD_SANDBOX_MODE` is refuted — it severs `claude` auth rather than isolating credentials. The POC's agent read a sibling folder outside its project directory unprompted.
+- **Content telemetry defaults on**, shipping base64 bodies of produced files. Already disabled on this machine.
+
+xtty's own constraint: it deliberately has almost no visual identity outside the terminal grid. Stock chrome, system-semantic colours, the user's own accent, one bespoke component (a toast). That restraint is the thing a mockup most easily destroys — generic web padding produces a dashboard, not xtty.
+
+## Goals / Non-Goals
+
+**Goals:**
+- A design base whose provenance is auditable value-by-value, so nobody later mistakes a platform default or a filled-in slot for an xtty design decision.
+- Mockups that reproduce shipped UI first, so proposals are diffable against something real.
+- Linkage that is scripted, idempotent, and verified by effect — the POC's failure was invisible precisely because nothing checked the effect.
+- A safety posture written where it will actually be read, given an unsandboxed agent inside the repo.
+
+**Non-Goals:**
+- Changing xtty's shipped UI. Translating an accepted mockup into SwiftUI is separate work.
+- Automating the design tool's GUI. No native-macOS automation exists in this environment; project creation and picker selection stay human steps.
+- Committing app-side state (its database, run traces, config). Only the repo half is portable.
+- A components fixture. Deferred until the first mockups exist to distil one from.
+
+## Decisions
+
+### D1 — Symlink registration, not copy or folder-import
+
+`POST /api/design-systems/install` with `{"source":"local","path":…}` symlinks the tool's catalogue entry at the repo directory (`library-install.ts:175`; discovery honours symlinks at `design-systems/index.ts:277`). Repo bytes and app bytes become the same bytes, so drift is structurally impossible rather than merely unlikely.
+
+*Alternatives:* a copy (drift by construction, and the POC's ambiguity about whether its install was a copy or a link is exactly the confusion to avoid); `POST /api/design-systems` writing the body verbatim (works, but stores a second copy); **"Import from folder" — rejected outright**, it is the CSS/JS scanner and would regenerate the design document from a scan of a directory containing no CSS, destroying the authored prose.
+
+### D2 — Verify by effect, never by API echo
+
+Every check reads the filesystem or the tool's catalogue after the fact; the closing check is that a value unique to our tokens appears in freshly generated output. A configuration read is a **precondition only**: the project's stored design-system id still reads correctly when the symlink dangles or the package regresses to draft, while the daemon composes zero design blocks. That exact gap is what made the POC look successful.
+
+### D3 — Provenance tags in the artifact, not in a side note
+
+Each token declaration carries `M` (measured, cited `path:line`), `P` (platform-resolved, probe-measured), or `D` (derived, filling a required slot). The tags live inline because the file is pasted verbatim into the agent's prompt — a provenance note kept elsewhere would not travel with the values it governs. Rule: a flat hex may carry `M` only if that hex appears in xtty's source.
+
+### D4 — Baseline/proposal encoded in the filename, and asserted in the page
+
+`<scenario>.baseline.html` vs `<scenario>.proposal-<slug>.html`. `b` sorts before `p`, so every listing shows a baseline above its proposals. A proposal with no baseline sibling means the feature does not exist in xtty — and because a filename is invisible once the page is open, that class also declares itself in the rendered page. The POC's settings-pane mockup was exactly this and nothing anywhere said so.
+
+### D5 — Ignore rules live at `design/`, one level above the agent's working directory
+
+The agent runs unsandboxed with its cwd at `design/mockups/`. Rules placed inside that directory could be rewritten as an ordinary in-scope edit; placed one level up, the same rewrite requires leaving project scope — a loud, reviewable event. Rules are annotated per entry with the reason, and anything unclassified stays visible in `git status` deliberately, as a tripwire.
+
+One consequence must be handled explicitly: an ignore rule hides the file it names, so a marker whose *existence* signals a broken state becomes invisible to status. Those are checked by an explicit existence test in the post-run checklist instead.
+
+### D6 — `metadata.json` authored to the app's own key set
+
+The daemon rewrites that file wholesale on first run as a 9-key allowlist; any other key is silently deleted. Authoring exactly those keys (minus the one the app supplies) collapses the first-run diff to a single added line, which can then be committed deliberately rather than investigated.
+
+### D7 — Scenario coverage stops at xtty's authored pixels
+
+Twelve baselines cover every surface xtty actually draws. Past that the mockups would be drawing macOS, not xtty. Three surfaces are excluded even as proposals: a project file-tree browser (a standing refutation), any account or sync chrome (a hard product requirement), and an app icon (none exists to reproduce).
+
+### D8 — The script owns what is scriptable and says what is not
+
+Registration, verification, status, and teardown are scripted. Project creation goes through the app's native folder picker and picker selection is a GUI action; the script prints those as explicit next steps rather than pretending to cover them.
+
+## Risks / Trade-offs
+
+- **The agent can reach the whole repo** → folder scope bounds blast radius without enforcing it. Mitigation is detect-and-revert: clean *pushed* tree before every run, repository-wide status/diff/reflog/stash review after, explicit-path staging. Accepted deliberately in exchange for mockups being a git-tracked deliverable; the alternative that removes rather than bounds the risk is an out-of-repo folder.
+- **A stale design document with fresh tokens, silently** → the tokens file propagates through the symlink (mtime-fingerprinted); the design document does not — its workspace copy freezes after first sync. Mitigation: the lifecycle documents clearing that cache after every prose edit, and the closing check is a generated-output grep, which catches the stale state.
+- **Values that are platform, not xtty** → roughly a third of the schema slots have no xtty literal. Mitigation is D3: they ship tagged, so a future reader cannot cite them back as xtty facts.
+- **Content telemetry has no rollback and no detection** → there is no local send-log, so what past runs transmitted is unrecoverable. Prevention-only; the checklist verifies the setting on disk before runs rather than implying it can be audited after.
+- **Teardown could reach the working tree** → the app's delete path does a recursive remove on the catalogue entry, and whether that unlinks a top-level symlink or recurses into the repo is unverified. Never exercised; teardown removes the link by hand.
+- **HTML cannot reproduce AppKit exactly** → SF Mono is not web-available, and the quake surface is sized from the screen's visible frame rather than a viewport. Accepted as approximation, annotated where it bites.
+- **Repository growth** → mockups run ~40 KB each. Mitigation: commit per *accepted* iteration, not per run; the agent's revision copies are promoted-and-deleted before commit rather than accumulating.
+
+## Migration Plan
+
+Additive; nothing existing changes behavior. Rollback is `make design-unlink` plus deleting `design/`, `scripts/design-link.sh`, and the Makefile targets — the app-side symlink is the only external state, and removing it leaves the tool as it was.
+
+Ordering matters in one place: the package must be authored and committed **before** linkage, since the symlink resolves a real directory; and linkage must precede project creation, since the picker can only select a registered, published package.
+
+## Open Questions
+
+- Whether the tool's interface exposes the symlink-install route at all. If it does not, the script is the only safe path — the alternative the interface does expose is the destructive scanner. Settled by running the linkage step.
+- Whether the interface offers the design-system picker for a folder-linked project. If not, the tokens channel is unreachable for this project shape and the package would only ever be read opportunistically — which decides whether a components fixture is worth authoring later.
+- Whether `.listStyle(.sidebar)` engages an AppKit material in xtty's bare-hosted sidebars. This decides whether mockup panels paint as a flat surface or a distinct tier, so it is worth one screenshot before authoring the first baselines.
+- Whether the artifact sidecars the tool writes churn their timestamps on unchanged regeneration. If they do, committing them is noise and they should move to the ignore list.
