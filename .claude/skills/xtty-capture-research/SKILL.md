@@ -1,9 +1,9 @@
 ---
 name: xtty-capture-research
-description: Capture settled research/decisions into research/ and reconcile the related trackers. Use AFTER a research investigation or decision has settled, or a change has been archived/decided — to write it into research/ following the doc conventions, index it, reconcile the trackers (research/README.md, AGENTS.md Current status table/snapshot, HISTORY.md narrative, research/04-design/02-milestones.md), and verify against the actual repo state. NOT for doing research — only for capturing + reconciling what has already settled.
+description: Capture settled research/decisions into research/ and reconcile the related trackers. Use AFTER a research investigation or decision has settled, or a change has been archived/decided — to write it into research/ following the doc conventions, index it, reconcile the trackers (research/README.md, AGENTS.md Current status section, HISTORY.md narrative, research/04-design/02-milestones.md), and verify against the actual repo state. NOT for doing research — only for capturing + reconciling what has already settled.
 metadata:
   author: xtty
-  version: "1.3"
+  version: "1.4"
 ---
 
 # Capture research & reconcile trackers
@@ -28,14 +28,13 @@ Capture a settled finding/decision into `research/` and bring every tracker back
 2. **Index it.** Add or update the one-line entry in `research/README.md`.
 
 3. **Reconcile the trackers** (the step that gets forgotten) — **bounded in AGENTS.md, narrative in HISTORY.md**:
-   - **`AGENTS.md` → Current status**: update the change's **table row** (state + one-liner + detail pointer; state it accurately: implemented / archived / decided / pending) and refresh the **snapshot paragraph** only if the milestone position or overall posture moved. **The measured test envelope is never cached in the guide** — its single home is `packer/README.md` → Acceptance → **Current envelope**: overwrite that table + append one capped history entry there instead. (The established-specs list is not cached in AGENTS.md — step 4 verifies it against `ls openspec/specs/`.) **Narrative paragraphs never go here** — a status entry is one table row.
+   - **`AGENTS.md` → Current status**: for an **open (in-flight) change**, there is no row to update — the guide's "Open changes" line is a derive-on-demand pointer (`openspec list`/`openspec show <name>`), never a cached per-change entry. Refresh the **snapshot paragraph** only if the milestone position or overall posture moved. **The measured test envelope is never cached in the guide** — its single home is `packer/README.md` → Acceptance → **Current envelope**: overwrite that table + append one capped history entry there instead. (The established-specs list is not cached in AGENTS.md — step 4 verifies it against `ls openspec/specs/`.) **Narrative paragraphs never go here.**
    - **`HISTORY.md`**: **append the full narrative** under the matching section with a dated lead-in (append-only — never rewrite existing entries).
    - If the work settled a **refutation** worth never re-litigating, add a **one-line entry** to AGENTS.md's **Learned refutations** list: a single-sentence conclusion + the condition under which it applies + an evidence pointer (mechanism/chronology live in HISTORY.md or the research doc, never in the entry). If the work **retires or supersedes the mechanism an existing refutation was measured on, edit that entry in place** — never append a second entry about the same finding.
    - **`research/04-design/02-milestones.md`** → the milestone's state tag + bullets.
 
 4. **Verify against disk** (the step that catches a stale tracker — e.g. a change still marked "pending archive" after it was archived):
    ```
-   openspec list                  # active changes   → must match the Current-status open-changes table
    ls openspec/changes/archive/   # archived changes → must be marked archived in the trackers
    ls openspec/specs/             # established specs → AGENTS.md carries no cached list; disk is the truth
    grep -n 'Current envelope' packer/README.md   # test envelope → lives ONLY in packer's Acceptance table; a count transcribed anywhere else is drift

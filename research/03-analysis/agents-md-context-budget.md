@@ -417,7 +417,7 @@ inline 2/3 — no regression introduced. Context re-measured (the B.2 S′ row).
 | Pointerize the refutations (a `REFUTATIONS.md` / bare pointers) | ❌ | Two ratified specs forbid it (`research-capture:86`, `agent-guide-parity:9`) + the archived V3 T1 0/2 — and now A-0's G1 0/2 at cluster granularity (B.4). |
 | Delete the cross-model cluster outright (the A-0 arm) | ❌ | G1 0/2 with secondary-home X1/X2 passes certifying nothing (B.4); merged-to-3 ships instead. |
 | Delete the shipped table | ❌ | Would leave `coherence-review:30–33`'s category-keyed check vacuous; the 5 phase rows are the useful compression of a stale 51 KB milestones file (A.4). Only the Tooling row collapsed. |
-| Pointerize the open-changes table | ❌ deferred, not adopted | A spec-text change + an untested probe class to save 298 B (A.4); kept as a table, revisit on observed friction. |
+| Pointerize the open-changes table | ❌ deferred, not adopted — **superseded 2026-07-28, see Addendum C** | A spec-text change + an untested-against-a-pointerized-shape probe class (A-T arm never built) to save 298 B (A.4); kept as a table, revisit on observed friction. |
 | "The 2026-07-06 measured numbers can serve as this campaign's bar" | ❌ | Different CLI/cap/model; every bar was computed against the freshly frozen N (which scored 56/66 — not the archived baseline's shape). |
 | "The baseline is presumptively clean; only S needs grading care" | ❌ | N failed E1 1/3 (teaching the false envelope claim as fact), G1 1/3, T5 1/3, R3 1/3 — the diet again *fixed* measured defects rather than risking regressions against a perfect fat file. |
 | "T5 measures env-seed-wall correctness" | ❌ (recorded defect) | The prompt straddles a genuinely-working arm (`ShellResolver` consumes the app's own `$SHELL` before the seed wall); frozen-letter grading kept arms comparable but the cell measures recitation (B.2). |
@@ -454,3 +454,38 @@ baseline + S/ablation tables + the envelope judgment), `grading-N.md` / `grading
 `grading-ablations.md` (extraction sheets), `README.md` (rubric + pre-registered envelope),
 `inline-sufficiency.md`, `max-turns-tool-trails.md`, `context/` JSONs, `ledger.log`; repo
 measurements at `eaa765b` / `9c843e2` / `38c9af1` (commands inline above).
+
+## Addendum C (2026-07-28) — "Pointerize the open-changes table" reversed (adopted via `pointerize-open-changes-table`)
+
+### C.1 What changed
+
+B.5's row above ("Pointerize the open-changes table | ❌ deferred, not adopted") recorded its own
+revisit condition: "kept as a table, revisit on observed friction." That friction was observed —
+`add-ci-pipeline`'s AGENTS.md row and its own `tasks.md` checkbox both stayed stale after the repo
+actually went public — and the owner separately stated a preference for updating AGENTS.md less
+often. The `pointerize-open-changes-table` change reopened `slim-status-surface`'s D4 on that basis
+and adopted the reversal: the guide's "Open changes" line is now a derive-on-demand pointer,
+matching the "Established specs" idiom.
+
+### C.2 The correction this addendum also carries
+
+D4's reasoning (and this doc's B.5 row) is easy to misread as "no orientation evidence exists" — it
+doesn't. The O1a/O1b/O2 orientation probes (§B, N and S arms) were designed and **run**, scoring 3/3
+on both arms; O1b in particular measured the exact `openspec list` derive-on-demand mechanism
+directly and found it correct at a *lower* turn cost (median 3–4 turns vs. 9 for reading the table).
+What was never built or run was the **A-T arm** — a repo state with the table actually removed —
+because D4 settled on keeping the table before that arm was needed. `pointerize-open-changes-table`'s
+own design record makes this distinction explicit; read this doc's fates-table framing ("an untested
+probe class") as "the A-T arm specifically, against a pointerized repo state," not "no orientation
+measurement was ever taken."
+
+### C.3 Forward pointer
+
+B.5's row above is left as the historical record of what `slim-status-surface` decided and why — it
+is not rewritten, only annotated. The current decision of record is the
+`pointerize-open-changes-table` change (`design.md` D4).
+
+### C.4 Re-verify by effect
+
+`grep -n '\*\*Open changes:\*\*' AGENTS.md` — reads the generic derive-on-demand pointer line, no
+per-change row; `openspec list` is the live source of truth for what is open.
