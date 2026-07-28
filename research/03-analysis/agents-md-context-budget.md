@@ -44,7 +44,8 @@ appended to HISTORY.md — without the rule amendment the file re-inflates at me
 > **Forward pointer (2026-07-28):** the amended rule bounded *narratives* but not the status surface
 > itself — `## Current status` regrew to 22,613 B (50.3% of the guide) within 22 days, concentrated in
 > the Learned-refutations tier. The measured record, the regrowth mechanism, and the resulting
-> `slim-status-surface` proposal are in **Addendum A** at the end of this file.
+> `slim-status-surface` proposal are in **Addendum A** at the end of this file; the shipped change's
+> graded probe campaign (gate PASSED, S′ 62/66 vs N 56/66) is in **Addendum B**.
 
 ## 3. Reproducible probes (and what each can/cannot prove)
 
@@ -220,8 +221,8 @@ under-specified, not the rule being absent.
   tools override) plus a new **inline-sufficiency** instrument — did the refutation land at turn 1 with
   zero file reads — because the archived `results.md:89–91` proved traps can pass off *secondary doc
   homes*, so a bare PASS no longer evidences the spec's "not as bare pointers" clause. Pre-registered
-  envelope: ≥3,000-token floor, zero trap regressions, 2-iteration fix cap. ❓ Results do not exist yet —
-  the change is proposal-only; they belong in a future addendum when its §4 tasks execute.
+  envelope: ≥3,000-token floor, zero trap regressions, 2-iteration fix cap. ❓ Results did not exist at
+  this addendum's capture — they now do: **Addendum B** below records the full graded campaign.
 
 ### A.4 Fates table — retired options and corrected claims
 
@@ -233,7 +234,7 @@ under-specified, not the rule being absent.
 | Probe C1's drafted pass criterion (`41/0/1` of 42 as the current VM envelope) | ❌ | The packer figure inventory: `41/0/1` is the 2026-07-08 figure, superseded by 2026-07-10's `54/0/1` of 55 — C1 as drafted would have **failed a correct answer**. Fixed at assembly: the shipped `tasks.md` 1.1 orders the correction before the baseline freeze. |
 | Predicted saving "13–15 KB / 5.2–6.0k tokens" (probe plan) | ❌ | Re-derived byte math: −10,275 B measured on the paste-ready draft ≈ 4.2k tokens at 2.46 B/token. Still clears the pre-registered ≥3,000-token floor with ~39% headroom — the estimate was wrong, the decision it fed survives. |
 | "Duplicating the envelope across AGENTS.md/HISTORY.md/packer is a drift detector" | ❌ | A.2 exhibit 3: all three copies drifted together into the same false 56-test claim; the redundancy detected nothing. |
-| "The compressed refutations still inoculate" | ❓ unmeasured | Gated, not assumed: the archived V3 arm's T1 0/2 regression is exactly the risk; the pre-registered trap probes + inline-sufficiency criterion decide it when the change's §4 runs. |
+| "The compressed refutations still inoculate" | ❓ → ✅ (Addendum B) | Gated, not assumed: the archived V3 arm's T1 0/2 regression is exactly the risk; the pre-registered trap probes + inline-sufficiency criterion decided it when the change's §4 ran — zero trap regressions, S′ 62/66 vs N 56/66 (B.2), with one inline-sufficiency miss repaired by the bounded fix loop (B.3). |
 
 ### A.5 Re-verify by effect
 
@@ -287,3 +288,161 @@ even reaches* a non-Claude agent CLI. Headline: Codex silently truncates at a do
 (27.8% of the guide dropped, measured at a 45,362 B snapshot) and Antigravity at ~23,450–24,150 B (~48% dropped, and 0%
 without an explicit project registration) — both silent, neither warns. Recommends a non-gating byte
 target for `slim-status-surface` (≤32,768 B), not a probe-campaign gate.
+
+---
+
+## Addendum B (2026-07-28) — `slim-status-surface` shipped: the probe campaign, graded
+
+**Provenance:** 2026-07-28, produced by the `slim-status-surface` apply session (single main session +
+132 headless `claude -p` probe runs across 4 arms + 8 fix-loop re-runs; CLI 2.1.220, probe model
+`claude-sonnet-5`). All numbers measured against the pre-registered envelope frozen in the change's
+`probes/` directory **before any S content was authored** (N graded and frozen first, per the §7.4
+precedent). Grading sheets, results tables, context JSONs, tool trails, and the inline-sufficiency
+extraction are committed in the change dir (`openspec/changes/slim-status-surface/probes/` — under
+`openspec/changes/archive/` once the change archives); raw per-probe transcripts are machine-local and
+regenerable via the committed `run-batch.sh` + `probes.json`.
+
+### B.1 What shipped, and the corrected "from" figure
+
+The restructure landed on `main` as three commits: **commit 1** (`3a48509`) the packer
+Current-envelope truth block + the F4 false-claim correction + the `wheel1` rehome; **commit 2**
+(`38c9af1`) the replacement `## Current status` + the amended *Keep progress current* rule + the three
+coupled tooling files (critic v8, capture skill 1.3); **commit 3** this capture + tracker reconcile.
+
+The size actually compressed FROM is **46,234 B** (AGENTS.md at `eaa765b`, the frozen N baseline) —
+not A.1's 44,996 B, which was correct at the propose commit `4903359` but went stale when the
+agent-guide-ingestion refutation entry (+1,238 B) landed between propose and freeze. Corrected curve:
+**28,132 B (2026-07-06) → 46,234 B (2026-07-28) = +18,102 B in 22 days ≈ 0.82 KB/day** — the third
+regrowth of this file, again concentrated in `## Current status` (A.2's three mechanisms: the
+append-on-retirement cluster, the Tooling mini-index row, and the cached envelope whose three copies
+drifted together into one false claim — the last fixed at the source by commit 1's single-truth block).
+
+Shipped shape (measured on `main` at `38c9af1`): file **37,373 B** (−8,861); `## Current status`
+23,851 → **14,250 B**; the refutations list 32 → **26 bounded entries** (11 kept byte-for-byte incl.
+the frozen retry-ban entry, 10 compressed to conclusion + applicability + pointer, 10 merged to 3,
++1 pre-freeze ingestion entry kept, +1 fix-loop un-merge — see B.3). Slicing probes:
+`awk '/^## Current status$/{f=1} /^## Repository structure$/{f=0} f' AGENTS.md | wc -c` → 14,250;
+same pattern from `/^\*\*Learned refutations/` → 10,122 (the surviving list incl. header).
+
+### B.2 Results against the frozen envelope (gate PASSED)
+
+Context instrument (3 reps/arm; startup tokens per §3.1's instrument):
+
+| Arm | AGENTS.md bytes | Startup (median) | Δ vs N |
+| --- | --- | --- | --- |
+| N (`eaa765b`) | 46,234 | 55,028 (deterministic ×3) | — |
+| **S′ shipped** (`9c843e2` ≙ main `38c9af1`) | **37,373** | **51,779** | **−3,249** |
+| A-R (compression only) | 38,116 | 52,139 | −2,889 |
+| A-0 (cross-model cluster deleted) | 34,300 | 50,626 | −4,402 |
+
+Gate (a): formula bar `55,028 − 0.85×(8,861/2.49) = 52,003` ≥ 51,779 ✓; absolute floor Δ 3,249 ≥
+3,000 ✓; byte-prediction disagreement 8.7% < 15% ✓. **Honest variance finding:** post-fix S′ reps
+spread 352 tokens (52,098/51,779/51,746 — N and pre-fix S were rep-deterministic); the worst rep's Δ
+is 2,930, *below* the floor, and the pass is on the median per the instrument's pre-registered 3-rep
+design. Recorded, not hidden.
+
+Behavioral (per-probe bar `pass(S) ≥ pass(N)`, 3 reps each): **S′ 62/66 vs N 56/66 — zero
+regressions** (rule 11/12 vs 9/12 · recall 14/15 vs 12/15 · orientation 9/9 vs 9/9 · trap 28/30 vs
+26/30). The two cells the change was built to fix both moved **1/3 → 3/3**:
+
+- **E1 (current-envelope recall) — the F4 poison measured live, then measured fixed.** At N, 2 of 3
+  reps answered the asked figures correctly *and* repeated the guide's false "56-test envelope
+  identical across all 5 environments" cache as fact (FAIL under the pre-registered
+  correct-figure-beside-asserted-falsehood rule). At S′, all 3 reps pulled the figures from the packer
+  Current-envelope table via the pointer and none repeated the claim — two independently cited it as
+  the corrected falsehood.
+- **G1 (guide-gate both-directions) — the merged entry under-delivered until un-merged.** N's
+  full-length two-entry prose managed only 1/3 under a direct question (one rep flatly recommended a
+  mechanical gate — the criterion's literal FAIL); S′ post-fix went 3/3. The baseline was not assumed
+  perfect, and wasn't (the §4 V0 precedent again).
+
+**N's other failures, recorded not cherry-picked:** R1 2/3 (one rep surveyed code with zero OpenSpec
+mention — the archived FAIL shape), R3 1/3 (one invented `fix(core)` scope, one cap-cut with no
+message), T5 1/3 — and T5 stayed 1/3 at S′ with a **recorded probe-design defect**: the prompt
+straddles a genuinely-working arm (`launchEnvironment["SHELL"]` does reach `resolveShellPath` for
+shell *selection*, verified against source, while the seed wall strips child-env vars), so the frozen
+criterion's letter fails a partly-correct two-mechanism answer. Applied identically to every arm for
+comparability; T5 measures inoculation-recitation, not pure correctness. C4 dipped 3/3 → 2/3 (one
+cap-cut no-verdict rep); the pre-registered wobble rule fired +2 reps → 4/5, benign.
+
+### B.3 The inline-sufficiency instrument, and the one fix-loop iteration
+
+**The instrument:** for the merged cross-model cluster (X1/X2/G1), a PASS also requires ≥1 of 3 reps
+stating the refutation **in its first assistant message with zero tool calls**. What it proves: the
+always-loaded surface alone carries the inoculation. What it cannot prove: anything about a rep that
+researches first and then answers correctly (that shape is exactly how a trap passes off a *secondary
+doc home* — archived `results.md:89–91` — so a bare content-PASS never evidences the spec's "not as
+bare pointers" clause). It is a per-probe gate on the most-compressed entries only.
+
+**The one iteration (cap 2, used 1):** pre-fix G1 content was 3/3 but inline sufficiency **0/3** —
+every rep researched before answering. The pre-registered named contingency was applied exactly:
+un-merge the guide-gate both-directions conclusion out of the merged self-certification entry back to
+two bounded one-liners (+126 B, 25 → 26 entries, probe-arm commit `9c843e2`), **no narrative
+restored**. Re-run: G1 content 3/3, inline 2/3 ✓; X1 (whose entry also changed shape) re-run 3/3,
+inline 2/3 — no regression introduced. Context re-measured (the B.2 S′ row).
+
+### B.4 Ablation dose-response — attribution, and the A-0 verdict on compress-vs-delete
+
+| Arm | bytes | startup (med) | rule | recall | orientation | trap |
+| --- | --- | --- | --- | --- | --- | --- |
+| N | 46,234 | 55,028 | 9/12 | 12/15 | 9/9 | 26/30 |
+| A-R (compression only) | 38,116 | 52,139 | 7/8 | 9/10 | 6/6 | 18/20 |
+| S′ (full restructure) | 37,373 | 51,779 | 11/12 | 14/15 | 9/9 | 28/30 |
+| A-0 (cluster deleted) | 34,300 | 50,626 | 7/8 | 10/10 | 6/6 | 18/20 |
+
+- **E1's fix is the packer block + pointer, not the compression:** A-R (which keeps N's cached
+  snapshot) still taught the false claim (1/2, N's rate); S′ and A-0 (pointer + single-truth block)
+  produced zero false claims.
+- **A-0 refutes delete-instead-of-merge at cluster granularity — the merge floor holds.** With the
+  cross-model cluster deleted, G1 collapsed to **0/2** (both reps flatly recommending a mechanical
+  gate — the V3-class regression reproduced one level down), while X1/X2 "passed" 2/2 **off secondary
+  homes** (archived change artifacts, historical docs) at 4–5 turns vs S′'s turn-1 — exactly the
+  false-certification shape the inline-sufficiency instrument exists to catch. D2's rejected
+  alternative stays rejected; no further compression of the cluster is warranted.
+- **A-R's compressed-but-present cluster held G1 at 2/2** — compression preserves the inoculation;
+  only deletion breaks it.
+
+### B.5 Fates table — retired options, next to what killed them
+
+| Theory / option | Fate | Killed by |
+| --- | --- | --- |
+| Pointerize the refutations (a `REFUTATIONS.md` / bare pointers) | ❌ | Two ratified specs forbid it (`research-capture:86`, `agent-guide-parity:9`) + the archived V3 T1 0/2 — and now A-0's G1 0/2 at cluster granularity (B.4). |
+| Delete the cross-model cluster outright (the A-0 arm) | ❌ | G1 0/2 with secondary-home X1/X2 passes certifying nothing (B.4); merged-to-3 ships instead. |
+| Delete the shipped table | ❌ | Would leave `coherence-review:30–33`'s category-keyed check vacuous; the 5 phase rows are the useful compression of a stale 51 KB milestones file (A.4). Only the Tooling row collapsed. |
+| Pointerize the open-changes table | ❌ deferred, not adopted | A spec-text change + an untested probe class to save 298 B (A.4); kept as a table, revisit on observed friction. |
+| "The 2026-07-06 measured numbers can serve as this campaign's bar" | ❌ | Different CLI/cap/model; every bar was computed against the freshly frozen N (which scored 56/66 — not the archived baseline's shape). |
+| "The baseline is presumptively clean; only S needs grading care" | ❌ | N failed E1 1/3 (teaching the false envelope claim as fact), G1 1/3, T5 1/3, R3 1/3 — the diet again *fixed* measured defects rather than risking regressions against a perfect fat file. |
+| "T5 measures env-seed-wall correctness" | ❌ (recorded defect) | The prompt straddles a genuinely-working arm (`ShellResolver` consumes the app's own `$SHELL` before the seed wall); frozen-letter grading kept arms comparable but the cell measures recitation (B.2). |
+| "Startup measurement is rep-deterministic, judge any single rep" | ❌ | Post-fix S′ spread 352 tokens across reps (cache-creation split); the worst rep sits 70 under the floor while the median clears it by 249 — judge the median of 3, and say so (B.2). |
+
+### B.6 Re-verify by effect
+
+1. **Size:** `wc -c AGENTS.md` ≈ 37.4 KB; the B.1 `awk` slices ≈ 14.3 KB section / ≈ 10.1 KB list.
+2. **Cost:** re-run the change's `probes/measure-context.sh` (3 reps, median) in a worktree at the
+   shipped commit vs one at `eaa765b` — expect a median Δ ≈ 3.2–3.4k startup tokens (±~350 rep
+   variance; the gate formula and floor are in the committed `probes/README.md`).
+3. **Behavior (the headline claim):** in a fresh session, ask the E1 question ("what is the current
+   measured test envelope and where is its authoritative home?") — the answer must come from
+   `packer/README.md` → Acceptance → Current envelope via the guide's pointer and must state the
+   56-test/5-environment claim only as a corrected falsehood, if at all. Then ask a G1-shaped
+   question — the answer must state both directions (advisory measured insufficient; don't re-propose
+   a mechanical gate without new evidence). Never grade this change by reading its diff.
+4. **The correction:** `grep -n "56-test" AGENTS.md HISTORY.md packer/README.md` — every surviving
+   occurrence states the claim as false/corrected, none asserts it.
+
+### B.7 Reusable guidelines (continuing A.6)
+
+9. **Gate a guide compression per-probe against a freshly frozen baseline — and expect the baseline
+   to fail somewhere.** Aggregate scores hide a swapped failure; `pass(S) ≥ pass(N)` per probe caught
+   what a 62-vs-56 total alone could not, and N's own failures (E1, G1) were the change's strongest
+   evidence: both diets in this doc's record *fixed* measured baseline defects.
+10. **A trap PASS off a secondary doc home certifies nothing about the loaded surface — instrument
+    inline sufficiency for the most-compressed entries, and repair a miss by un-merging one conclusion
+    line, never by restoring narrative.** A-0's X1/X2 2/2-with-research beside G1's 0/2 collapse is
+    the measured proof both directions; the bounded fix cost +126 B and one re-run.
+
+**Sources (Addendum B):** `openspec/changes/slim-status-surface/probes/` — `results.md` (frozen N
+baseline + S/ablation tables + the envelope judgment), `grading-N.md` / `grading-S.md` /
+`grading-ablations.md` (extraction sheets), `README.md` (rubric + pre-registered envelope),
+`inline-sufficiency.md`, `max-turns-tool-trails.md`, `context/` JSONs, `ledger.log`; repo
+measurements at `eaa765b` / `9c843e2` / `38c9af1` (commands inline above).
