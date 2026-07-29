@@ -67,7 +67,12 @@ DESIGN.md.tmp.*
 #   xtty-mockups/DESIGN.md  A real document if "finalize" ever runs here.
 #
 # COMMITTED ON PURPOSE: *.html, *.artifact.json (provenance sidecars),
-#   index.html, README.md, assets/**, and all of design/xtty-design-system/**.
+#   index.html, README.md, and all of design/xtty-design-system/**.
+#   There is deliberately NO assets/ directory: mockups are single-file
+#   (images, if ever unavoidable, are data URIs), generated media never lands
+#   in this folder (it writes to the app's own data dir), and an empty
+#   subfolder was the one thing the remembered-state GUI folder panel could
+#   mis-root a project into. Forensics doc, addendum (g).
 #
 # NEVER name a subfolder any of: build out dist debug target vendor .build
 #   .swiftpm .cache coverage node_modules — the app's own ignore list hides

@@ -32,6 +32,7 @@ Some surfaces are **out of scope even as proposals** — a project file-tree bro
 ## Conventions
 
 - One file per scenario. Inline CSS, no build step, no external requests, no JavaScript unless genuinely unavoidable.
+- No image files. A mockup is self-contained: if a scenario genuinely cannot be shown without an image, inline it as a data URI. This folder has no `assets/` directory on purpose.
 - States that share a layout (empty / loading / populated / error) go in the **same page** as labeled variants. Split files only when the layout itself differs.
 - Annotate anywhere HTML cannot faithfully reproduce AppKit rather than silently drawing something slightly wrong.
 

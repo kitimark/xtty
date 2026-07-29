@@ -27,6 +27,7 @@ Read `README.md` in the project root. It names the scenario you are drawing and 
 ## Output conventions
 
 - One self-contained HTML file per scenario. Inline CSS, no build step, no external requests.
+- No image files. If a scenario genuinely cannot be shown without an image, inline it as a data URI — the project folder has no `assets/` directory, and a mockup must not reference sibling files.
 - Zero JavaScript unless a scenario genuinely cannot be shown without it — these are static mockups, not prototypes.
 - Where a scenario has several states that share a layout (empty / loading / populated / error), show them as labeled variants **in the same page**. Only split into separate files when the layout itself differs.
 - Annotate any place where HTML cannot faithfully reproduce AppKit — approximate font metrics, the viewport-vs-visible-frame difference on the quake surface — rather than silently drawing something slightly wrong.
