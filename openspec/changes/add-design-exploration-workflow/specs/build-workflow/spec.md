@@ -42,7 +42,9 @@ The command SHALL verify its own result against the filesystem and the tool's ow
 
 ### Requirement: Scripted project creation deduplicates, verifies by effect, and falls back to manual instructions
 
-The design-linkage entry point SHALL create the design tool's mockups project when none exists, using the design tool's own first-party command-line interface — it SHALL NOT hand-mint authentication tokens, read secrets from process state, or bypass the tool's import gate; when the scripted route is unavailable the fallback is printed manual instructions, never a workaround of the gate. Before creating, the command SHALL resolve existing projects by the canonical (symlink-resolved) path of their base directory — never by name — and SHALL treat an existing match as the project, reporting it instead of creating a duplicate, because the design tool itself enforces no uniqueness on project names or base directories.
+The design-linkage entry point SHALL create the design tool's project for the committed mockups folder when none exists, using the design tool's own first-party command-line interface — it SHALL NOT hand-mint authentication tokens, read secrets from process state, or bypass the tool's import gate; when the scripted route is unavailable the fallback is printed manual instructions, never a workaround of the gate. Before creating, the command SHALL resolve existing projects by the canonical (symlink-resolved) path of their base directory — never by name — and SHALL treat an existing match as the project, reporting it instead of creating a duplicate, because the design tool itself enforces no uniqueness on project names or base directories.
+
+The project SHALL carry the product name (`xtty`) as its tool-side display name, set at creation. The display name SHALL never be used as identity — every lookup resolves by the canonical base directory — and when the existing project at the committed folder carries a different display name (for example, a manual GUI import named after the folder), the command SHALL rename it in place through the tool's update route, preserving the project's identity and tool-side history, with the rename verified by re-read and proven to write nothing into the repository.
 
 The command SHALL verify creation by effect: re-reading the project from the tool and confirming a folder-backed project at the canonical path of the committed project folder, and confirming the import wrote nothing into the repository. It SHALL NOT treat the creating call's exit status as evidence. In the same invocation it SHALL configure the project's design system and platform through the tool's update route, each setting verified by re-read.
 
@@ -61,9 +63,16 @@ The command SHALL verify creation by effect: re-reading the project from the too
 
 #### Scenario: A created project is configured in the same invocation
 
-- **WHEN** the command creates the mockups project
+- **WHEN** the command creates the project
 - **THEN** the same invocation sets the project's design system and platform
 - **AND** each setting is verified by re-reading it from the tool
+
+#### Scenario: An existing project's display name is converged in place
+
+- **WHEN** the design-linkage command finds the project at the committed folder carrying a display name other than the product name
+- **THEN** the command renames it in place through the tool's update route, preserving the project's identity and tool-side history
+- **AND** the new name is verified by re-reading it from the tool, and the repository is proven untouched
+- **AND** re-running the command performs no further rename
 
 #### Scenario: Multiple projects at the same folder stop the command
 
@@ -97,7 +106,7 @@ The project SHALL provide a documented command that reports the current design-t
 
 ### Requirement: Design-tool teardown undoes the scripted setup
 
-The project SHALL provide a documented command that undoes what the design-linkage entry point set up: it SHALL delete the tool-side mockups project, remove the tool's workspace copy of the design document, and remove the design-system registration. Because the registration is a reference into the version-controlled tree, teardown SHALL remove that reference directly and SHALL NOT invoke the design tool's design-system delete operation, whose behavior on a referenced directory is unverified and whose failure mode would reach the working tree. Project deletion, by contrast, MAY use the tool's own project-delete route, whose target resolution is verified to reach only the tool's own data directory and never the project's base directory.
+The project SHALL provide a documented command that undoes what the design-linkage entry point set up: it SHALL delete the tool-side project at the committed mockups folder, remove the tool's workspace copy of the design document, and remove the design-system registration. Because the registration is a reference into the version-controlled tree, teardown SHALL remove that reference directly and SHALL NOT invoke the design tool's design-system delete operation, whose behavior on a referenced directory is unverified and whose failure mode would reach the working tree. Project deletion, by contrast, MAY use the tool's own project-delete route, whose target resolution is verified to reach only the tool's own data directory and never the project's base directory.
 
 Teardown SHALL resolve the project to delete by the canonical (symlink-resolved) path of its base directory — never by name — and SHALL refuse to delete any project whose base directory resolves outside the repository. When more than one project points at the committed project folder, teardown SHALL delete none of them, report each with enough identity for a human to decide, and exit distinctly. An escape hatch SHALL allow keeping the project (and its tool-side run history) while removing the rest.
 
@@ -108,7 +117,7 @@ After any tool-side delete, teardown SHALL warn that the tool's running interfac
 #### Scenario: Full teardown undoes the setup and is verified by effect
 
 - **WHEN** the developer invokes the teardown command against a fully set-up linkage with the design tool running
-- **THEN** the mockups project, the workspace copy, and the registration reference are all removed
+- **THEN** the project at the committed mockups folder, the workspace copy, and the registration reference are all removed
 - **AND** each removal is confirmed by re-reading the tool's state and the filesystem, not by the deleting calls' responses
 - **AND** the version-control status of the design tree is byte-identical across the whole teardown
 - **AND** a warning states that the tool's running interface shows a stale card until relaunch
@@ -140,5 +149,5 @@ After any tool-side delete, teardown SHALL warn that the tool's running interfac
 #### Scenario: The escape hatch keeps the project
 
 - **WHEN** the developer invokes the teardown command with the keep-project option
-- **THEN** the mockups project and its run history are left in place
+- **THEN** the project at the committed mockups folder and its run history are left in place
 - **AND** the workspace copy and the registration reference are still removed
