@@ -28,50 +28,78 @@
 <title>xtty — app shell (baseline)</title>
 <style>
 /* ═══════════════════════════════════════════════════════════════════════════
-   LAYER 0 — tokens.css :root, pasted verbatim.
-   Provenance tags: M measured in xtty's Swift · P platform (AppKit/SwiftUI
-   resolves it) · D derived (xtty has no equivalent).
+   LAYER 0 — tokens.css :root, pasted BYTE-VERBATIM. Re-synced 2026-07-30.
+
+   Do not hand-edit. If it drifts from the design system, re-paste the whole
+   block — a scenario that copies a stale :root inherits stale provenance, and
+   the comments here are the only place a reader learns which values are
+   measured (M), platform (P), or derived (D).
+
+   This sync picked up the four entries this baseline's findings changed:
+   --text-xs and --xtty-row-dim (corrected descriptions), --xtty-scroller-w
+   (the load-bearing note), and --xtty-space-05 (new — see the gaps table).
    ═══════════════════════════════════════════════════════════════════════════ */
 :root {
   /* ── A1 identity ─────────────────────────────────────────────────────── */
-  --bg:            #1d1f21;  /* M XttyConfig.swift:62 */
-  --surface:       #1f212c;  /* P measured window ground (titlebar, no-List regions) */
-  --fg:            #c5c8c6;  /* M XttyConfig.swift:61,63 */
+  --bg:            #1d1f21;  /* M XttyConfig.swift:62 — the terminal canvas; xtty's one authored color */
+  --surface:       #1f212c;  /* P screen-measured window ground on macOS 26 darkAqua: titlebar + any
+                              * panel region where no List paints (git-panel empty states). Opaque —
+                              * invariant across 4 solid backdrops and window activation. The
+                              * windowBackgroundColor CATALOG value resolves #1e1e1e but never renders;
+                              * what the WindowServer composites is this. Still near --bg: that
+                              * near-identity IS the design. Probe:
+                              * research/03-analysis/appkit-sidebar-material-forensics.md */
+  --fg:            #c5c8c6;  /* M XttyConfig.swift:61,63 — foreground AND cursor are the same value */
   --muted:         rgba(255,255,255,0.549);  /* P Color.secondary */
-  --border:        rgba(255,255,255,0.098);  /* P separatorColor */
-  --accent:        #007aff;  /* P controlAccentColor, DEFAULT ONLY — never a brand */
-  --font-display:  -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
-  --font-body:     -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --border:        rgba(255,255,255,0.098);  /* P separatorColor. xtty draws no border of its own */
+  --accent:        #007aff;  /* P controlAccentColor, DEFAULT ONLY — reference, never a brand.
+                              * xtty always uses Color.accentColor, i.e. whatever the user picked
+                              * in System Settings. Mockups may render blue; never call it xtty's color. */
+  --font-display:  -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;  /* P — xtty sets no chrome typeface */
+  --font-body:     -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;     /* P — no display/body split exists */
 
   /* ── B slots ─────────────────────────────────────────────────────────── */
-  --surface-warm:  var(--surface);
+  --surface-warm:  var(--surface);  /* alias — xtty has no third surface tier */
   --fg-2:          rgba(255,255,255,0.847);  /* P Color.primary */
   --meta:          rgba(255,255,255,0.247);  /* P tertiaryLabelColor */
-  --border-soft:   var(--border);
+  --border-soft:   var(--border);   /* alias — one divider weight only (.thin) */
 
   /* ── A2 color ────────────────────────────────────────────────────────── */
-  --accent-on:     #ffffff;
-  --accent-hover:  color-mix(in srgb, var(--accent) 92%, black);
-  --accent-active: color-mix(in srgb, var(--accent) 86%, black);
-  --success:       #30d158;  /* P Color.green darkAqua */
-  --warn:          #ff9230;  /* P Color.orange darkAqua */
-  --danger:        #ff4245;  /* P Color.red darkAqua */
+  --accent-on:     #ffffff;  /* D — no filled accent surfaces exist in xtty */
+  --accent-hover:  color-mix(in srgb, var(--accent) 92%, black);   /* D — no hover states */
+  --accent-active: color-mix(in srgb, var(--accent) 86%, black);   /* D */
+  --success:       #30d158;  /* P Color.green darkAqua. Roles M SessionSidebar.swift:262 (done), GitReviewView.swift:205 (added) */
+  --warn:          #ff9230;  /* P Color.orange darkAqua. Role M GitReviewView.swift:204 (modified) */
+  --danger:        #ff4245;  /* P Color.red darkAqua. Roles M SessionSidebar.swift:264 (error), GitReviewView.swift:209 (conflicted) */
   --font-mono:     "SF Mono", ui-monospace, Menlo, Monaco, monospace;
+                             /* M TerminalConfigurator.swift:19 requests the monospaced system font.
+                              * SF Mono is not web-available, so cell metrics in a browser are
+                              * approximate — say so in any mockup that measures columns. */
 
   /* ── A1 structure — type ─────────────────────────────────────────────── */
-  --text-xs:       9px;   /* M SessionSidebar.swift:127 */
-  --text-sm:       10px;  /* P .caption / .caption2 = 10.0pt */
-  --text-base:     11px;  /* M .system(size:11) — glyph/diff workhorse, NOT body */
-  --text-lg:       12px;  /* M SpatialToast.swift:16 */
-  --text-xl:       13px;  /* M XttyConfig.swift:124; P SwiftUI default body */
-  --text-2xl:      16px;
-  --text-3xl:      20px;
-  --text-4xl:      24px;  /* M GitReviewView.swift:89 */
-  --leading-body:  1.35;
-  --leading-tight: 1.15;
-  --tracking-display: 0;  /* asserted: zero kerning anywhere in the app */
+  --text-xs:       9px;   /* M SessionSidebar.swift:127 — the pane row's DISCLOSURE CHEVRON.
+                           * Not a "block-status caption": block rows are .caption/.caption2
+                           * (10px) at :170,187,191. Corrected 2026-07-30 from the app-shell baseline. */
+  --text-sm:       10px;  /* P .caption and .caption2 are both 10.0pt; only weight differs */
+  --text-base:     11px;  /* M .system(size:11) appears 8× — the glyph/diff workhorse.
+                           * CAVEAT: an unmodified SwiftUI Text (the sidebar pane label,
+                           * SessionSidebar.swift:207) is default body = 13.0pt → bind --text-xl there,
+                           * NOT --text-base. Kept at 11 rather than rebinding base=13, which would
+                           * evict the measured 11/12 anchors from the scale entirely. */
+  --text-lg:       12px;  /* M SpatialToast.swift:16; P .callout = 12.0 */
+  --text-xl:       13px;  /* M XttyConfig.swift:124 (terminal); P systemFontSize = SwiftUI default body */
+  --text-2xl:      16px;  /* D — xtty has no heading tier */
+  --text-3xl:      20px;  /* D */
+  --text-4xl:      24px;  /* M GitReviewView.swift:89 (empty-state glyph) */
+  --leading-body:  1.35;  /* D — AppKit computes line height; no literal exists */
+  --leading-tight: 1.15;  /* D */
+  --tracking-display: 0;  /* D, and asserted: zero kerning anywhere in the app. This 0 is a guardrail */
 
-  /* ── A2 space — xtty's 2px-dense rhythm ──────────────────────────────── */
+  /* ── A2 space — xtty's real 2px-dense rhythm, not the schema's 4/8 default ─
+   * Cites: SessionSidebar.swift:121,167,203,212;
+   *        GitReviewView.swift:40,61-62,87,95,171,311,327,466,519,530;
+   *        SpatialToast.swift:43-44.
+   * (The schema has no --space-7. These seven names are exactly the set.) */
   --space-1:       2px;   /* M */
   --space-2:       4px;   /* M */
   --space-3:       6px;   /* M */
@@ -79,94 +107,137 @@
   --space-5:       10px;  /* M */
   --space-6:       12px;  /* M */
   --space-8:       16px;  /* M */
-  --space-12:      24px;
+  --space-12:      24px;  /* D — covers the 18/28pt outliers */
 
   /* ── A1 structure — sections ─────────────────────────────────────────── */
-  --section-y-desktop: 0px;
-  --section-y-tablet:  0px;
-  --section-y-phone:   0px;
+  --section-y-desktop: 0px;  /* D, asserted — xtty has no scrolling marketing sections. Guardrail */
+  --section-y-tablet:  0px;  /* D */
+  --section-y-phone:   0px;  /* D */
 
   /* ── A2 shape, elevation, motion ─────────────────────────────────────── */
-  --radius-sm:     6px;
-  --radius-md:     8px;    /* M SpatialToast.swift:25 — the only custom radius */
-  --radius-lg:     10px;
-  --radius-pill:   9999px;
-  --elev-flat:     none;
-  --elev-ring:     0 0 0 1px var(--border);
-  --elev-raised:   none;   /* deliberate: xtty has zero shadows */
-  --focus-ring:    0 0 0 3px rgba(26,169,255,0.5);
+  --radius-sm:     6px;    /* D */
+  --radius-md:     8px;    /* M SpatialToast.swift:25 — the ONLY custom corner radius in the app */
+  --radius-lg:     10px;   /* D */
+  --radius-pill:   9999px; /* D */
+  --elev-flat:     none;   /* M-by-absence for AUTHORED effects only (grep for shadow/blur/vibrancy/
+                            * NSVisualEffectView → 0 hits) — but AppKit supplies a live sidebar
+                            * material anyway (measured 2026-07-29). Mockups still draw no shadow/blur:
+                            * panels paint the flat measured --xtty-panel-bg (Layer C), never a
+                            * CSS backdrop-filter. */
+  --elev-ring:     0 0 0 1px var(--border);  /* D — the CSS analogue of a .thin divider */
+  --elev-raised:   none;   /* Deliberate override of the schema's shadow fallback.
+                            * xtty has zero shadows; a raised tier would be a lie. */
+  --focus-ring:    0 0 0 3px rgba(26,169,255,0.5);  /* P keyboardFocusIndicatorColor */
   --motion-fast:   250ms;  /* M SpatialToast.swift:51 */
-  --motion-base:   350ms;  /* M SpatialToast.swift:56 */
-  --ease-standard: ease-in-out;
+  --motion-base:   350ms;  /* M SpatialToast.swift:56 — with the above, the app's only animation */
+  --ease-standard: ease-in-out;  /* D */
 
   /* ── A1 structure — container ────────────────────────────────────────── */
-  --container-max:              900px;  /* M TerminalWindowController.swift:92 */
-  --container-gutter-desktop:   10px;   /* M GitReviewView.swift:61 */
-  --container-gutter-tablet:    8px;
-  --container-gutter-phone:     6px;
+  --container-max:              900px;  /* M TerminalWindowController.swift:92 (default content width) */
+  --container-gutter-desktop:   10px;   /* M GitReviewView.swift:61 (git-panel header gutter) */
+  --container-gutter-tablet:    8px;    /* D — xtty has no responsive tiers. Borrowed from a diff-row */
+  --container-gutter-phone:     6px;    /* D — gutter (GitReviewView.swift:519) and a notice padding
+                                         * (:466), purely to fill required slots. Not breakpoints. */
 
-  /* ═══ Layer C — xtty extensions ═════════════════════════════════════════ */
-  --xtty-content-w:          900px;  /* M TerminalWindowController.swift:92 */
-  --xtty-content-h:          560px;  /* M TerminalWindowController.swift:92 */
+  /* ═══ Layer C — xtty extensions (NOT schema tokens) ═══════════════════════
+   * Namespaced so their non-standard status is self-evident. These carry the
+   * measurements a faithful xtty mockup actually needs. */
+
+  /* Window + panels — all M unless noted */
+  --xtty-content-w:          900px;  /* M TerminalWindowController.swift:92 — the CONTENT rect.
+                                      * The titlebar sits ABOVE this (.titled styleMask, :97).
+                                      * Named content-* so no mockup draws chrome inside the 560. */
+  --xtty-content-h:          560px;  /* M :92 */
   --xtty-sidebar-w:          220px;  /* M TerminalWindowController.swift:68 */
-  --xtty-sidebar-min-w:      180px;  /* M SessionSidebar.swift:114 */
-  --xtty-git-panel-w:        280px;  /* M TerminalWindowController.swift:79 */
-  --xtty-git-panel-min-w:    240px;  /* M GitReviewView.swift:30 — different layer */
-  --xtty-panel-collapsed-w:  0px;    /* M TerminalWindowController.swift:222,299 */
-  --xtty-git-filelist-max-h: 220px;  /* M GitReviewView.swift:131 */
-  --xtty-scroller-w:         17px;   /* P NSScroller.scrollerWidth(.regular,.legacy) */
-  --xtty-panel-bg:           #393a40; /* P live sidebar material, window ACTIVE */
-  --xtty-panel-bg-inactive:  #282a35; /* P same material, window INACTIVE (opaque) */
-  --xtty-quake-h:            40vh;
+  --xtty-sidebar-min-w:      180px;  /* M SessionSidebar.swift:114 (SwiftUI content floor) */
+  --xtty-git-panel-w:        280px;  /* M TerminalWindowController.swift:79 — the AppKit panel width */
+  --xtty-git-panel-min-w:    240px;  /* M GitReviewView.swift:30 — the SwiftUI content minimum.
+                                      * DIFFERENT LAYER from the 280. Label both; never conflate. */
+  --xtty-panel-collapsed-w:  0px;    /* M TerminalWindowController.swift:222 */
+  --xtty-git-filelist-max-h: 220px;  /* M GitReviewView.swift:131 — list clamps to this once a diff shows */
+  --xtty-scroller-w:         17px;   /* P NSScroller.scrollerWidth(for:.regular, scrollerStyle:.legacy)
+                                      * = 17.0 on macOS 26. Runtime-computed — re-run the probe on OS
+                                      * updates. It is NOT 15.
+                                      * LOAD-BEARING, not decorative: SwiftTerm pins the scroller to the
+                                      * terminal's trailing edge and getEffectiveWidth subtracts it from
+                                      * the grid's usable width (MacTerminalView.swift:562-564), whether
+                                      * or not there is scrollback to scroll. Any scenario that counts
+                                      * columns must subtract it from the pane width first. */
+  --xtty-panel-bg:           #393a40; /* P — the .listStyle(.sidebar) panels (session sidebar AND the
+                                       * git panel's file list) are a LIVE AppKit vibrancy material,
+                                       * even in xtty's bare NSHostingViews: ≈ #24252b + ~18% of the
+                                       * desktop behind the window, saturation-boosted ~2x. This value
+                                       * is the material screen-measured over a neutral mid-grey
+                                       * backdrop, window active. Paint it FLAT and annotate that the
+                                       * shipped surface is live and viewer-dependent; NEVER use a CSS
+                                       * backdrop-filter (a mockup doesn't control the backdrop, and
+                                       * the page's own background would mix in — confidently wrong).
+                                       * Probe: research/03-analysis/appkit-sidebar-material-forensics.md */
+  --xtty-panel-bg-inactive:  #282a35; /* P — the same material when the window is INACTIVE: it goes
+                                       * fully opaque at exactly this value (backdrop-invariant), so
+                                       * this one is a measurement, not an approximation. */
+  --xtty-quake-h:            40vh;   /* D-ish: source is 0.4 × screen.visibleFrame.height
+                                      * (QuickTerminalController.swift:30,125-129), which EXCLUDES the
+                                      * menu bar and Dock. CSS vh is viewport-relative, so a
+                                      * full-viewport mockup runs ~5–10% tall. Annotate it. */
 
   /* Terminal */
   --xtty-term-font-size:     13px;    /* M XttyConfig.swift:124 */
   --xtty-term-bg-light:      #ffffff; /* M XttyConfig.swift:71 */
-  --xtty-term-fg-light:      #1d1f21; /* M XttyConfig.swift:70,72 */
+  --xtty-term-fg-light:      #1d1f21; /* M XttyConfig.swift:70,72 — foreground and cursor share one value */
 
   /* Sidebar rows */
   --xtty-row-indent:         18px;  /* M SessionSidebar.swift:177 */
-  --xtty-icon-slot:          14px;  /* M SessionSidebar.swift:129,205 */
+  --xtty-icon-slot:          14px;  /* M SessionSidebar.swift:129 */
   --xtty-icon-slot-sm:       12px;  /* M SessionSidebar.swift:168 */
-  --xtty-row-dim:            0.55;  /* M SessionSidebar.swift:179 — see correction C1 */
-  --xtty-space-05:           1px;   /* M SessionSidebar.swift:176,206 — added to tokens.css 2026-07-30
-                                     * in response to this page's gap U7. No longer quarantined. */
+  --xtty-row-dim:            0.55;  /* M SessionSidebar.swift:179 — dims a BLOCK row whose
+                                     * scroll/copy anchor is stale or trimmed
+                                     * (.opacity(block.isActionable ? 1.0 : 0.55) on SidebarBlockRow).
+                                     * NOT pane dimming: nothing dims a pane row for being inactive —
+                                     * an active pane is marked by the accent tint at :137 alone.
+                                     * Corrected 2026-07-30 from the app-shell baseline. */
+  --xtty-space-05:           1px;   /* M SessionSidebar.swift:176 (.padding(.vertical, 1)) and
+                                     * :206 (VStack spacing: 1). The schema's --space-* scale starts
+                                     * at 2px, so this measured 1pt value has no schema home.
+                                     * Added 2026-07-30 — proposed by the app-shell baseline. */
 
-  /* Tints — alphas M, hues P (at runtime the hue is the USER's accent) */
-  --xtty-tint-selection:     rgba(0,122,255,0.18);  /* M SessionSidebar.swift:137 */
-  --xtty-tint-hunk-header:   rgba(0,122,255,0.12);
-  --xtty-tint-emphasis:      rgba(0,122,255,0.30);
+  /* Tints — alphas are M, hues are P (at runtime the hue is the USER's accent) */
+  --xtty-tint-selection:     rgba(0,122,255,0.18);  /* M SessionSidebar.swift:137, GitReviewView.swift:229 */
+  --xtty-tint-hunk-header:   rgba(0,122,255,0.12);  /* M GitReviewView.swift:610 */
+  --xtty-tint-emphasis:      rgba(0,122,255,0.30);  /* M GitReviewView.swift:591 */
 
-  /* Diff tinting */
+  /* Diff tinting — alphas M GitReviewView.swift:608,609,589,590; hues P */
   --xtty-diff-add-bg:        rgba(48,209,88,0.18);
   --xtty-diff-del-bg:        rgba(255,66,69,0.18);
   --xtty-diff-add-emph:      rgba(48,209,88,0.40);
   --xtty-diff-del-emph:      rgba(255,66,69,0.40);
 
-  /* Git status letters */
+  /* Git status letters — roles M GitReviewView.swift:204-209 */
   --xtty-git-modified:       var(--warn);
   --xtty-git-added:          var(--success);
-  --xtty-git-deleted:        var(--muted);   /* deliberately MUTED, not red */
+  --xtty-git-deleted:        var(--muted);   /* deliberately MUTED, not red — "the zed tweak" (:206) */
   --xtty-git-untracked:      var(--muted);
   --xtty-git-conflicted:     var(--danger);
-  --xtty-git-renamed:        #0091ff;
+  --xtty-git-renamed:        #0091ff;        /* role M :207 (.blue); value P Color.blue darkAqua */
 
-  /* Session status vocabulary */
-  --xtty-status-blocked:     #db34f2;
+  /* Session status vocabulary — roles M SessionSidebar.swift:250-268 */
+  --xtty-status-blocked:     #db34f2;  /* role M :266 (.purple); value P Color.purple darkAqua */
 
-  /* Toast */
-  --xtty-toast-bg:           rgba(0,0,0,0.78);
-  --xtty-toast-fg:           #ffffff;
+  /* Toast — the app's only bespoke component */
+  --xtty-toast-bg:           rgba(0,0,0,0.78);  /* M SpatialToast.swift:24 */
+  --xtty-toast-fg:           #ffffff;           /* M SpatialToast.swift:17 */
 
-  /* ANSI palette — M XttyConfig.swift:38-55 (shared by BOTH built-in themes) */
-  --xtty-ansi-0:  #000000;  --xtty-ansi-8:  #7f7f7f;
-  --xtty-ansi-1:  #cd0000;  --xtty-ansi-9:  #ff0000;
-  --xtty-ansi-2:  #00cd00;  --xtty-ansi-10: #00ff00;
-  --xtty-ansi-3:  #cdcd00;  --xtty-ansi-11: #ffff00;
-  --xtty-ansi-4:  #0000ee;  --xtty-ansi-12: #5c5cff;
-  --xtty-ansi-5:  #cd00cd;  --xtty-ansi-13: #ff00ff;
-  --xtty-ansi-6:  #00cdcd;  --xtty-ansi-14: #00ffff;
-  --xtty-ansi-7:  #e5e5e5;  --xtty-ansi-15: #ffffff;
+  /* ANSI palette — M XttyConfig.swift:38-55 (standardAnsi, shared by BOTH built-in themes).
+   * Required: every scenario contains a terminal pane, and the injected prompt bans raw
+   * hex outside :root, so a faithful prompt / ls / git status has nowhere else to get these. */
+  --xtty-ansi-0:  #000000;  --xtty-ansi-8:  #7f7f7f;   /* M */
+  --xtty-ansi-1:  #cd0000;  --xtty-ansi-9:  #ff0000;   /* M */
+  --xtty-ansi-2:  #00cd00;  --xtty-ansi-10: #00ff00;   /* M */
+  --xtty-ansi-3:  #cdcd00;  --xtty-ansi-11: #ffff00;   /* M */
+  --xtty-ansi-4:  #0000ee;  --xtty-ansi-12: #5c5cff;   /* M */
+  --xtty-ansi-5:  #cd00cd;  --xtty-ansi-13: #ff00ff;   /* M */
+  --xtty-ansi-6:  #00cdcd;  --xtty-ansi-14: #00ffff;   /* M */
+  --xtty-ansi-7:  #e5e5e5;  --xtty-ansi-15: #ffffff;   /* M */
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -645,6 +716,8 @@ table.pg-table td:first-child { white-space: nowrap; }
 }
 .pg-tag-vendor { color: var(--warn); border-color: var(--warn); }
 .pg-tag-gap    { color: var(--danger); border-color: var(--danger); }
+.pg-tag-ok     { color: var(--success); border-color: var(--success); }
+.pg-resolved td { color: var(--muted); }
 </style>
 </head>
 
@@ -672,9 +745,9 @@ table.pg-table td:first-child { white-space: nowrap; }
     at constant <code class="pg-code">0</code> (<code class="pg-code">:222</code>). The sidebar's is
     activated at <code class="pg-code">220</code> (<code class="pg-code">:220</code>) with
     <code class="pg-code">sidebarVisible = true</code> (<code class="pg-code">:75</code>).
-    So at launch the terminal gets <em>all</em> the remaining width — 680pt, not the ~400pt squeeze
-    DESIGN.md §5 describes. That squeeze is real, but it belongs to
-    <code class="pg-code">git-review-flat</code>, where the panel is open.
+    So at launch the terminal gets <em>all</em> the remaining width — 680pt. The ~400pt squeeze is
+    real but belongs to <code class="pg-code">git-review-flat</code>, where the panel is open;
+    DESIGN.md §5 now records both states with their citations (corrected from this baseline, C3).
   </div>
 
   <!-- ══════════════════════════════════════════════════════════════════════
@@ -890,8 +963,9 @@ markmark@Marks-MacBook-Pro xtty % <span class="tm-caret"></span></pre>
     <code class="pg-code">_hasFocus &amp;&amp; (window?.isKeyWindow ?? true)</code>
     (<code class="pg-code">MacTerminalView.swift:708–712</code>) — it folds in window-key state, not
     just first-responder state. So an inactive xtty window shows a hollow caret even though its pane
-    is still the first responder. DESIGN.md §4 records the filled/hollow rule under <em>Splits</em>
-    but does not mention that window activation triggers it too.
+    is still the first responder — which is why the two variants differ in more than the sidebar
+    fill. DESIGN.md §4 now records this under <em>Splits</em>, the window-activation clause having
+    been added from this baseline (C5).
   </div>
 
   <!-- ══════════════════════════════════════════════════════════════════════
@@ -1047,7 +1121,7 @@ markmark@Marks-MacBook-Pro xtty % <span class="tm-caret"></span></pre>
       <tr><td>U4</td><td>Window corner radius</td><td><code>--radius-lg</code> (itself a D token) reused</td><td><code>--xtty-window-radius</code> (P)</td></tr>
       <tr><td>U5</td><td>Traffic-light diameter, gap, inset</td><td>12 / 8 / 20</td><td><code>--xtty-traffic-*</code> (P) — or leave them out and keep the annotation</td></tr>
       <tr><td>U6</td><td>Traffic-light fills, key and non-key</td><td>4 quarantined hexes</td><td>none — these are AppKit's and change per OS release; better annotated than tokenised</td></tr>
-      <tr><td>U7</td><td><strong>1pt spacing.</strong> <code>SessionSidebar.swift:176</code> (<code>.padding(.vertical, 1)</code>) and <code>:206</code> (<code>VStack(spacing: 1)</code>) both use it. The space scale starts at <code>--space-1: 2px</code>, so a measured xtty value has nowhere to live.</td><td><code>var(--xtty-space-05)</code></td><td><strong>CLOSED 2026-07-30</strong> — added to <code>tokens.css</code> as <code>--xtty-space-05: 1px</code> (M). Namespaced rather than <code>--space-05</code>: the schema's <code>--space-*</code> set is fixed, and an unprefixed non-schema name would break the package's token-purity rule.</td></tr>
+      <tr class="pg-resolved"><td>U7 <span class="pg-tag pg-tag-ok">closed</span></td><td><strong>1pt spacing.</strong> <code>SessionSidebar.swift:176</code> (<code>.padding(.vertical, 1)</code>) and <code>:206</code> (<code>VStack(spacing: 1)</code>) both use it. The space scale starts at <code>--space-1: 2px</code>, so a measured xtty value has nowhere to live.</td><td><code>var(--xtty-space-05)</code></td><td><strong>CLOSED 2026-07-30</strong> — added to <code>tokens.css</code> as <code>--xtty-space-05: 1px</code> (M). Namespaced rather than <code>--space-05</code>: the schema's <code>--space-*</code> set is fixed, and an unprefixed non-schema name would break the package's token-purity rule.</td></tr>
       <tr><td>U8</td><td>SwiftUI sidebar row inset, row-background radius, List top inset</td><td>10 / 5 / 6</td><td><code>--xtty-sidebar-row-inset</code>, <code>--xtty-sidebar-row-radius</code> (both P)</td></tr>
       <tr><td>U9</td><td>Tab-bar selected fill, divider weight, “+” glyph</td><td>approximated from <code>--surface</code> and <code>--border</code></td><td>defer to <code>window-tabs</code>, which should probe them properly</td></tr>
       <tr><td>U10</td><td>Terminal cell height — CTFont ascent + descent + leading at 13pt</td><td><code>--mock-term-line-h: 1.2</code></td><td><code>--xtty-term-cell-h</code> / <code>--xtty-term-cell-w</code> (M, from <code>cellDimension</code>)</td></tr>
@@ -1077,39 +1151,56 @@ markmark@Marks-MacBook-Pro xtty % <span class="tm-caret"></span></pre>
   <!-- ══════════════════════════════════════════════════════════════════════
        DESIGN.md CORRECTIONS — the source wins
        ══════════════════════════════════════════════════════════════════════ -->
-  <h2 class="pg-h2" data-od-id="corrections-heading">Where DESIGN.md and the source disagree — the source wins</h2>
+  <h2 class="pg-h2" data-od-id="corrections-heading">Six errors this baseline found in the design system</h2>
+
+  <div class="pg-note pg-note-cite" data-od-id="note-corrections-adopted">
+    <strong>All six are closed.</strong> Reading the source to draw this window turned up six places
+    where <code class="pg-code">DESIGN.md</code> or <code class="pg-code">tokens.css</code> described
+    something the Swift did not do. Each was folded into the design system on <strong>2026-07-30</strong>,
+    together with the token that closed gap U7 — so this is a record of provenance, not an open
+    dispute. It is kept because the next scenario author will want to know <em>why</em> the design
+    system says what it now says, and because the rule that produced them is worth repeating: a
+    baseline that cites its source finds the errors a baseline that trusts the prose cannot.
+  </div>
+
   <table class="pg-table">
-    <thead><tr><th>#</th><th>DESIGN.md / tokens.css says</th><th>The source says</th></tr></thead>
+    <thead><tr><th>#</th><th>What it said</th><th>What the source says</th><th>Now</th></tr></thead>
     <tbody>
       <tr>
         <td>C1</td>
         <td>§4: “pane rows with block rows indented 18pt beneath them; <strong>inactive panes dimmed to 0.55</strong>.” <code>tokens.css</code> repeats it: <code>--xtty-row-dim</code> — “inactive-pane dimming”.</td>
         <td><strong>Wrong subject.</strong> The <code>0.55</code> at <code>SessionSidebar.swift:179</code> is <code>.opacity(block.isActionable ? 1.0 : 0.55)</code> on <code>SidebarBlockRow</code> — it dims a <em>block</em> row whose scroll/copy anchor is stale or trimmed out. Nothing in <code>SessionSidebar.swift</code> dims a pane row for being inactive. No pane row on this page is dimmed, and <code>session-sidebar</code> should apply 0.55 to stale block rows only.</td>
+        <td><code>tokens.css</code> <code>--xtty-row-dim</code> and DESIGN.md §4 both now say “block row … stale or trimmed”, and §4 adds that nothing dims a pane row.</td>
       </tr>
       <tr>
         <td>C2</td>
         <td><code>tokens.css</code>: <code>--text-xs: 9px /* M SessionSidebar.swift:127 (block-status caption) */</code>.</td>
         <td>Value right, description wrong. Line 127 is <code>.font(.system(size: 9, weight: .semibold))</code> on the <strong>disclosure chevron</strong>. There is no 9px block-status caption; block rows use <code>.caption</code>/<code>.caption2</code> (10px) at <code>:170</code>, <code>:187</code>, <code>:191</code>. The chevron is what this page binds it to.</td>
+        <td><code>--text-xs</code>'s comment now reads “the pane row's DISCLOSURE CHEVRON”, with the <code>:170,187,191</code> counter-citation. DESIGN.md §3 matches.</td>
       </tr>
       <tr>
         <td>C3</td>
         <td>§5: “At the default 900pt width with everything open, the terminal is squeezed to roughly 400pt — that squeeze is a real design fact worth showing.”</td>
         <td>True, but <strong>not at launch</strong> — it needs the git panel open, and <code>gitReviewVisible = false</code> (<code>:85</code>). At launch the terminal column is 680pt. The squeeze belongs to <code>git-review-flat</code>.</td>
+        <td>DESIGN.md §5 now opens with the launch state <code>[220 | 680 | 0]</code> and its three citations, then the panel-open squeeze.</td>
       </tr>
       <tr>
         <td>C4</td>
         <td><code>tokens.css</code>: <code>--xtty-scroller-w: 17px</code>, tagged P with no consumer noted.</td>
         <td>It is <em>load-bearing</em>: SwiftTerm reserves it on the terminal's trailing edge and subtracts it from the grid's usable width (<code>getEffectiveWidth</code>). Any scenario that counts columns must subtract 17 from the pane width first, whether or not the scroller can scroll.</td>
+        <td><code>--xtty-scroller-w</code> now carries a LOAD-BEARING note and the <code>MacTerminalView.swift:562-564</code> citation; DESIGN.md §5 repeats it.</td>
       </tr>
       <tr>
         <td>C5</td>
         <td>§4 records the filled/hollow caret rule under <em>Splits</em>, as a pane-focus cue.</td>
         <td>It is also a <strong>window-activation</strong> cue: <code>hasFocus</code> folds in <code>window.isKeyWindow</code>. That is why Variant 2's caret is hollow — the difference between the two variants is not only the sidebar fill.</td>
+        <td>DESIGN.md §4 <em>Splits</em> now cites <code>CaretView.swift:24-29</code> and <code>MacTerminalView.swift:708-712</code> and states the window-activation clause.</td>
       </tr>
       <tr>
         <td>C6</td>
         <td>§1: xtty “authors no material, blur, gradient, or shadow anywhere”; §6: “Flat. Hairline separators … do all the layering work.”</td>
         <td>Confirmed for materials — and stronger than stated for separators: <code>buildLayout</code> (<code>:206–243</code>) adds three subviews and no divider view at all, so <strong>there is no hairline between the sidebar and the terminal</strong>. The only boundary is where the material stops. None is drawn here.</td>
+        <td>DESIGN.md §6 now opens “flatter than ‘hairlines everywhere’” and states that <code>buildLayout</code> adds no divider view at all.</td>
       </tr>
     </tbody>
   </table>
