@@ -32,11 +32,15 @@
 #                                               create+configure the mockups
 #                                               project, then verify            (make design-link)
 #   scripts/design-link.sh --status             verify only; mutates nothing    (make design-status)
-#   scripts/design-link.sh --uninstall          unlink by hand, then verify     (make design-unlink)
+#   scripts/design-link.sh --uninstall          undo install: delete the mockups
+#                                               project + the ds-<pkg> workspace
+#                                               copy, unlink by hand, verify    (make design-unlink)
 #   scripts/design-link.sh --create-project     dedupe/create/configure the mockups project only
 #   scripts/design-link.sh --select-project ID  opt-in: set a project's picker
 # Options:
 #   --package-dir PATH   package to link (default: <repo>/design/xtty)
+#   --keep-project       with --uninstall: leave the mockups project row (and
+#                        its app-side run history) in place; remove the rest
 # Env:
 #   OD_DATA_DIR   override the app data dir (default: the running daemon's own,
 #                 else ~/Library/Application Support/Open Design/namespaces/release-stable/data)
@@ -53,6 +57,7 @@ OD_APP="${OD_APP:-/Applications/Open Design.app}"
 DEFAULT_DATA_DIR="$HOME/Library/Application Support/Open Design/namespaces/release-stable/data"
 MODE=install
 SELECT_PROJECT=""
+KEEP_PROJECT=0
 # Single target on purpose — see the platform note in the `select` branch.
 PLATFORM="desktop-app"
 
@@ -60,6 +65,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --status)          MODE=status ;;
     --uninstall)       MODE=uninstall ;;
+    --keep-project)    KEEP_PROJECT=1 ;;
     --create-project)  MODE=create ;;
     --select-project)  MODE=select; SELECT_PROJECT="${2:?--select-project needs a project id or name}"; shift ;;
     --platform)        PLATFORM="${2:?--platform needs a slug (default: desktop-app)}"; shift ;;
@@ -643,19 +649,162 @@ status)
   ;;
 
 uninstall)
-  step "Unlinking $DS_ID"
+  step "Tearing down what install set up ($DS_ID + the mockups project)"
+  # The whole teardown is bracketed by a git-status byte-compare: nothing in
+  # this branch may touch the repo. (The app's project delete removes only its
+  # OWN dir — removeProjectDir resolves <data>/projects/<id>, never
+  # metadata.baseDir; projects.ts:1339-1342 — but that is proven by the
+  # compare below, not assumed.)
+  GIT_BEFORE="$(git -C "$ROOT" status --porcelain design/ 2>/dev/null || true)"
+  DID=0        # 1 => something was actually removed
+  RC=0         # sticky worst outcome: 0 ok | 2 daemon down/unverified | 3 human needed
+  PHANTOM=0    # 1 => a daemon-side delete happened; the UI card outlives it
+  bump() { [ "$1" -gt "$RC" ] && RC="$1"; return 0; }
+
+  # Guard every realpath comparison the same way install does (the daemon's
+  # own primitive class), computed once.
+  ROOT_REAL="$("$py" -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$ROOT")"
+  MOCK_REAL="$("$py" -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$MOCKUPS_DIR")"
+
+  # ── 1. the mockups project (reverse of create_flow) ────────────────────────
+  # Deletion is UNCONDITIONAL, with --keep-project as the escape hatch — not
+  # opt-in — because `make design-unlink` means "undo `make design-link`", and
+  # install now CREATES the project: a teardown that leaves it behind quietly
+  # re-inverts the symmetry this mode exists for. What deletion costs is
+  # app-side only — every mockup lives in design/mockups/ in the repo, which
+  # the delete provably never touches — so the one honest reason to keep the
+  # row is its app-side run/chat history, and that is exactly what
+  # --keep-project preserves.
+  #
+  # Mechanism: the ungated HTTP DELETE /api/projects/:id, not the bundled od
+  # CLI. The CLI's own `project delete` is a bare unauthenticated fetch of the
+  # very same route (cli.ts:6220-6230); the Electron-helper + IPC-socket
+  # ceremony exists only to mint the *import* token, which deletion does not
+  # need — same mechanism, fewer moving parts. This is the PROJECT delete
+  # route (row + <data>/projects/<id> only); the DESIGN-SYSTEM delete route
+  # stays banned below, unchanged.
+  if [ "$KEEP_PROJECT" = 1 ]; then
+    say "  project: kept (--keep-project)"
+  elif [ -n "$BASE" ]; then
+    hits="$(od_get /api/projects | projects_at "$MOCKUPS_DIR")" || die "GET /api/projects failed"
+    n=0; [ -n "$hits" ] && n="$(printf '%s\n' "$hits" | wc -l | tr -d ' ')"
+    if [ "$n" -eq 0 ]; then
+      say "  project: none at $MOCKUPS_DIR — nothing to delete"
+    elif [ "$n" -gt 1 ]; then
+      # The known no-dedupe hazard: independent projects at the same baseDir,
+      # each with its own runs. Guessing which to delete is exactly what this
+      # script refuses to do — a human decides.
+      warn "$n projects point at design/mockups — refusing to guess which to delete:"
+      printf '%s\n' "$hits" | while IFS='|' read -r pid pnm pds _rest; do
+        warn "    id=$pid  name=$pnm  designSystem=$pds"
+      done
+      warn "Delete the extras in the app (or curl -X DELETE $BASE/api/projects/<id>), then re-run."
+      bump 3
+    else
+      IFS='|' read -r pid pnm pds _rest <<<"$hits"
+      # Belt-and-braces on top of the baseDir matcher: refuse to delete
+      # anything that resolves outside this repo (design/mockups itself could
+      # be a symlink pointing elsewhere).
+      case "$MOCK_REAL/" in
+        "$ROOT_REAL"/*) : ;;
+        *) die "refusing: $MOCKUPS_DIR resolves outside the repo ($MOCK_REAL)" 3 ;;
+      esac
+      say "  project: deleting id=$pid  name=$pnm  designSystem=$pds"
+      code="$(od_json DELETE "/api/projects/$pid" '' "$TMPD/del-resp")"
+      [ "$code" = 200 ] || die "DELETE /api/projects/$pid failed ($code): $(api_err <"$TMPD/del-resp")"
+      # Verify by effect: the daemon's own list, never the DELETE echo.
+      left="$(od_get /api/projects | projects_at "$MOCKUPS_DIR")" || true
+      [ -z "$left" ] || die "a project still points at $MOCKUPS_DIR after the delete: $(first_line "$left")"
+      say "  project: deleted (re-read confirms nothing points at design/mockups)"
+      DID=1; PHANTOM=1
+      # Honest residue: the app's own delete leaves finished run dirs behind
+      # too (runs are keyed by run id at <data>/runs/, not under the project).
+      orphans="$(grep -l "\"projectId\":\"$pid\"" "$DATA_DIR"/runs/*/state.json 2>/dev/null | wc -l | tr -d ' ' || true)"
+      [ "${orphans:-0}" -gt 0 ] && say "  note:    $orphans run-history dir(s) under $DATA_DIR/runs/ still reference the deleted project — app-side only; remove by hand if you want them gone"
+    fi
+  else
+    warn "daemon not running: the mockups project row (if any) cannot be found or deleted from the filesystem — relaunch Open Design and re-run"
+    bump 2
+  fi
+
+  # ── 2. the ds-<pkg> workspace copy (the frozen DESIGN.md) ─────────────────
+  # This is BOTH a directory (<data>/projects/ds-<pkg>) and a project row the
+  # app maintains for it (ensureUserDesignSystemWorkspaceProject,
+  # server-services.ts:226-270). Not gated by --keep-project: it belongs to
+  # the design-system registration, not to the mockups project. With the
+  # daemon up, the same ungated project DELETE removes row+dir in one
+  # app-sanctioned move (removeProjectDir is exactly rm -rf of the app-side
+  # dir, and ds-<pkg> has no baseDir to confuse it with). Without the daemon,
+  # fall back to removing the directory — already the documented remedy for
+  # the DESIGN.md freeze — and report the row as unreachable.
+  WS="$DATA_DIR/projects/ds-$PKG_NAME"
+  ws_present=0; { [ -e "$WS" ] || [ -L "$WS" ]; } && ws_present=1
+  ws_row=""
+  if [ -n "$BASE" ]; then
+    ws_row="$(od_get /api/projects | "$py" -c '
+import json,sys
+d=json.load(sys.stdin)
+print(next((p.get("id") for p in d.get("projects") or [] if p.get("id")==sys.argv[1]), ""))' "ds-$PKG_NAME")" \
+      || die "GET /api/projects failed while checking for the ds-$PKG_NAME row"
+  fi
+  if [ "$ws_present" = 0 ] && [ -z "$ws_row" ]; then
+    say "  workspace: none (no dir at $WS, no ds-$PKG_NAME row)"
+  else
+    [ -L "$WS" ] && die "refusing: $WS is a symlink, not the app's workspace directory — inspect it yourself" 3
+    if [ -n "$BASE" ]; then
+      code="$(od_json DELETE "/api/projects/ds-$PKG_NAME" '' "$TMPD/ws-resp")"
+      [ "$code" = 200 ] || die "DELETE /api/projects/ds-$PKG_NAME failed ($code): $(api_err <"$TMPD/ws-resp")"
+      PHANTOM=1
+    fi
+    if [ -e "$WS" ]; then
+      # Daemon down (or its delete left the dir): guarded rm -rf. The guard is
+      # paranoid on purpose — this is the branch's only recursive remove.
+      [ -n "$DATA_DIR" ] && [ -d "$DATA_DIR/projects" ] || die "refusing rm -rf: no projects dir under $DATA_DIR" 3
+      [ "$(basename "$WS")" = "ds-$PKG_NAME" ] || die "internal: workspace basename mismatch" 3
+      WS_REAL="$("$py" -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$WS")"
+      DD_REAL="$("$py" -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$DATA_DIR")"
+      case "$WS_REAL/" in
+        "$ROOT_REAL"/*) die "refusing rm -rf: $WS resolves INTO the repo ($WS_REAL) — is OD_DATA_DIR wrong?" 3 ;;
+      esac
+      case "$WS_REAL/" in
+        "$DD_REAL/projects/"*) : ;;
+        *) die "refusing rm -rf: $WS resolves outside $DATA_DIR/projects ($WS_REAL)" 3 ;;
+      esac
+      rm -rf "$WS"
+    fi
+    # Verify by effect on both halves.
+    if [ -e "$WS" ] || [ -L "$WS" ]; then die "workspace dir still present after removal: $WS"; fi
+    if [ -n "$BASE" ]; then
+      ws_row="$(od_get /api/projects | "$py" -c '
+import json,sys
+d=json.load(sys.stdin)
+print(next((p.get("id") for p in d.get("projects") or [] if p.get("id")==sys.argv[1]), ""))' "ds-$PKG_NAME")" \
+        || die "GET /api/projects failed while re-checking the ds-$PKG_NAME row"
+      [ -z "$ws_row" ] || die "the daemon still lists project ds-$PKG_NAME after the delete"
+      say "  workspace: removed (dir gone; re-read confirms no ds-$PKG_NAME row)"
+    else
+      say "  workspace: dir removed; the ds-$PKG_NAME row (if any) needs the daemon"
+      bump 2
+    fi
+    DID=1
+  fi
+
+  # ── 3. the design-system symlink ──────────────────────────────────────────
   st="$(link_state)"
   case "$st" in
-    A) say "  nothing to do (no link at $LINK)" ;;
+    A) say "  link:    nothing to do (no link at $LINK)" ;;
     B|C)
       # BY HAND, on purpose. The app's own DELETE for a `user:` id bypasses the
       # safe lstat+unlink sibling (static-resource.ts:827-829) and runs
       # rm(path,{recursive:true,force:false}) (index.ts:1451-1460) — whether
       # that unlinks or recurses into the repo working tree is UNVERIFIED, and
       # the downside if wrong is the git tree. unlink(2) can only remove a link.
+      # (The PROJECT deletes above are a different route with a verified-safe
+      # target resolution; this ban is specifically the design-system route.)
       [ -L "$LINK" ] || die "refusing: $LINK is not a symlink" 3
       rm "$LINK"
-      say "  unlinked $LINK  (repo untouched — unlink(2) on the symlink only)"
+      say "  link:    unlinked $LINK  (repo untouched — unlink(2) on the symlink only)"
+      DID=1
       ;;
     D) die "$LINK is a real file/directory, not our symlink. Refusing to delete it. Inspect and remove it yourself if you are sure." 3 ;;
   esac
@@ -667,12 +816,32 @@ uninstall)
     say "  catalog: $DS_ID no longer listed"
   else
     warn "daemon not running: could not confirm the catalog dropped it (it will — discovery is a bare readdir)"
+    bump 2
   fi
-  say ""
-  say "App-side residue this does NOT remove (delete by hand for a clean slate):"
-  say "  $DATA_DIR/projects/ds-$PKG_NAME      (workspace copy of DESIGN.md)"
-  say "  the mockups project row + its runs/  (delete the project in the app UI)"
-  exit 0
+
+  # ── verify by effect, then report ─────────────────────────────────────────
+  [ -d "$PKG_REAL" ] || die "the committed package dir vanished during teardown: $PKG_REAL"
+  GIT_AFTER="$(git -C "$ROOT" status --porcelain design/ 2>/dev/null || true)"
+  if [ "$GIT_AFTER" != "$GIT_BEFORE" ]; then
+    die "TEARDOWN TOUCHED THE REPO: git status design/ changed — inspect immediately (git status design/ && git diff design/)"
+  fi
+  say "  verified: git status design/ byte-identical across the teardown"
+
+  if [ "$PHANTOM" = 1 ]; then
+    say ""
+    say "  /!\\ The app's open UI may still show a card for what was just deleted:"
+    say "      an API/CLI delete leaves a phantom card that the in-app Refresh"
+    say "      does NOT clear — quit and relaunch Open Design to see truth."
+  fi
+  if [ "$RC" = 2 ]; then
+    say ""
+    say "Filesystem teardown done; the daemon half could not run (app not running):"
+    [ "$KEEP_PROJECT" = 1 ] || say "  - the mockups project row (if any) was not deleted"
+    say "  - catalog/project-list re-reads were skipped — relaunch Open Design and re-run to finish + verify"
+  elif [ "$RC" = 0 ] && [ "$DID" = 0 ]; then
+    say ""; say "Already clean — nothing to do."
+  fi
+  exit "$RC"
   ;;
 
 select)

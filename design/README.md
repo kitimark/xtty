@@ -16,7 +16,7 @@ Background, mechanism, and the retired theories: `research/03-analysis/open-desi
 ```sh
 make design-link      # register the package + create/configure the mockups project (idempotent; needs the app running)
 make design-status    # read-only linkage report
-make design-unlink    # remove the app-side symlink by hand
+make design-unlink    # undo design-link: delete the mockups project + workspace copy, unlink the symlink (idempotent)
 ```
 
 `make design-link` now does the whole setup: it registers the package, then creates the `mockups` project through the app's **bundled first-party CLI** (`od project import-folder`, run via the app's own Electron helper — it mints the gated import token itself; the script never touches the daemon's socket or secrets) and points it at the `xtty` design system. It dedupes by `baseDir` first, so re-running is a no-op that reports the existing project. If any of that fails, the script prints the manual GUI steps, which remain the documented fallback:
@@ -29,6 +29,12 @@ Step 2 is not optional decoration. It is the *only* channel that pastes `tokens.
 > **What `fromTrustedPicker` means now.** The import route stamps `fromTrustedPicker: true` for **any valid HMAC token**, regardless of origin. While creation was GUI-only, that flag genuinely meant "a human chose this folder in the native picker". With creation scripted through the app's own CLI, it means only "a valid token was presented". The gate itself still stands (a bare `POST /api/import/folder` without a token is still 403), but the flag no longer carries human-consent semantics. Owner-accepted tradeoff, recorded here so nobody later reads the flag as an audit trail of human choices.
 
 **Verify by effect, not by configuration.** Change one token value, run one generation, grep the output for the new value. Reading the stored design-system id proves only a precondition: it still reads correctly when the symlink dangles or the package has regressed to draft.
+
+## Teardown
+
+`make design-unlink` undoes everything `make design-link` set up: it deletes the mockups project (resolved by canonical `baseDir`, never by name; via the ungated project-delete route — the same route the app's own CLI uses; refuses with more than one match), removes the `ds-xtty` workspace copy (row + directory), and removes the symlink by hand — `unlink(2)`, never the app's design-system delete route, whose recursive behavior on a referenced directory remains deliberately unverified. Every removal is verified by re-read, the whole run is bracketed by a `git status design/` byte-compare, and re-running on a clean state is a no-op. `--keep-project` preserves the project row (and its app-side run history) while removing the rest; project deletion never touches `design/mockups/` — the mockups live in the repo, so the only thing deletion costs is app-side run/chat history.
+
+Three things teardown does **not** do: it cannot delete the project row while the app is not running (it then does the filesystem half — symlink, workspace directory — reports what it skipped, and exits 2; relaunch and re-run to finish); it leaves finished run directories under the app's `runs/` in place (the app's own delete leaves them too — the script reports how many reference the deleted project); and it cannot refresh the running app's UI — **after any teardown, the open app still shows a phantom card for the deleted project until you quit and relaunch** (the in-app Refresh does not clear it; see the hazards below).
 
 ## The naming contract
 
@@ -56,7 +62,7 @@ Moving or renaming this checkout dangles the symlink silently — re-run `make d
 
 ## Portable vs per-machine
 
-**In git:** everything under `design/`. **Not in git, and re-created by re-running the setup above:** the symlink, the app's project row, and its config. A fresh clone on another machine needs `make design-link` — nothing else (the two GUI steps are only the fallback if the scripted creation fails).
+**In git:** everything under `design/`. **Not in git, re-created by `make design-link` and removed again by `make design-unlink`:** the symlink, the app's project row, and its config. A fresh clone on another machine needs `make design-link` — nothing else (the two GUI steps are only the fallback if the scripted creation fails).
 
 `manifest.json`'s `source.path` is repo-relative and provenance-only; no code branches on it.
 
@@ -104,7 +110,7 @@ Two of the three look like what you want and are not. Verify after creating: the
 **Two operational hazards, both measured 2026-07-29:**
 
 - **Open Design does not dedupe folder imports.** The import route has no existing-project check and the `projects` table constrains only `id` — not `name`, not `metadata.baseDir`. Importing the same directory twice yields two independent projects writing into the same folder, each with its own design-system setting, and nothing warns at import time; a generation run in the unconfigured one silently skips our tokens. This is why the script dedupes by `realpath(baseDir)` before creating, and why `make design-status` warns when more than one project points at `design/mockups`.
-- **Deleting a project via the HTTP API (or the CLI, same route) leaves a phantom card in the app's UI** that the in-app "Refresh" button does **not** clear — only quitting and relaunching does (DB and disk had one project while the UI showed two). Delete projects in the app, or expect to relaunch after an API delete.
+- **Deleting a project via the HTTP API (or the CLI, same route) leaves a phantom card in the app's UI** that the in-app "Refresh" button does **not** clear — only quitting and relaunching does (DB and disk had one project while the UI showed two). Delete projects in the app, or expect to relaunch after an API delete — `make design-unlink` deletes over the API and prints this exact reminder after every daemon-side delete.
 
 Other findings from that first run:
 

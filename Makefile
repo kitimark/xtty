@@ -133,7 +133,7 @@ design-link: ## Register design/xtty + create/configure the mockups project in t
 design-status: ## Report Open Design linkage (read-only; 0=linked+published, 2=app not running, 1=not linked)
 	-@scripts/design-link.sh --status
 
-design-unlink: ## Remove the Open Design symlink by hand (never via the app's delete route)
+design-unlink: ## Undo design-link: delete the mockups project + workspace copy, unlink the symlink by hand (idempotent)
 	@scripts/design-link.sh --uninstall
 
 # --- local VM test image (packer/README.md) -----------------------------------
