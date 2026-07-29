@@ -5,7 +5,7 @@ A place to try a visual direction before writing SwiftUI. Two halves:
 | | What it is | How it reaches the app |
 |---|---|---|
 | `xtty/` | The **design-system package** — xtty's visual language, hand-authored from Swift source | Symlinked into Open Design by `make design-link`. Repo bytes *are* app bytes. |
-| `mockups/` | The **project folder** — the design agent's working directory | Imported once by `make design-link` via the app's bundled CLI (GUI folder picker is the fallback). |
+| `mockups/` | The **project folder** — the design agent's working directory | Imported once by `make design-link` via the app's bundled CLI (GUI folder picker is the fallback). The app-side project is *named* **`xtty`** (display only — see the naming note below); the folder stays `mockups/`. |
 
 Open Design emits **HTML only**. Its coherent role here is mockup exploration; translating an accepted direction into SwiftUI is separate, human work. It cannot and must not edit Swift.
 
@@ -14,15 +14,17 @@ Background, mechanism, and the retired theories: `research/03-analysis/open-desi
 ## Setup
 
 ```sh
-make design-link      # register the package + create/configure the mockups project (idempotent; needs the app running)
+make design-link      # register the package + create/configure the 'xtty' project (idempotent; needs the app running)
 make design-status    # read-only linkage report
-make design-unlink    # undo design-link: delete the mockups project + workspace copy, unlink the symlink (idempotent)
+make design-unlink    # undo design-link: delete the 'xtty' project + workspace copy, unlink the symlink (idempotent)
 ```
 
-`make design-link` now does the whole setup: it registers the package, then creates the `mockups` project through the app's **bundled first-party CLI** (`od project import-folder`, run via the app's own Electron helper — it mints the gated import token itself; the script never touches the daemon's socket or secrets) and points it at the `xtty` design system. It dedupes by `baseDir` first, so re-running is a no-op that reports the existing project. If any of that fails, the script prints the manual GUI steps, which remain the documented fallback:
+`make design-link` now does the whole setup: it registers the package, then creates the **`xtty`** project (named at import via `--name`; working folder `design/mockups/`) through the app's **bundled first-party CLI** (`od project import-folder`, run via the app's own Electron helper — it mints the gated import token itself; the script never touches the daemon's socket or secrets) and points it at the `xtty` design system. It dedupes by `baseDir` first, so re-running is a no-op that reports the existing project — and if the existing project carries a different display name (a GUI import defaults to the folder name `mockups`), it renames it in place, keeping its id and run history. If any of that fails, the script prints the manual GUI steps, which remain the documented fallback:
 
 1. **New project → "Open folder" →** `design/mockups/`
-2. **Set the project's design system to `xtty`** (or `scripts/design-link.sh --select-project mockups`).
+2. **Re-run `make design-link`** — it renames the GUI import to `xtty` and sets design system + platform (or set the design system by hand in the picker).
+
+> **The naming note.** The project's *name* is `xtty`; its *folder* is `design/mockups/` (`design/xtty/` is the sibling design-system package, so the folder itself cannot be renamed). That mismatch is deliberate and harmless: the name is pure display — it labels the app's project list and export filenames, never reaches the agent's prompt, and keys nothing (identity everywhere, in the app and in the script, is `realpath(baseDir)`). Two caveats it buys: (1) once the app has ensured the design-system *workspace* row (`ds-xtty`), the project list shows **two rows displaying "xtty"** — that row mirrors the design system's title; the one whose card opens `design/mockups/` is the project. (2) **Never rename the `ds-xtty` workspace row in the app** — a rename on a workspace row writes the new title through into the design system's `metadata.json`, which is our symlinked `design/xtty/metadata.json`, i.e. an app-initiated write into the git tree. Renaming the `xtty` project itself cannot do that (verified: the write-through is gated on `importedFrom:"design-system"`; ours is `"folder"`).
 
 Step 2 is not optional decoration. It is the *only* channel that pastes `tokens.css` and `DESIGN.md` into the agent's prompt. A package that is registered but not selected — or selected but not published — contributes **nothing**, and the agent may still produce plausible-looking output by reading files on its own. That is exactly how an earlier attempt looked successful while being wired up wrong.
 
@@ -32,7 +34,7 @@ Step 2 is not optional decoration. It is the *only* channel that pastes `tokens.
 
 ## Teardown
 
-`make design-unlink` undoes everything `make design-link` set up: it deletes the mockups project (resolved by canonical `baseDir`, never by name; via the ungated project-delete route — the same route the app's own CLI uses; refuses with more than one match), removes the `ds-xtty` workspace copy (row + directory), and removes the symlink by hand — `unlink(2)`, never the app's design-system delete route, whose recursive behavior on a referenced directory remains deliberately unverified. Every removal is verified by re-read, the whole run is bracketed by a `git status design/` byte-compare, and re-running on a clean state is a no-op. `--keep-project` preserves the project row (and its app-side run history) while removing the rest; project deletion never touches `design/mockups/` — the mockups live in the repo, so the only thing deletion costs is app-side run/chat history.
+`make design-unlink` undoes everything `make design-link` set up: it deletes the `xtty` project at `design/mockups` (resolved by canonical `baseDir`, never by name; via the ungated project-delete route — the same route the app's own CLI uses; refuses with more than one match), removes the `ds-xtty` workspace copy (row + directory), and removes the symlink by hand — `unlink(2)`, never the app's design-system delete route, whose recursive behavior on a referenced directory remains deliberately unverified. Every removal is verified by re-read, the whole run is bracketed by a `git status design/` byte-compare, and re-running on a clean state is a no-op. `--keep-project` preserves the project row (and its app-side run history) while removing the rest; project deletion never touches `design/mockups/` — the mockups live in the repo, so the only thing deletion costs is app-side run/chat history.
 
 Three things teardown does **not** do: it cannot delete the project row while the app is not running (it then does the filesystem half — symlink, workspace directory — reports what it skipped, and exits 2; relaunch and re-run to finish); it leaves finished run directories under the app's `runs/` in place (the app's own delete leaves them too — the script reports how many reference the deleted project); and it cannot refresh the running app's UI — **after any teardown, the open app still shows a phantom card for the deleted project until you quit and relaunch** (the in-app Refresh does not clear it; see the hazards below).
 

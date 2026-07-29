@@ -29,18 +29,19 @@
 #
 # Usage:
 #   scripts/design-link.sh                      install / repair the link, then
-#                                               create+configure the mockups
-#                                               project, then verify            (make design-link)
+#                                               create+configure the 'xtty'
+#                                               project (folder design/mockups),
+#                                               then verify                     (make design-link)
 #   scripts/design-link.sh --status             verify only; mutates nothing    (make design-status)
-#   scripts/design-link.sh --uninstall          undo install: delete the mockups
+#   scripts/design-link.sh --uninstall          undo install: delete the 'xtty'
 #                                               project + the ds-<pkg> workspace
 #                                               copy, unlink by hand, verify    (make design-unlink)
-#   scripts/design-link.sh --create-project     dedupe/create/configure the mockups project only
+#   scripts/design-link.sh --create-project     dedupe/create/configure the 'xtty' project only
 #   scripts/design-link.sh --select-project ID  opt-in: set a project's picker
 # Options:
 #   --package-dir PATH   package to link (default: <repo>/design/xtty)
-#   --keep-project       with --uninstall: leave the mockups project row (and
-#                        its app-side run history) in place; remove the rest
+#   --keep-project       with --uninstall: leave the project row (and its
+#                        app-side run history) in place; remove the rest
 # Env:
 #   OD_DATA_DIR   override the app data dir (default: the running daemon's own,
 #                 else ~/Library/Application Support/Open Design/namespaces/release-stable/data)
@@ -60,6 +61,13 @@ SELECT_PROJECT=""
 KEEP_PROJECT=0
 # Single target on purpose — see the platform note in the `select` branch.
 PLATFORM="desktop-app"
+# App-side DISPLAY name of the design/mockups project — never identity: every
+# lookup here resolves projects by realpath(metadata.baseDir) (PY_PROJ). The
+# folder stays design/mockups (design/xtty is the package dir, a sibling); the
+# name exists for the app's project list and export filenames, and reaches
+# neither the agent prompt nor any artifact path. Set at creation (--name) and
+# converged on an existing row (ensure_name). Owner call, 2026-07-29.
+PROJECT_NAME="xtty"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -248,13 +256,16 @@ for p in by_basedir(d.get("projects") or [], sys.argv[1]):
 manual_creation_instructions() {
   cat <<EOF
 
-  MANUAL FALLBACK — create the mockups project in the GUI:
+  MANUAL FALLBACK — create the project in the GUI:
     In Open Design:  new project -> "Open folder"
     Choose:          $MOCKUPS_DIR
     /!\\ That is the PROJECT folder import. Do NOT confuse it with
         Settings > Design Systems > "Import from folder" — that one would
         regenerate DESIGN.md from a CSS scan and destroy design/xtty/.
-    Then:            scripts/design-link.sh --select-project mockups
+    Then:            re-run  make design-link
+                     (the GUI names the import '$(basename "$MOCKUPS_DIR")' after the folder;
+                      the re-run renames it to '$PROJECT_NAME' and configures
+                      design system + platform via the ungated PATCH path)
 EOF
 }
 
@@ -349,28 +360,34 @@ verify_catalog() {
 }
 
 advisories() {
-  # 0a. Duplicate folder-imports. Open Design does NOT dedupe: the import route
-  # has no existing-project check, and `projects` constrains only `id` — not
-  # `name`, not metadata.baseDir (db.ts:58-67). So importing design/mockups
-  # twice yields two independent projects writing into the SAME directory,
-  # each with its own design-system setting. Observed for real: a double-fired
-  # click produced two `mockups` rows, one configured and one not, which then
-  # made `--select-project mockups` ambiguous. Names are not identity here —
-  # always resolve by baseDir.
+  # 0a. The project at design/mockups: report it, and warn on the two hazards.
+  # Duplicates: Open Design does NOT dedupe — the import route has no
+  # existing-project check, and `projects` constrains only `id` — not `name`,
+  # not metadata.baseDir (db.ts:58-67). So importing design/mockups twice
+  # yields two independent projects writing into the SAME directory, each with
+  # its own design-system setting. Observed for real: a double-fired click
+  # produced two rows at the same folder, one configured and one not, which
+  # then made a by-name --select-project ambiguous. Names are not identity
+  # here — always resolve by baseDir.
   if [ -n "$BASE" ]; then
-    dups="$(od_get /api/projects 2>/dev/null | projects_at "$MOCKUPS_DIR" 2>/dev/null || true)"
-    case "$dups" in
-      *$'\n'*) : ;;   # >1 line = >1 project at the same baseDir — fall through and warn
-      *)       dups="" ;;
-    esac
-    if [ -n "$dups" ]; then
+    local projs pn
+    projs="$(od_get /api/projects 2>/dev/null | projects_at "$MOCKUPS_DIR" 2>/dev/null || true)"
+    pn=0; [ -n "$projs" ] && pn="$(printf '%s\n' "$projs" | wc -l | tr -d ' ')"
+    if [ "$pn" -eq 0 ]; then
+      say "  project: none at $MOCKUPS_DIR (make design-link creates it)"
+    elif [ "$pn" -eq 1 ]; then
+      local pi pnm pds ppf _rest
+      IFS='|' read -r pi pnm pds ppf _rest <<<"$projs"
+      say "  project: '$pnm'  id=$pi  designSystem=$pds  platform=$ppf"
+      [ "$pnm" = "$PROJECT_NAME" ] || warn "project name is '$pnm', expected '$PROJECT_NAME' — make design-link renames it in place (display only; identity is baseDir)"
+    else
       warn "DUPLICATE PROJECTS: more than one project has baseDir $MOCKUPS_DIR."
       warn "  Open Design does not dedupe folder imports (no uniqueness on name or baseDir),"
       warn "  so these are independent projects writing into the same directory — one may"
       warn "  have the design system attached and another not, and a generation run in the"
       warn "  wrong one silently skips your tokens. Delete the extras IN THE APP (deleting"
       warn "  a project never touches baseDir), keeping the one that reports user:xtty:"
-      printf '%s\n' "$dups" | while IFS='|' read -r i n ds _rest; do
+      printf '%s\n' "$projs" | while IFS='|' read -r i n ds _rest; do
         warn "    id=$i  name=$n  designSystem=$ds"
       done
     fi
@@ -455,10 +472,14 @@ print("false" if t is False else ("true" if t is True else "unset"))' "$cfg")"
 # /api/projects/:id accepts designSystemId and is NOT behind the desktop-auth
 # gate (routes/project/index.ts:2218-2228). Creation is gated over raw HTTP but
 # scriptable via the app's own bundled CLI — see create_flow.
-# NOTE the project NAME defaults to basename(baseDir) = "mockups" when the
-# import's name field is left alone (import-export-routes.ts:380-382); when the
-# given name/id matches nothing, fall back to resolving by baseDir ==
-# design/mockups (the shared matcher — names are not identity here).
+# NOTE on names: a GUI folder import defaults the project name to
+# basename(baseDir) = "mockups" (import-export-routes.ts:380-382); the scripted
+# import passes --name $PROJECT_NAME instead. Either way names are not
+# identity: when the given name/id matches nothing, resolve by baseDir ==
+# design/mockups (the shared matcher), and when it matches MORE than one row,
+# narrow by baseDir — the ds-<pkg> workspace row displays the design system's
+# TITLE (server-services.ts:255 stamps summary.title), which equals
+# $PROJECT_NAME here, so '--select-project xtty' can name-hit both rows.
 select_flow() {
   step "Pointing project '$SELECT_PROJECT' at $DS_ID"
   verify_catalog || die "refusing: $DS_ID is not present+published — run 'make design-link' first"
@@ -470,6 +491,10 @@ d=json.load(sys.stdin); projs=d.get("projects") or []
 hits=[p for p in projs if p.get("id")==want or p.get("name")==want]
 if not hits:
     hits=by_basedir(projs, mock)   # fallback: resolve by baseDir (shared matcher)
+elif len(hits)>1:
+    # A display-name collision (e.g. the ds-<pkg> workspace row also shows
+    # the design-system title): narrow to the row(s) at design/mockups.
+    hits=by_basedir(hits, mock) or hits
 if len(hits)!=1: print("AMBIGUOUS %d"%len(hits)); raise SystemExit
 p=hits[0]; b=_base(p)
 if not (b==root or b.startswith(root+os.sep)): print("OUTSIDE %s"%b); raise SystemExit
@@ -524,6 +549,32 @@ print("  verified: baseDir still %s"%m["baseDir"])' "$PLATFORM" \
   say "grep the produced HTML for the new value."
 }
 
+# ── project display name (converge in place; never delete-and-recreate) ─────
+# PATCH /api/projects/:id accepts {name} through the same ungated handler the
+# designSystemId PATCH uses (routes/project/index.ts:2095). Renaming in place
+# preserves the row's id and its app-side run/chat history. It cannot reach
+# the repo: the daemon's one rename write-through — into the bound design
+# system's metadata.json, which for us is the SYMLINKED design/xtty/ — is
+# gated on metadata.importedFrom=="design-system" (a ds-<pkg> workspace row;
+# design-systems/index.ts:1279-1291), and every row this script touches is
+# importedFrom=="folder". That is still proven by the git bracket below, not
+# assumed. Verified by re-read, never by the PATCH echo.
+ensure_name() { # $1=project id  $2=current display name
+  local id="$1" nm="$2" before after code now
+  [ "$nm" = "$PROJECT_NAME" ] && return 0
+  before="$(git -C "$ROOT" status --porcelain design/ 2>/dev/null || true)"
+  say "  renaming: '$nm' -> '$PROJECT_NAME' (display only — identity stays baseDir; id and run history kept)"
+  code="$(od_json PATCH "/api/projects/$id" \
+    "$("$py" -c 'import json,sys;print(json.dumps({"name":sys.argv[1]}))' "$PROJECT_NAME")" \
+    "$TMPD/name-resp")"
+  [ "$code" = 200 ] || die "rename PATCH failed ($code): $(api_err <"$TMPD/name-resp")"
+  now="$(od_get "/api/projects/$id" | "$py" -c 'import json,sys; d=json.load(sys.stdin); print((d.get("project") or d).get("name"))')"
+  [ "$now" = "$PROJECT_NAME" ] || die "re-read says name=$now, expected $PROJECT_NAME"
+  after="$(git -C "$ROOT" status --porcelain design/ 2>/dev/null || true)"
+  [ "$after" = "$before" ] || die "RENAME TOUCHED THE REPO: git status design/ changed — inspect immediately (git status design/ && git diff design/)"
+  say "  verified: name = $now (git status design/ unchanged)"
+}
+
 # ── project creation (dedupe-first; the app itself NEVER dedupes) ────────────
 # Auto-run from `install` on purpose, not opt-in, because:
 #  - dedupe-first makes it a no-op whenever a project already points at
@@ -535,7 +586,7 @@ print("  verified: baseDir still %s"%m["baseDir"])' "$PLATFORM" \
 #  - it collapses a fresh clone's setup to the one documented command.
 # Exit: 0 ok/no-op | 2 fell back to manual | 3 duplicates need a human.
 create_flow() {
-  step "Mockups project (baseDir $MOCKUPS_DIR)"
+  step "Project '$PROJECT_NAME' (baseDir $MOCKUPS_DIR)"
   local before hits n out rc id nm ds pf ifrom trusted
   hits="$(od_get /api/projects | projects_at "$MOCKUPS_DIR")" || die "GET /api/projects failed"
   n=0; [ -n "$hits" ] && n="$(printf '%s\n' "$hits" | wc -l | tr -d ' ')"
@@ -554,6 +605,10 @@ create_flow() {
   if [ "$n" -eq 1 ]; then
     IFS='|' read -r id nm ds pf ifrom trusted <<<"$hits"
     say "  exists:  id=$id  name=$nm  designSystem=$ds  platform=$pf"
+    # Converge the display name first (no-op when it already matches), so a
+    # pre-rename row or a GUI fallback import (named after the folder) ends up
+    # as '$PROJECT_NAME' without losing its id or run history.
+    ensure_name "$id" "$nm"
     if [ "$ds" = "$DS_ID" ] && [ "$pf" = "$PLATFORM" ]; then
       say "  already configured — nothing to do"
       return 0
@@ -576,8 +631,18 @@ create_flow() {
   # NOT "a human chose this folder in the native picker". Owner-accepted.
   before="$(git -C "$ROOT" status --porcelain design/ 2>/dev/null || true)"
   say "  creating via the bundled od CLI (Electron helper as interpreter)"
+  # --name sets the display name at creation (the route trims it and only
+  # falls back to basename(baseDir) when absent; import-export-routes.ts:
+  # 380-384) — one fewer mutation than create-then-rename, and the seeded
+  # conversation title reads "Imported from $PROJECT_NAME". --design-system
+  # is deliberately NOT folded in: the import route 400s outright on a
+  # missing/draft package (validateProjectDesignSystemId), which would turn
+  # today's recoverable created-but-half-configured state into no project at
+  # all; the platform PATCH has no import flag and must run anyway, so the
+  # chained select_flow stays the one configuration path for every shape
+  # (fresh create, half-configured repair, standalone --select-project).
   rc=0
-  out="$(od_cli project import-folder "$MOCKUPS_DIR" --daemon-url "$BASE" --json 2>&1)" || rc=$?
+  out="$(od_cli project import-folder "$MOCKUPS_DIR" --name "$PROJECT_NAME" --daemon-url "$BASE" --json 2>&1)" || rc=$?
   if [ "$rc" -ne 0 ]; then
     warn "bundled-CLI import failed (rc=$rc): $(first_line "$out")"
     manual_creation_instructions >&2
@@ -609,6 +674,9 @@ create_flow() {
   fi
   say "  verified: id=$id  baseDir -> $MOCKUPS_DIR  importedFrom=folder  fromTrustedPicker=true"
   say "  verified: zero bytes written into design/ (git status unchanged)"
+  # Belt-and-braces: the re-read above carries the name — if a future CLI
+  # build silently dropped --name, converge it here instead of trusting it.
+  ensure_name "$id" "$nm"
 
   # Chain design system + platform in the same command, via the existing
   # ungated PATCH path (each step verified by re-read inside select_flow).
@@ -649,7 +717,7 @@ status)
   ;;
 
 uninstall)
-  step "Tearing down what install set up ($DS_ID + the mockups project)"
+  step "Tearing down what install set up ($DS_ID + the '$PROJECT_NAME' project at design/mockups)"
   # The whole teardown is bracketed by a git-status byte-compare: nothing in
   # this branch may touch the repo. (The app's project delete removes only its
   # OWN dir — removeProjectDir resolves <data>/projects/<id>, never
@@ -666,7 +734,7 @@ uninstall)
   ROOT_REAL="$("$py" -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$ROOT")"
   MOCK_REAL="$("$py" -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$MOCKUPS_DIR")"
 
-  # ── 1. the mockups project (reverse of create_flow) ────────────────────────
+  # ── 1. the design/mockups project (reverse of create_flow) ────────────────
   # Deletion is UNCONDITIONAL, with --keep-project as the escape hatch — not
   # opt-in — because `make design-unlink` means "undo `make design-link`", and
   # install now CREATES the project: a teardown that leaves it behind quietly
@@ -723,7 +791,7 @@ uninstall)
       [ "${orphans:-0}" -gt 0 ] && say "  note:    $orphans run-history dir(s) under $DATA_DIR/runs/ still reference the deleted project — app-side only; remove by hand if you want them gone"
     fi
   else
-    warn "daemon not running: the mockups project row (if any) cannot be found or deleted from the filesystem — relaunch Open Design and re-run"
+    warn "daemon not running: the project row at design/mockups (if any) cannot be found or deleted from the filesystem — relaunch Open Design and re-run"
     bump 2
   fi
 
@@ -731,7 +799,7 @@ uninstall)
   # This is BOTH a directory (<data>/projects/ds-<pkg>) and a project row the
   # app maintains for it (ensureUserDesignSystemWorkspaceProject,
   # server-services.ts:226-270). Not gated by --keep-project: it belongs to
-  # the design-system registration, not to the mockups project. With the
+  # the design-system registration, not to the design/mockups project. With the
   # daemon up, the same ungated project DELETE removes row+dir in one
   # app-sanctioned move (removeProjectDir is exactly rm -rf of the app-side
   # dir, and ds-<pkg> has no baseDir to confuse it with). Without the daemon,
@@ -836,7 +904,7 @@ print(next((p.get("id") for p in d.get("projects") or [] if p.get("id")==sys.arg
   if [ "$RC" = 2 ]; then
     say ""
     say "Filesystem teardown done; the daemon half could not run (app not running):"
-    [ "$KEEP_PROJECT" = 1 ] || say "  - the mockups project row (if any) was not deleted"
+    [ "$KEEP_PROJECT" = 1 ] || say "  - the project row at design/mockups (if any) was not deleted"
     say "  - catalog/project-list re-reads were skipped — relaunch Open Design and re-run to finish + verify"
   elif [ "$RC" = 0 ] && [ "$DID" = 0 ]; then
     say ""; say "Already clean — nothing to do."
@@ -935,7 +1003,8 @@ EOF
     cat <<EOF
 
 ──────────────────────────────────────────────────────────────────────────────
-Linked, published, and the mockups project is created and configured.
+Linked, published, and the '$PROJECT_NAME' project (design/mockups) is created
+and configured.
 
  ONE CHECK REMAINS, AND IT IS BY EFFECT: change one value in
  design/xtty/tokens.css, generate a mockup, grep the produced HTML for the
@@ -951,7 +1020,8 @@ EOF
     cat <<EOF
 
 ──────────────────────────────────────────────────────────────────────────────
-Linked and published — but the mockups project is NOT fully set up (details
+Linked and published — but the '$PROJECT_NAME' project (design/mockups) is NOT
+fully set up (details
 and the manual fallback are printed above; exit code $CREATE_RC).
 
  After finishing it by hand, verify the channel BY EFFECT: change one value

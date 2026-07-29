@@ -127,13 +127,13 @@ audit-leaks: build ## P7c leak/allocation DIAGNOSTIC (leaks+vmmap; NOT a gate â€
 
 # --- Open Design linkage (research/03-analysis/open-design-integration-forensics.md) ---
 
-design-link: ## Register design/xtty + create/configure the mockups project in the running Open Design app (idempotent)
+design-link: ## Register design/xtty + create/configure the 'xtty' project (folder design/mockups) in the running Open Design app (idempotent)
 	@scripts/design-link.sh
 
 design-status: ## Report Open Design linkage (read-only; 0=linked+published, 2=app not running, 1=not linked)
 	-@scripts/design-link.sh --status
 
-design-unlink: ## Undo design-link: delete the mockups project + workspace copy, unlink the symlink by hand (idempotent)
+design-unlink: ## Undo design-link: delete the 'xtty' project + workspace copy, unlink the symlink by hand (idempotent)
 	@scripts/design-link.sh --uninstall
 
 # --- local VM test image (packer/README.md) -----------------------------------
