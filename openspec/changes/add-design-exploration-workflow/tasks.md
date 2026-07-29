@@ -1,6 +1,6 @@
-## 1. Design-system package (`design/xtty/`)
+## 1. Design-system package (`design/design-system/`)
 
-> Drafted ahead of this proposal and parked in `git stash` (`design/xtty/{tokens.css,manifest.json,metadata.json}`, `scripts/design-link.sh`, the Makefile targets — see `git stash list`); restore it when applying. These tasks verify and finish that draft rather than starting from nothing. Raw material for the prose: the recovered prior draft at `/tmp/od-poc-salvage/recovered/` (scratch; will not survive a reboot).
+> Drafted ahead of this proposal and parked in `git stash` (then at `design/xtty/` — `{tokens.css,manifest.json,metadata.json}`, `scripts/design-link.sh`, the Makefile targets; the package directory was renamed to `design/design-system/` mid-change, section 6); restore it when applying. These tasks verify and finish that draft rather than starting from nothing. Raw material for the prose: the recovered prior draft at `/tmp/od-poc-salvage/recovered/` (scratch; will not survive a reboot).
 
 - [x] 1.1 `tokens.css` — bind all 56 schema tokens plus namespaced `--xtty-*` extensions, each declaration carrying an `M`/`P`/`D` provenance tag per design.md D3
 - [x] 1.2 Verify token coverage mechanically: every schema name present, no unprefixed non-schema name (a diff against `packages/contracts/src/design-systems/token-schema.ts`)
@@ -37,7 +37,7 @@
 - [x] 4.3 Create the project in the app (human step — native folder picker at `design/mockups/`), then verify the import wrote zero bytes into the repo
 - [x] 4.4 Set the project's design system to the xtty package (human step), then verify the stored id — recording that this is a precondition, not proof
 - [x] 4.5 **Close the loop by effect**: change one token value, run one generation, grep the produced HTML for the new value. Record the `metadata.json` write-back diff and commit or discard it deliberately
-- [x] 4.6 Verify teardown: `make design-unlink` undoes the whole setup — mockups project deleted via the app's project-delete route (resolved by canonical `baseDir`, never name; duplicates defer to a human, exit 3; `--keep-project` escape hatch), `ds-xtty` workspace row+dir removed, symlink unlinked by hand (the design-system delete API still never invoked), every removal verified by re-read, `git status design/` byte-identical across the run, already-clean rerun a no-op, daemon-down run filesystem-only with exit 2 — exercised first against a throwaway `/tmp` repo through the same script code path, then the real `make design-unlink` → `make design-link` round-trip restoring project + `user:xtty` + `desktop-app` + live symlink with the repo unchanged
+- [x] 4.6 Verify teardown: `make design-unlink` undoes the whole setup — mockups project deleted via the app's project-delete route (resolved by canonical `baseDir`, never name; duplicates defer to a human, exit 3; `--keep-project` escape hatch), `ds-<pkg>` workspace row+dir removed, symlink unlinked by hand (the design-system delete API still never invoked), every removal verified by re-read, `git status design/` byte-identical across the run, already-clean rerun a no-op, daemon-down run filesystem-only with exit 2 — exercised first against a throwaway `/tmp` repo through the same script code path, then the real `make design-unlink` → `make design-link` round-trip restoring project + package id + `desktop-app` + live symlink with the repo unchanged (run pre-rename against `user:xtty`; re-run post-rename against `user:design-system`, task 6.5)
 - [x] 4.7 Record in `design/README.md` what the interface actually exposed — whether the symlink-install route and the picker were reachable through the GUI at all (design.md Open Questions)
 
 ## 5. Baseline mockups
@@ -49,9 +49,17 @@
 - [ ] 5.3 Author a second baseline exercising the widest token slice (`git-review-flat.baseline.html`), including the all-panels-open squeeze at the default window width
 - [ ] 5.4 Confirm both baselines cite the source implementing what they draw, and that neither invents a colour outside the token file
 
-## 6. Documentation and completion
+## 6. Package-directory rename (`design/xtty/` → `design/design-system/`, owner readability call; design.md D10)
 
-- [ ] 6.1 Capture what this change settled into `research/03-analysis/open-design-integration-forensics.md` as a dated addendum — answering the open questions it can, and correcting anything the live run refuted
-- [ ] 6.2 Reconcile the trackers: `HISTORY.md` narrative, `research/README.md` index line, and a Learned-refutations entry only if something was genuinely settled beyond re-litigation
-- [ ] 6.3 Pre-archive coherence review ⟶ xtty-openspec-critic (add-design-exploration-workflow)
-- [ ] 6.4 Archive + reconcile ⟶ archive-ritual
+- [x] 6.1 Settle from the tool's source that the id cannot be decoupled from the directory basename (install body is `{source, path}` only; symlink named `basename(realpath)`; catalog id `user:<entry-name>` from readdir) and record the decision: the id follows the rename to `user:design-system`
+- [x] 6.2 Tear down the old id in full (`make design-unlink` before the rename), verify orphan-free from the daemon and filesystem, then `git mv` and reconcile the identity-coupled package files: `manifest.json` `id` = new basename (validator rejects on mismatch, silently), `source.path`, and drop the stale app-written `projectId` so the app re-mints `ds-design-system` rather than pinning `ds-xtty` forever
+- [x] 6.3 Update every tooling/doc surface off the old path (`scripts/design-link.sh` default + inline text, `Makefile` help, `design/.gitignore` comments, `design/README.md`, change artifacts) — repo-wide grep for `design/xtty`, `ds-xtty`, `user:xtty` returning only intentional historical references
+- [x] 6.4 Rehearse the edited script against a throwaway `/tmp` repo through the same code path (fresh create → verify → no-op re-run → teardown) before touching the real linkage
+- [ ] 6.5 Re-link live and re-verify by effect: symlink → renamed dir, catalog `user:design-system` published with full token coverage, exactly one project at `realpath(design/mockups)` bound to `user:design-system`/`desktop-app`, workspace-ensure write-back re-mints `projectId: ds-design-system` (committed deliberately), token channel re-proven end-to-end (sentinel token value in generated output), and the full `make design-unlink` → `make design-link` round-trip byte-identical on `git status --porcelain design/`
+
+## 7. Documentation and completion
+
+- [ ] 7.1 Capture what this change settled into `research/03-analysis/open-design-integration-forensics.md` as a dated addendum — answering the open questions it can, and correcting anything the live run refuted
+- [ ] 7.2 Reconcile the trackers: `HISTORY.md` narrative, `research/README.md` index line, and a Learned-refutations entry only if something was genuinely settled beyond re-litigation
+- [ ] 7.3 Pre-archive coherence review ⟶ xtty-openspec-critic (add-design-exploration-workflow)
+- [ ] 7.4 Archive + reconcile ⟶ archive-ritual
