@@ -22,6 +22,7 @@ Read `README.md` in the project root. It names the scenario you are drawing and 
 - **`--accent` is a stand-in.** xtty uses the user's own macOS accent. Render it blue; never describe blue as xtty's brand color.
 - **The git panel is 280pt** (`--xtty-git-panel-w`). The 240 (`--xtty-git-panel-min-w`) is a content minimum on a different layer — do not lay out at 240.
 - **`--elev-raised` is `none` on purpose.** Do not substitute a shadow because a card "looks flat". Flat is correct.
+- **The sidebar and git-panel file list are a live AppKit material — paint them flat.** On screen they mix the desktop behind the window (and saturate it ~2×); a mockup cannot reproduce that and must not try. Fill them with `--xtty-panel-bg` (active window) or `--xtty-panel-bg-inactive` (inactive), use `--surface` for the titlebar and the git panel's empty states (those are opaque — the material only exists where a List paints), and annotate the vibrancy where it matters. **Never use `backdrop-filter`**: the mockup's backdrop is the page, not the user's wallpaper, so it would blur-and-tint the wrong thing.
 - **The window is 900×560 of *content*.** The titlebar is above that; do not subtract it from the 560.
 
 ## Output conventions

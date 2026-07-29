@@ -35,7 +35,13 @@
 :root {
   /* ── A1 identity ─────────────────────────────────────────────────────── */
   --bg:            #1d1f21;  /* M XttyConfig.swift:62 — the terminal canvas; xtty's one authored color */
-  --surface:       #1e1e1e;  /* P windowBackgroundColor. Three points from --bg: that near-identity IS the design */
+  --surface:       #1f212c;  /* P screen-measured window ground on macOS 26 darkAqua: titlebar + any
+                              * panel region where no List paints (git-panel empty states). Opaque —
+                              * invariant across 4 solid backdrops and window activation. The
+                              * windowBackgroundColor CATALOG value resolves #1e1e1e but never renders;
+                              * what the WindowServer composites is this. Still near --bg: that
+                              * near-identity IS the design. Probe:
+                              * research/03-analysis/appkit-sidebar-material-forensics.md */
   --fg:            #c5c8c6;  /* M XttyConfig.swift:61,63 — foreground AND cursor are the same value */
   --muted:         rgba(255,255,255,0.549);  /* P Color.secondary */
   --border:        rgba(255,255,255,0.098);  /* P separatorColor. xtty draws no border of its own */
@@ -104,7 +110,11 @@
   --radius-md:     8px;    /* M SpatialToast.swift:25 — the ONLY custom corner radius in the app */
   --radius-lg:     10px;   /* D */
   --radius-pill:   9999px; /* D */
-  --elev-flat:     none;   /* M-by-absence: grep for shadow/blur/vibrancy/NSVisualEffectView → 0 hits */
+  --elev-flat:     none;   /* M-by-absence for AUTHORED effects only (grep for shadow/blur/vibrancy/
+                            * NSVisualEffectView → 0 hits) — but AppKit supplies a live sidebar
+                            * material anyway (measured 2026-07-29). Mockups still draw no shadow/blur:
+                            * panels paint the flat measured --xtty-panel-bg (Layer C), never a
+                            * CSS backdrop-filter. */
   --elev-ring:     0 0 0 1px var(--border);  /* D — the CSS analogue of a .thin divider */
   --elev-raised:   none;   /* Deliberate override of the schema's shadow fallback.
                             * xtty has zero shadows; a raised tier would be a lie. */
@@ -139,6 +149,19 @@
   --xtty-scroller-w:         17px;   /* P NSScroller.scrollerWidth(for:.regular, scrollerStyle:.legacy)
                                       * = 17.0 on macOS 26. Runtime-computed — re-run the probe on OS
                                       * updates. It is NOT 15. */
+  --xtty-panel-bg:           #393a40; /* P — the .listStyle(.sidebar) panels (session sidebar AND the
+                                       * git panel's file list) are a LIVE AppKit vibrancy material,
+                                       * even in xtty's bare NSHostingViews: ≈ #24252b + ~18% of the
+                                       * desktop behind the window, saturation-boosted ~2x. This value
+                                       * is the material screen-measured over a neutral mid-grey
+                                       * backdrop, window active. Paint it FLAT and annotate that the
+                                       * shipped surface is live and viewer-dependent; NEVER use a CSS
+                                       * backdrop-filter (a mockup doesn't control the backdrop, and
+                                       * the page's own background would mix in — confidently wrong).
+                                       * Probe: research/03-analysis/appkit-sidebar-material-forensics.md */
+  --xtty-panel-bg-inactive:  #282a35; /* P — the same material when the window is INACTIVE: it goes
+                                       * fully opaque at exactly this value (backdrop-invariant), so
+                                       * this one is a measurement, not an approximation. */
   --xtty-quake-h:            40vh;   /* D-ish: source is 0.4 × screen.visibleFrame.height
                                       * (QuickTerminalController.swift:30,125-129), which EXCLUDES the
                                       * menu bar and Dock. CSS vh is viewport-relative, so a
