@@ -8,30 +8,52 @@
 #   miserable to set repeatedly (e.g. cheap model to iterate, strong model to
 #   author a baseline). This script is that dropdown, scripted.
 #
-# MECHANISM (verified against the vendor source @ f52fda2 and by driving the
-# real GUI once and diffing the config it wrote — see the forensics doc)
+# MECHANISM (verified against the vendor source @ f52fda2, by driving the
+# real GUI once, and by a live minimal-PUT probe — see the forensics doc)
 #   The preference lives at `agentModels.<agentId>.model` in the daemon's
-#   app-config. At spawn the daemon resolves, in order (server.ts:4925-4936):
+#   app-config. At spawn the daemon resolves, in order (server.ts:4924-4936):
 #       1. a per-request `model` field  (the UI sends this; we do not)
 #       2. `agentModels.<agentId>.model`   <-- what this script writes
 #       3. "default" -> NO --model flag is passed at all, and the agent CLI's
 #          own configured model wins.
-#   A value that `isKnownModel` recognizes passes through verbatim; anything
-#   else goes through `sanitizeCustomModel` (models.ts:205) and is passed
-#   through if it matches ^[A-Za-z0-9][A-Za-z0-9._/:@-]*$ and is <=200 chars.
-#   That custom path is the documented escape hatch for "a brand-new model the
-#   CLI's list hasn't surfaced yet" — which is exactly our case: this Open
-#   Design build's pinned list is 4.x-era and predates Claude 5 entirely.
+#   `sanitizeCustomModel` (models.ts:205: ^[A-Za-z0-9][A-Za-z0-9._/:@-]*$,
+#   <=200 chars, trimmed) gates only the PER-REQUEST field. A config-sourced
+#   value bypasses it at the chat-spawn fallback (server.ts:4934) and reaches
+#   the CLI verbatim as `--model <id>`; paths that re-send the stored pref as
+#   the request field (e.g. Orbit routines, server.ts:8396-8406) sanitize it
+#   to no-flag instead. Either way a bad stored id fails far from the write —
+#   and the claude CLI rejects an unknown id with a readable message but EXIT
+#   CODE 0 — so this script validates against the same regex at set time,
+#   where failure is loud and attributable. The custom path is the documented
+#   escape hatch for "a brand-new model the CLI's list hasn't surfaced yet" —
+#   exactly our case: this build's pinned list is 4.x-era and predates
+#   Claude 5 entirely.
 #
-# WHY NOT WRITE THE FILE DIRECTLY
-#   The daemon holds app-config in memory and fires `onAppConfigWritten` hooks
-#   on every write. A direct file poke is ignored until relaunch and can be
-#   overwritten by the next GUI action. We use the same HTTP route the GUI
-#   uses. That route is a WHOLE-CONFIG REPLACE, not a merge — so this script
-#   always does read-modify-write of the full object, and verifies afterwards
-#   that it did not drop the telemetry opt-out.
+# WRITE SHAPE (and why not write the file directly)
+#   The daemon holds app-config in memory and fires `onAppConfigWritten`
+#   hooks; a direct file poke is ignored until relaunch and overwritten by
+#   the next GUI action. So we use the GUI's own route, PUT /api/app-config.
+#   That route MERGES at the top-key level (`doWrite` starts from the stored
+#   config and applies only the keys sent — app-config.ts) but REPLACES each
+#   sent key wholesale (a sent `agentModels` replaces the whole per-agent
+#   map). So this script read-modify-writes the `agentModels` map and sends
+#   ONLY that key: unsent keys (the telemetry opt-out included) cannot be
+#   dropped, and the read-modify-write race against a concurrent GUI action
+#   is confined to the model prefs themselves — the route offers no
+#   version/etag, so that residual last-writer-wins window (two simultaneous
+#   model picks) is accepted, not closed.
 #
-# Exit codes: 0 ok · 1 usage/validation · 2 daemon not running · 3 write refused
+# TELEMETRY GUARD
+#   `telemetry.content: false` is repo posture (content telemetry ships file
+#   bodies to a remote relay). On a fresh install the daemon SERVES absent
+#   telemetry as {metrics: true, content: true} — content telemetry is the
+#   pre-privacy-decision DEFAULT (app-config.ts applyTelemetryDefaults) — so
+#   this script refuses to write until it is off, and re-checks after the
+#   write that it did not move (our PUT never carries the telemetry key, so
+#   any movement means a concurrent writer).
+#
+# Exit codes: 0 ok · 1 usage/validation · 2 daemon not running
+#             · 3 write refused (telemetry guard, HTTP failure, or failed verify)
 
 set -euo pipefail
 
@@ -40,7 +62,7 @@ AGENT_ID_OVERRIDE=""
 WANT=""
 MODE=set
 
-die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit "${2:-1}"; }
+die()  { printf '\033[31merror:\033[0m %s\n' "$1" >&2; exit "${2:-1}"; }
 warn() { printf '\033[33mwarn:\033[0m %s\n' "$*" >&2; }
 step() { printf '\033[36m==>\033[0m %s\n' "$*"; }
 
@@ -136,7 +158,9 @@ elif model == "default":
 else:
     print(f"  model:   {model} -> spawned as --model {model}")
 tel = cfg.get("telemetry") or {}
-print("  telemetry: content=" + str(tel.get("content")).lower())
+c = tel.get("content")
+state = "true" if c is True else ("false" if c is False else "unset (consumers gate on content === true, so off today)")
+print("  telemetry: content=" + state)
 '
 
 show_current() {
@@ -150,20 +174,44 @@ if [ "$MODE" = status ]; then
 fi
 
 # ── validate ────────────────────────────────────────────────────────────────
-# Mirror sanitizeCustomModel (models.ts:205). We reject here rather than let
-# the daemon silently drop the value at spawn time, where it would look like
-# the setting simply did nothing.
-printf '%s' "$WANT" | "$py" -c '
+# Mirror sanitizeCustomModel (models.ts:205), including its trim — the value
+# we store is the value the daemon would have accepted per-request. Reject
+# here because a bad stored id only surfaces at spawn (as a verbatim --model
+# the CLI rejects with exit 0, or silently sanitized to no-flag on the
+# request-forwarding paths), where it looks like the setting did nothing.
+want_norm="$(printf '%s' "$WANT" | "$py" -c '
 import re, sys
 v = sys.stdin.read().strip()
 if not v or len(v) > 200 or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/:@-]*", v):
     sys.exit(1)
-' || die "invalid model id: '$WANT' (must match ^[A-Za-z0-9][A-Za-z0-9._/:@-]*$, <=200 chars)"
+sys.stdout.write(v)
+')" || die "invalid model id: '$WANT' (must match ^[A-Za-z0-9][A-Za-z0-9._/:@-]*$, <=200 chars)"
+WANT="$want_norm"
 
 step "current pick"
 show_current
 
-# ── read-modify-write the WHOLE config ──────────────────────────────────────
+# ── pre-write telemetry guard ───────────────────────────────────────────────
+# Refuse to touch the config while content telemetry is on. On a fresh
+# install "on" is what the daemon serves for an absent telemetry key — the
+# pre-privacy-decision default — so this is the state to expect there.
+PY_TEL='
+import sys, json
+cfg = json.load(sys.stdin).get("config") or {}
+c = (cfg.get("telemetry") or {}).get("content")
+print("true" if c is True else ("false" if c is False else "unset"))
+'
+pre_content="$(printf '%s' "$cfg_json" | "$py" -c "$PY_TEL")"
+case "$pre_content" in
+  true) die "content telemetry is ON (telemetry.content=true — it ships file bodies to a remote relay; on a fresh install this is the app's default until the privacy decision). Turn it off in Open Design's privacy settings, then re-run. Nothing was written." 3 ;;
+  unset) warn "telemetry.content is unset — every consumer gates on content === true, so it is off today; set it explicitly to false in Open Design's privacy settings" ;;
+esac
+
+# ── read-modify-write the agentModels map, send ONLY that key ───────────────
+# The route merges top-level keys but replaces a sent key wholesale, so the
+# map (other agents' prefs + this agent's reasoning/serviceTier) must be
+# carried over; everything else must NOT be echoed back — re-sending
+# unrelated keys would clobber any concurrent GUI write with our stale read.
 PY_MERGE='
 import sys, json
 agent, want = sys.argv[1], sys.argv[2]
@@ -172,13 +220,14 @@ models = dict(cfg.get("agentModels") or {})
 prefs = dict(models.get(agent) or {})
 prefs["model"] = want
 models[agent] = prefs
-cfg["agentModels"] = models
-json.dump(cfg, sys.stdout)
+json.dump({"agentModels": models}, sys.stdout)
 '
 new_body="$(printf '%s' "$cfg_json" | "$py" -c "$PY_MERGE" "$AGENT_ID" "$WANT")"
 
+# No -f here: the status line is checked explicitly, and -f would suppress
+# the error body we want in the failure message.
 tmp_resp="$(mktemp)"; trap 'rm -f "$tmp_resp"' EXIT
-code="$(curl -fsS --max-time 15 -o "$tmp_resp" -w '%{http_code}' \
+code="$(curl -sS --max-time 15 -o "$tmp_resp" -w '%{http_code}' \
         -X PUT -H 'Content-Type: application/json' \
         --data-binary "$new_body" "$BASE/api/app-config" 2>/dev/null || true)"
 [ "$code" = 200 ] || die "PUT /api/app-config failed (HTTP ${code:-none}): $(head -c 300 "$tmp_resp")" 3
@@ -187,24 +236,27 @@ code="$(curl -fsS --max-time 15 -o "$tmp_resp" -w '%{http_code}' \
 cfg_json="$(curl -fsS --max-time 10 "$BASE/api/app-config" 2>/dev/null)" \
   || die "wrote, but could not re-read app-config to verify" 3
 
-# The PUT is a whole-config replace, so a bad merge here would silently
-# re-enable content telemetry (which ships file bodies to a remote relay).
-# Check it on every write and fail loudly rather than leave that on.
+# Our PUT never carries the telemetry key, so it cannot move telemetry —
+# but assert that anyway: movement here means a concurrent writer or a
+# daemon regression, and content telemetry silently on is the one failure
+# in this workflow with a privacy consequence.
 PY_VERIFY='
 import sys, json
-agent, want = sys.argv[1], sys.argv[2]
+agent, want, pre = sys.argv[1], sys.argv[2], sys.argv[3]
 cfg = json.load(sys.stdin).get("config") or {}
 got = ((cfg.get("agentModels") or {}).get(agent) or {}).get("model")
 if got != want:
     print(f"error: re-read says model={got!r}, expected {want!r}", file=sys.stderr)
     sys.exit(1)
-tel = cfg.get("telemetry") or {}
-if tel.get("content") is not False:
-    print("error: THE WRITE CHANGED TELEMETRY - content=" + repr(tel.get("content")) +
-          ", expected False. Turn it back off in Settings immediately.", file=sys.stderr)
+c = (cfg.get("telemetry") or {}).get("content")
+post = "true" if c is True else ("false" if c is False else "unset")
+if post != pre:
+    print(f"error: telemetry.content moved across the write ({pre} -> {post}). "
+          "This script never sends the telemetry key, so something else changed it mid-write. "
+          "If it is not false, turn it off in Open Design\x27s privacy settings immediately.", file=sys.stderr)
     sys.exit(1)
 '
-printf '%s' "$cfg_json" | "$py" -c "$PY_VERIFY" "$AGENT_ID" "$WANT" || exit 3
+printf '%s' "$cfg_json" | "$py" -c "$PY_VERIFY" "$AGENT_ID" "$WANT" "$pre_content" || exit 3
 
 step "set"
 show_current
