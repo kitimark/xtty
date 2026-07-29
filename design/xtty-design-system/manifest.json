@@ -1,19 +1,18 @@
 {
   "schemaVersion": "od-design-system-project/v1",
-  "id": "design-system",
+  "id": "xtty-design-system",
   "name": "xtty",
   "category": "Developer Tools",
   "description": "The visual language of xtty, a native macOS terminal emulator. Stock-native chrome with almost no custom identity outside the terminal grid itself — restraint by inheriting AppKit and SwiftUI defaults.",
   "source": {
     "type": "local",
-    "path": "design/design-system",
+    "path": "design/xtty-design-system",
     "origin": "Hand-authored by reading xtty's own shipped Swift source (App/*.swift, XttyCore/Sources/XttyCore/). Not a brand extraction: xtty has no website, and Open Design's importers scan CSS/Tailwind/React-family files only, so no tool can derive this package. See research/03-analysis/open-design-integration-forensics.md.",
     "doNotRegenerate": "NEVER run 'Import from folder' (import-local) against this directory: it regenerates DESIGN.md from a CSS/JS scan and destroys the authored prose. Register by symlink via `make design-link`. The separate project-folder import used for design/mockups/ is safe and unrelated."
   },
   "files": {
     "design": "DESIGN.md",
-    "tokens": "tokens.css",
-    "usage": "USAGE.md",
-    "components": "components.html"
-  }
+    "tokens": "tokens.css"
+  },
+  "usage": "USAGE.md"
 }

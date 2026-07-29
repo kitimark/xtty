@@ -13,6 +13,5 @@
       "XttyCore/Sources/XttyCore/XttyProfile.swift"
     ],
     "notes": "Hand-authored by reading xtty's shipped Swift source. Not derivable by any Open Design importer (they scan CSS/Tailwind/React-family files only). NEVER run 'Import from folder' against this package - it regenerates DESIGN.md from a source scan and destroys the authored prose."
-  },
-  "projectId": "ds-design-system"
+  }
 }

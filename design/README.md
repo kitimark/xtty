@@ -4,10 +4,12 @@ A place to try a visual direction before writing SwiftUI. Two halves:
 
 | | What it is | How it reaches the app |
 |---|---|---|
-| `design-system/` | The **design-system package** — xtty's visual language, hand-authored from Swift source | Symlinked into Open Design by `make design-link`. Repo bytes *are* app bytes. The directory basename **is** the design-system id (`user:design-system`) — the install route derives the symlink name and catalog id from it, and `manifest.json`'s `id` must equal it or the manifest is silently ignored. Renaming this directory renames the id; re-run the full unlink → link cycle. The picker shows the *title* (`xtty`, from `metadata.json`), not the id. |
+| `xtty-design-system/` | The **design-system package** — xtty's visual language, hand-authored from Swift source | Symlinked into Open Design by `make design-link`. Repo bytes *are* app bytes. The directory basename **is** the design-system id (`user:xtty-design-system`) — the install route derives the symlink name and catalog id from it, and `manifest.json`'s `id` must equal it or the manifest is silently ignored. The basename carries the project name on purpose: the app's install namespace is flat and machine-global, so a generic name (`design-system`) would be first-come-first-served against any other repo's package (owner call, 2026-07-29). Renaming this directory renames the id; re-run the full unlink → link cycle. The picker shows the *title* (`xtty`, from `metadata.json`), not the id. |
 | `mockups/` | The **project folder** — the design agent's working directory | Imported once by `make design-link` via the app's bundled CLI (GUI folder picker is the fallback). The app-side project is *named* **`xtty`** (display only — see the naming note below); the folder stays `mockups/`. |
 
 Open Design emits **HTML only**. Its coherent role here is mockup exploration; translating an accepted direction into SwiftUI is separate, human work. It cannot and must not edit Swift.
+
+> **`metadata.json` says `"surface": "web"` — that is correct for this macOS app, on purpose.** `surface` names the *artifact medium*, not the product platform: the schema's only legal values are `web | image | video | audio` (there is no desktop/native value), and since Open Design emits HTML, `web` is the only honest one. The field drives the app's design-systems filter pills and the exported SKILLS.md framing — it never reaches the generation prompt; the macOS targeting lives on the *project* (`platform: "desktop-app"`, set by `make design-link`). An unrecognized value would be **silently dropped** on the app's write-back and fall back to `web` anyway. Schema evidence: forensics doc, addendum (e). Relatedly, `manifest.json` declares only files that exist — a declared-but-missing file (the earlier dangling `components.html` entry) is silently ignored by every consumer, so a components fixture gets a manifest entry only when one is actually authored.
 
 Background, mechanism, and the retired theories: `research/03-analysis/open-design-integration-forensics.md`.
 
@@ -24,7 +26,7 @@ make design-unlink    # undo design-link: delete the 'xtty' project + workspace 
 1. **New project → "Open folder" →** `design/mockups/`
 2. **Re-run `make design-link`** — it renames the GUI import to `xtty` and sets design system + platform (or set the design system by hand in the picker).
 
-> **The naming note.** The project's *name* is `xtty`; its *folder* is `design/mockups/` (the folder is the agent's working directory; keeping the generic folder names — `design-system/` for the package, `mockups/` for the working folder — is an owner readability call). That mismatch is deliberate and harmless: the name is pure display — it labels the app's project list and export filenames, never reaches the agent's prompt, and keys nothing (identity everywhere, in the app and in the script, is `realpath(baseDir)`). Two caveats it buys: (1) once the app has ensured the design-system *workspace* row (`ds-design-system`), the project list shows **two rows displaying "xtty"** — that row mirrors the design system's title; the one whose card opens `design/mockups/` is the project. (2) **Never rename the `ds-design-system` workspace row in the app** — a rename on a workspace row writes the new title through into the design system's `metadata.json`, which is our symlinked `design/design-system/metadata.json`, i.e. an app-initiated write into the git tree. Renaming the `xtty` project itself cannot do that (verified: the write-through is gated on `importedFrom:"design-system"`; ours is `"folder"`).
+> **The naming note.** The project's *name* is `xtty`; its *folder* is `design/mockups/` (the folder is the agent's working directory; the package folder is `xtty-design-system/` — its basename is identity, see the table above — and the generic `mockups/` name is an owner readability call). That mismatch is deliberate and harmless: the name is pure display — it labels the app's project list and export filenames, never reaches the agent's prompt, and keys nothing (identity everywhere, in the app and in the script, is `realpath(baseDir)`). Two caveats it buys: (1) once the app has ensured the design-system *workspace* row (`ds-xtty-design-system`), the project list shows **two rows displaying "xtty"** — that row mirrors the design system's title; the one whose card opens `design/mockups/` is the project. (2) **Never rename the `ds-xtty-design-system` workspace row in the app** — a rename on a workspace row writes the new title through into the design system's `metadata.json`, which is our symlinked `design/xtty-design-system/metadata.json`, i.e. an app-initiated write into the git tree. Renaming the `xtty` project itself cannot do that (verified: the write-through is gated on `importedFrom:"design-system"`; ours is `"folder"`).
 
 Step 2 is not optional decoration. It is the *only* channel that pastes `tokens.css` and `DESIGN.md` into the agent's prompt. A package that is registered but not selected — or selected but not published — contributes **nothing**, and the agent may still produce plausible-looking output by reading files on its own. That is exactly how an earlier attempt looked successful while being wired up wrong.
 
@@ -34,7 +36,7 @@ Step 2 is not optional decoration. It is the *only* channel that pastes `tokens.
 
 ## Teardown
 
-`make design-unlink` undoes everything `make design-link` set up: it deletes the `xtty` project at `design/mockups` (resolved by canonical `baseDir`, never by name; via the ungated project-delete route — the same route the app's own CLI uses; refuses with more than one match), removes the `ds-design-system` workspace copy (row + directory), and removes the symlink by hand — `unlink(2)`, never the app's design-system delete route, whose recursive behavior on a referenced directory remains deliberately unverified. Every removal is verified by re-read, the whole run is bracketed by a `git status design/` byte-compare, and re-running on a clean state is a no-op. `--keep-project` preserves the project row (and its app-side run history) while removing the rest; project deletion never touches `design/mockups/` — the mockups live in the repo, so the only thing deletion costs is app-side run/chat history.
+`make design-unlink` undoes everything `make design-link` set up: it deletes the `xtty` project at `design/mockups` (resolved by canonical `baseDir`, never by name; via the ungated project-delete route — the same route the app's own CLI uses; refuses with more than one match), removes the `ds-xtty-design-system` workspace copy (row + directory), and removes the symlink by hand — `unlink(2)`, never the app's design-system delete route, whose recursive behavior on a referenced directory remains deliberately unverified. Every removal is verified by re-read, the whole run is bracketed by a `git status design/` byte-compare, and re-running on a clean state is a no-op. `--keep-project` preserves the project row (and its app-side run history) while removing the rest; project deletion never touches `design/mockups/` — the mockups live in the repo, so the only thing deletion costs is app-side run/chat history.
 
 Three things teardown does **not** do: it cannot delete the project row while the app is not running (it then does the filesystem half — symlink, workspace directory — reports what it skipped, and exits 2; relaunch and re-run to finish); it leaves finished run directories under the app's `runs/` in place (the app's own delete leaves them too — the script reports how many reference the deleted project); and it cannot refresh the running app's UI — **after any teardown, the open app still shows a phantom card for the deleted project until you quit and relaunch** (the in-app Refresh does not clear it; see the hazards below).
 
@@ -52,11 +54,11 @@ Three things teardown does **not** do: it cannot delete the project row while th
 
 | File | Propagates | Notes |
 |---|---|---|
-| `xtty/tokens.css` | **Automatically** | Read fresh through the symlink every run |
-| `xtty/USAGE.md` | **Automatically** | Same — put iterating rules here |
-| `xtty/DESIGN.md` | **No** | The picker copies it into a workspace once and that copy **freezes** |
+| `xtty-design-system/tokens.css` | **Automatically** | Read fresh through the symlink every run |
+| `xtty-design-system/USAGE.md` | **Automatically** | Same — put iterating rules here |
+| `xtty-design-system/DESIGN.md` | **No** | The picker copies it into a workspace once and that copy **freezes** |
 
-To force a `DESIGN.md` re-copy: `rm -rf "<Open Design data>/projects/ds-design-system/"`, then run one generation.
+To force a `DESIGN.md` re-copy: `rm -rf "<Open Design data>/projects/ds-xtty-design-system/"`, then run one generation.
 
 **Skipping that yields fresh token values with stale prose, with no error shown anywhere.** It is the one silent failure mode in this setup. `make design-status` reports the workspace-copy state; catch it there, or catch it by grepping generated output for a phrase you just changed.
 
@@ -84,7 +86,7 @@ git status                    # repo-wide, not just design/
 git diff
 git reflog -10                # destructive git leaves a clean-looking tree
 git stash list
-test -e design/design-system/.od-generated.json && echo 'ARTIFACT MODE LOST'
+test -e design/xtty-design-system/.od-generated.json && echo 'ARTIFACT MODE LOST'
 ```
 
 That last line is not redundant. `.gitignore` hides that file, so `git status` can no longer reveal it — and its mere existence means the package lost `agent-managed` mode and the app is about to scaffold over the authored files.
@@ -116,7 +118,7 @@ Two of the three look like what you want and are not. Verify after creating: the
 
 Other findings from that first run:
 
-- **The design-system picker is exposed**, both on the home composer and per-project (the palette chip above the prompt box). `xtty` appears under **YOUR SYSTEMS**, above the bundled presets, with our `manifest.json` description as its subtitle. Selecting it set `design_system_id` to the package id (`user:xtty` at the time; `user:design-system` since the 2026-07-29 package-directory rename).
+- **The design-system picker is exposed**, both on the home composer and per-project (the palette chip above the prompt box). `xtty` appears under **YOUR SYSTEMS**, above the bundled presets, with our `manifest.json` description as its subtitle. Selecting it set `design_system_id` to the package id (`user:xtty` at the time; then `user:design-system`; `user:xtty-design-system` since the second 2026-07-29 rename for machine-global uniqueness).
 - **The symlink-install route is not exposed in the UI** as far as could be found — `make design-link` is the path. The UI's "Import from folder" for design systems remains the destructive scanner; do not use it.
 - **`index.html` pinned `entryFile` at import**, as intended. Create it before importing.
 - **Import wrote zero bytes** into the repo, confirmed by checksum before/after.
