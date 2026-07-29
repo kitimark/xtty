@@ -15,7 +15,7 @@
 # /!\ NEVER use Settings > Design Systems > "Import from folder" for this
 #     package — that is import-local, a CSS/JS scanner that REGENERATES
 #     DESIGN.md and destroys the authored prose. The PROJECT-creation folder
-#     import is a different, safe mechanism and is what design/mockups/ uses.
+#     import is a different, safe mechanism and is what design/xtty-mockups/ uses.
 #
 # The daemon binds an EPHEMERAL port and writes no port file (server.ts:
 # 8976-8999): port is read from the running sidecar's listening socket, and the
@@ -30,7 +30,7 @@
 # Usage:
 #   scripts/design-link.sh                      install / repair the link, then
 #                                               create+configure the 'xtty'
-#                                               project (folder design/mockups),
+#                                               project (folder design/xtty-mockups),
 #                                               then verify                     (make design-link)
 #   scripts/design-link.sh --status             verify only; mutates nothing    (make design-status)
 #   scripts/design-link.sh --uninstall          undo install: delete the 'xtty'
@@ -59,7 +59,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # design-system id; manifest.json's "id" must equal the basename or the whole
 # manifest is silently ignored (isProjectManifest, index.ts:3683-3702).
 PKG_DIR="$ROOT/design/xtty-design-system"
-MOCKUPS_DIR="$ROOT/design/mockups"
+MOCKUPS_DIR="$ROOT/design/xtty-mockups"
 OD_APP="${OD_APP:-/Applications/Open Design.app}"
 DEFAULT_DATA_DIR="$HOME/Library/Application Support/Open Design/namespaces/release-stable/data"
 MODE=install
@@ -67,9 +67,9 @@ SELECT_PROJECT=""
 KEEP_PROJECT=0
 # Single target on purpose — see the platform note in the `select` branch.
 PLATFORM="desktop-app"
-# App-side DISPLAY name of the design/mockups project — never identity: every
+# App-side DISPLAY name of the design/xtty-mockups project — never identity: every
 # lookup here resolves projects by realpath(metadata.baseDir) (PY_PROJ). The
-# folder stays design/mockups (design/xtty-design-system is the package dir, a sibling); the
+# folder stays design/xtty-mockups (design/xtty-design-system is the package dir, a sibling); the
 # name exists for the app's project list and export filenames, and reaches
 # neither the agent prompt nor any artifact path. Set at creation (--name) and
 # converged on an existing row (ensure_name). Owner call, 2026-07-29.
@@ -366,10 +366,10 @@ verify_catalog() {
 }
 
 advisories() {
-  # 0a. The project at design/mockups: report it, and warn on the two hazards.
+  # 0a. The project at design/xtty-mockups: report it, and warn on the two hazards.
   # Duplicates: Open Design does NOT dedupe — the import route has no
   # existing-project check, and `projects` constrains only `id` — not `name`,
-  # not metadata.baseDir (db.ts:58-67). So importing design/mockups twice
+  # not metadata.baseDir (db.ts:58-67). So importing design/xtty-mockups twice
   # yields two independent projects writing into the SAME directory, each with
   # its own design-system setting. Observed for real: a double-fired click
   # produced two rows at the same folder, one configured and one not, which
@@ -479,10 +479,10 @@ print("false" if t is False else ("true" if t is True else "unset"))' "$cfg")"
 # gate (routes/project/index.ts:2218-2228). Creation is gated over raw HTTP but
 # scriptable via the app's own bundled CLI — see create_flow.
 # NOTE on names: a GUI folder import defaults the project name to
-# basename(baseDir) = "mockups" (import-export-routes.ts:380-382); the scripted
+# basename(baseDir) = "xtty-mockups" (import-export-routes.ts:380-382); the scripted
 # import passes --name $PROJECT_NAME instead. Either way names are not
 # identity: when the given name/id matches nothing, resolve by baseDir ==
-# design/mockups (the shared matcher), and when it matches MORE than one row,
+# design/xtty-mockups (the shared matcher), and when it matches MORE than one row,
 # narrow by baseDir — the ds-<pkg> workspace row displays the design system's
 # TITLE (server-services.ts:255 stamps summary.title), which equals
 # $PROJECT_NAME here, so '--select-project xtty' can name-hit both rows.
@@ -499,7 +499,7 @@ if not hits:
     hits=by_basedir(projs, mock)   # fallback: resolve by baseDir (shared matcher)
 elif len(hits)>1:
     # A display-name collision (e.g. the ds-<pkg> workspace row also shows
-    # the design-system title): narrow to the row(s) at design/mockups.
+    # the design-system title): narrow to the row(s) at design/xtty-mockups.
     hits=by_basedir(hits, mock) or hits
 if len(hits)!=1: print("AMBIGUOUS %d"%len(hits)); raise SystemExit
 p=hits[0]; b=_base(p)
@@ -584,7 +584,7 @@ ensure_name() { # $1=project id  $2=current display name
 # ── project creation (dedupe-first; the app itself NEVER dedupes) ────────────
 # Auto-run from `install` on purpose, not opt-in, because:
 #  - dedupe-first makes it a no-op whenever a project already points at
-#    design/mockups, so auto-running cannot mint duplicates — while leaving
+#    design/xtty-mockups, so auto-running cannot mint duplicates — while leaving
 #    creation to humans provably CAN (the app has no uniqueness on name or
 #    baseDir, and a double-fired GUI click already produced two `mockups` rows);
 #  - every failure degrades to exactly the pre-CLI behavior: print the manual
@@ -598,7 +598,7 @@ create_flow() {
   n=0; [ -n "$hits" ] && n="$(printf '%s\n' "$hits" | wc -l | tr -d ' ')"
 
   if [ "$n" -gt 1 ]; then
-    warn "refusing to touch anything: $n projects already point at design/mockups —"
+    warn "refusing to touch anything: $n projects already point at design/xtty-mockups —"
     printf '%s\n' "$hits" | while IFS='|' read -r id nm ds pf _rest; do
       warn "    id=$id  name=$nm  designSystem=$ds  platform=$pf"
     done
@@ -658,13 +658,13 @@ create_flow() {
 
   # ── verify by effect: three independent checks, none trusting the CLI ──────
   # 1. the daemon's own project list shows exactly one folder-backed project
-  #    whose baseDir realpath-resolves to design/mockups (the matcher's test);
+  #    whose baseDir realpath-resolves to design/xtty-mockups (the matcher's test);
   # 2. its shape is the trusted folder import (importedFrom + fromTrustedPicker);
   # 3. the import wrote zero bytes into the repo (git status unchanged).
   hits="$(od_get /api/projects | projects_at "$MOCKUPS_DIR")" || true
   n=0; [ -n "$hits" ] && n="$(printf '%s\n' "$hits" | wc -l | tr -d ' ')"
   if [ "$n" -ne 1 ]; then
-    warn "post-create re-read finds $n projects at design/mockups (expected exactly 1)"
+    warn "post-create re-read finds $n projects at design/xtty-mockups (expected exactly 1)"
     manual_creation_instructions >&2
     return 2
   fi
@@ -723,7 +723,7 @@ status)
   ;;
 
 uninstall)
-  step "Tearing down what install set up ($DS_ID + the '$PROJECT_NAME' project at design/mockups)"
+  step "Tearing down what install set up ($DS_ID + the '$PROJECT_NAME' project at design/xtty-mockups)"
   # The whole teardown is bracketed by a git-status byte-compare: nothing in
   # this branch may touch the repo. (The app's project delete removes only its
   # OWN dir — removeProjectDir resolves <data>/projects/<id>, never
@@ -740,12 +740,12 @@ uninstall)
   ROOT_REAL="$("$py" -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$ROOT")"
   MOCK_REAL="$("$py" -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$MOCKUPS_DIR")"
 
-  # ── 1. the design/mockups project (reverse of create_flow) ────────────────
+  # ── 1. the design/xtty-mockups project (reverse of create_flow) ────────────────
   # Deletion is UNCONDITIONAL, with --keep-project as the escape hatch — not
   # opt-in — because `make design-unlink` means "undo `make design-link`", and
   # install now CREATES the project: a teardown that leaves it behind quietly
   # re-inverts the symmetry this mode exists for. What deletion costs is
-  # app-side only — every mockup lives in design/mockups/ in the repo, which
+  # app-side only — every mockup lives in design/xtty-mockups/ in the repo, which
   # the delete provably never touches — so the one honest reason to keep the
   # row is its app-side run/chat history, and that is exactly what
   # --keep-project preserves.
@@ -768,7 +768,7 @@ uninstall)
       # The known no-dedupe hazard: independent projects at the same baseDir,
       # each with its own runs. Guessing which to delete is exactly what this
       # script refuses to do — a human decides.
-      warn "$n projects point at design/mockups — refusing to guess which to delete:"
+      warn "$n projects point at design/xtty-mockups — refusing to guess which to delete:"
       printf '%s\n' "$hits" | while IFS='|' read -r pid pnm pds _rest; do
         warn "    id=$pid  name=$pnm  designSystem=$pds"
       done
@@ -777,7 +777,7 @@ uninstall)
     else
       IFS='|' read -r pid pnm pds _rest <<<"$hits"
       # Belt-and-braces on top of the baseDir matcher: refuse to delete
-      # anything that resolves outside this repo (design/mockups itself could
+      # anything that resolves outside this repo (design/xtty-mockups itself could
       # be a symlink pointing elsewhere).
       case "$MOCK_REAL/" in
         "$ROOT_REAL"/*) : ;;
@@ -789,7 +789,7 @@ uninstall)
       # Verify by effect: the daemon's own list, never the DELETE echo.
       left="$(od_get /api/projects | projects_at "$MOCKUPS_DIR")" || true
       [ -z "$left" ] || die "a project still points at $MOCKUPS_DIR after the delete: $(first_line "$left")"
-      say "  project: deleted (re-read confirms nothing points at design/mockups)"
+      say "  project: deleted (re-read confirms nothing points at design/xtty-mockups)"
       DID=1; PHANTOM=1
       # Honest residue: the app's own delete leaves finished run dirs behind
       # too (runs are keyed by run id at <data>/runs/, not under the project).
@@ -797,7 +797,7 @@ uninstall)
       [ "${orphans:-0}" -gt 0 ] && say "  note:    $orphans run-history dir(s) under $DATA_DIR/runs/ still reference the deleted project — app-side only; remove by hand if you want them gone"
     fi
   else
-    warn "daemon not running: the project row at design/mockups (if any) cannot be found or deleted from the filesystem — relaunch Open Design and re-run"
+    warn "daemon not running: the project row at design/xtty-mockups (if any) cannot be found or deleted from the filesystem — relaunch Open Design and re-run"
     bump 2
   fi
 
@@ -805,7 +805,7 @@ uninstall)
   # This is BOTH a directory (<data>/projects/ds-<pkg>) and a project row the
   # app maintains for it (ensureUserDesignSystemWorkspaceProject,
   # server-services.ts:226-270). Not gated by --keep-project: it belongs to
-  # the design-system registration, not to the design/mockups project. With the
+  # the design-system registration, not to the design/xtty-mockups project. With the
   # daemon up, the same ungated project DELETE removes row+dir in one
   # app-sanctioned move (removeProjectDir is exactly rm -rf of the app-side
   # dir, and ds-<pkg> has no baseDir to confuse it with). Without the daemon,
@@ -910,7 +910,7 @@ print(next((p.get("id") for p in d.get("projects") or [] if p.get("id")==sys.arg
   if [ "$RC" = 2 ]; then
     say ""
     say "Filesystem teardown done; the daemon half could not run (app not running):"
-    [ "$KEEP_PROJECT" = 1 ] || say "  - the project row at design/mockups (if any) was not deleted"
+    [ "$KEEP_PROJECT" = 1 ] || say "  - the project row at design/xtty-mockups (if any) was not deleted"
     say "  - catalog/project-list re-reads were skipped — relaunch Open Design and re-run to finish + verify"
   elif [ "$RC" = 0 ] && [ "$DID" = 0 ]; then
     say ""; say "Already clean — nothing to do."
@@ -1009,7 +1009,7 @@ EOF
     cat <<EOF
 
 ──────────────────────────────────────────────────────────────────────────────
-Linked, published, and the '$PROJECT_NAME' project (design/mockups) is created
+Linked, published, and the '$PROJECT_NAME' project (design/xtty-mockups) is created
 and configured.
 
  ONE CHECK REMAINS, AND IT IS BY EFFECT: change one value in
@@ -1026,7 +1026,7 @@ EOF
     cat <<EOF
 
 ──────────────────────────────────────────────────────────────────────────────
-Linked and published — but the '$PROJECT_NAME' project (design/mockups) is NOT
+Linked and published — but the '$PROJECT_NAME' project (design/xtty-mockups) is NOT
 fully set up (details
 and the manual fallback are printed above; exit code $CREATE_RC).
 

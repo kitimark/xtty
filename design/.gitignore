@@ -1,7 +1,7 @@
 # design/.gitignore — Open Design daemon residue.
 #
 # This file lives at design/, ONE LEVEL ABOVE the agent's working directory
-# (design/mockups/). That placement is deliberate: the design agent runs with
+# (design/xtty-mockups/). That placement is deliberate: the design agent runs with
 # --permission-mode bypassPermissions, so rules kept inside its cwd could be
 # rewritten as an ordinary in-scope edit. From here, the same rewrite requires
 # leaving project scope — a loud, reviewable event rather than a silent one.
@@ -64,7 +64,7 @@ DESIGN.md.tmp.*
 #   brand-spec.md           A brand source was attached and OUTRANKED our tokens.
 #   .mcp.json               The daemon misclassified our working directory.
 #   code/ plan/ review/     Plugin-atom output; we do not use those flows.
-#   mockups/DESIGN.md       A real document if "finalize" ever runs here.
+#   xtty-mockups/DESIGN.md  A real document if "finalize" ever runs here.
 #
 # COMMITTED ON PURPOSE: *.html, *.artifact.json (provenance sidecars),
 #   index.html, README.md, assets/**, and all of design/xtty-design-system/**.

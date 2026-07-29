@@ -9,7 +9,7 @@
  *     package. That path is import-local, a CSS/JS scanner: it REGENERATES
  *     DESIGN.md from a scan of a directory that contains no CSS, destroying the
  *     authored prose. Register with `make design-link` (symlink) instead.
- *     The PROJECT folder import used for design/mockups/ is a different, safe
+ *     The PROJECT folder import used for design/xtty-mockups/ is a different, safe
  *     mechanism — do not confuse the two.
  *
  * This file is pasted VERBATIM into the design agent's system prompt whenever

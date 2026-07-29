@@ -8,7 +8,7 @@
     "type": "local",
     "path": "design/xtty-design-system",
     "origin": "Hand-authored by reading xtty's own shipped Swift source (App/*.swift, XttyCore/Sources/XttyCore/). Not a brand extraction: xtty has no website, and Open Design's importers scan CSS/Tailwind/React-family files only, so no tool can derive this package. See research/03-analysis/open-design-integration-forensics.md.",
-    "doNotRegenerate": "NEVER run 'Import from folder' (import-local) against this directory: it regenerates DESIGN.md from a CSS/JS scan and destroys the authored prose. Register by symlink via `make design-link`. The separate project-folder import used for design/mockups/ is safe and unrelated."
+    "doNotRegenerate": "NEVER run 'Import from folder' (import-local) against this directory: it regenerates DESIGN.md from a CSS/JS scan and destroys the authored prose. Register by symlink via `make design-link`. The separate project-folder import used for design/xtty-mockups/ is safe and unrelated."
   },
   "files": {
     "design": "DESIGN.md",
