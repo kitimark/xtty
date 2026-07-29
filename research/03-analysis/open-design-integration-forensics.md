@@ -350,3 +350,59 @@ Run history lives at `<data>/runs/<runId>/` keyed by run id, with `state.json` c
 ### Reusable guidelines (continuing this doc's numbering)
 
 11. **Treat a directory whose basename feeds a tool-derived identity as an identity artifact: migrate it (tear down the old id in full first, from the old name), never just rename it** — and before the rename, sweep for every committed value the tool derived from the old name (here: the manifest's self-id, which silently voids the manifest on mismatch, and a written-back row id that the tool *prefers* over re-deriving), deciding for each whether to update it by hand or delete it and let the tool re-mint it.
+
+## Addendum 2026-07-29 (e) — owner review: the id goes project-unique (`design/xtty-design-system/`), `surface: "web"` is the artifact medium, and the dangling `components` key is dropped
+
+> **Provenance:** 2026-07-29, produced while implementing the owner's review of `design/design-system/`: (1) rename the package for a machine-unique id, (2) settle whether `surface: "web"` is right for a macOS app, (3) resolve the manifest's dangling `components.html` reference. Ground truth: the pinned `f52fda2` clone at `/tmp/open-design-src` (ref re-verified before reading); live verification against the installed v0.16.1 app — the same migration choreography as addendum (d): full teardown of the old id, `git mv`, `/tmp` rehearsal through the script's own code path, real re-link, a sentinel generation run, and a `make design-unlink` → `make design-link` round-trip.
+
+### The second rename in one day — uniqueness wins over brevity, reversing part of (d)'s acceptance
+
+✅ **The collision (d) accepted is a first-come-first-served land grab, and the owner declined to play.** `<data>/design-systems/` is flat and keyed by nothing but the package directory's basename; `installFromLocal`'s collision check (`library-install.ts:164-171`) `statSync`s the link path and refuses the second claimant with `A design system named "<dirName>" is already installed`. Addendum (d) recorded that failure as "loud, accepted". The owner's review reversed the acceptance: loud does not un-occupy the name — whichever repo installs first owns `design-system` machine-wide, and every other repo with a generically-named package loses. A basename carrying the project name (`xtty-design-system`) removes the contest by construction. So the package moved `design/design-system/` → `design/xtty-design-system/` and the id `user:design-system` → **`user:xtty-design-system`** — knowingly walking back part of the same day's readability rename (`design/xtty/` → `design/design-system/`). The mechanism and choreography are unchanged from (d) (teardown old id first → `git mv` → reconcile manifest self-id + drop the written-back `projectId` → rehearse → re-link → let the daemon re-mint `ds-xtty-design-system`); what is new is only the *naming policy*: guideline 12.
+
+### `surface` is the artifact medium, not the product platform — `"web"` is correct for a macOS app
+
+✅ **The schema has exactly four values and no desktop one.** `DesignSystemSurface = 'web' | 'image' | 'video' | 'audio'` (`design-systems/index.ts:27`; runtime guard `KNOWN_SURFACES`, `:3725`). The values partition by *output medium*: `image`/`video`/`audio` mark media-generation systems (dispatched via `media generate --surface …`), and `web` marks everything that renders as HTML — which is the only thing Open Design's design pipeline emits, macOS brief or not.
+
+✅ **What the field actually controls is small and cosmetic:** the Design Systems tab's surface filter pills (`apps/web/src/components/DesignSystemsTab.tsx:67-76`, default `'web'`) and the surface-specific framing of the SKILLS.md the app injects into a design-system *export* zip (`DESIGN_SYSTEM_SURFACE_GUIDE`, `design-systems/index.ts:1581+` — `web` reads "websites, landing pages, dashboards, decks, and product UI"). It does **not** reach the generation prompt: the media-vs-HTML prompt dispatch keys on the *project's* surface (`packages/contracts/src/prompts/system.ts:755/780/841`), and the macOS-app targeting is carried by the project's `metadata.platform: "desktop-app"` (the `--platform` the link script sets).
+
+✅ **An unrecognized value is silently dropped, then re-derived.** `readUserMetadata` filters `surface` through `isDesignSystemSurface` (`design-systems/index.ts:2585`); a value like `"desktop"` would vanish on the next app write-back and the catalog would fall back `extractSurface(DESIGN.md body)` → frontmatter → `'web'` (`:320-326`). Inventing a value is therefore not even wrong — it is a no-op with extra steps. **Verdict: keep `"web"`**, recorded in `design/README.md` and design.md D6 so the question stays closed.
+
+### The dangling `components` declaration: silently ignored everywhere — dropped, not created
+
+✅ **`files.components` is optional and, when present, must be the exact literal `'components.html'`** (`isProjectManifest`, `design-systems/index.ts:3700`). With the file missing, every consumer shrugs silently: `readDesignSystemAssets` reads it through `readFileOptional`, which swallows `ENOENT` (`:500-503`, `:3632-3639`), leaving `fixtureHtml` undefined; `listAvailableDesignSystemPackageFiles` `stat`s and skips absentees (`:436-446`); the assets-cache fingerprint tolerates absence the same way. No warning, no error, no broken package — just a manifest promising a fixture that does not exist. Notably, when a manifest is present and the key is *absent*, `readDesignSystemAssets` skips even the default `components.html` probe — so omitting the key is the honest, first-class way to declare "no fixture". The key was dropped (the components fixture itself stays a design Non-Goal until real mockups exist to distil one from).
+
+✅ **A sibling misdeclaration was fixed in the same pass:** the manifest carried `usage` *inside* `files`, where the validator ignores unknown keys and no reader looks — `USAGE.md` was only being read via the default-path fallback (`manifest?.usage ?? 'USAGE.md'`, `:499`). `usage` is a top-level manifest field (`DesignSystemProjectManifest`, `:135-155`); it now lives there, honored rather than coincidental.
+
+### Probes (this pass)
+
+| Probe | Command | Proves | Does NOT prove |
+|---|---|---|---|
+| Collision mechanism | read `installFromLocal`, `library-install.ts:133-181` | the install namespace is flat, basename-keyed; the second same-name claimant gets a 400 and nothing else | how future versions arbitrate (re-check on upgrade) |
+| Surface schema + consumers | grep `DesignSystemSurface`/`KNOWN_SURFACES`/`isDesignSystemSurface`; read `DesignSystemsTab.tsx`, `DESIGN_SYSTEM_SURFACE_GUIDE`, `prompts/system.ts` media arms | four legal values; filter-pills + SKILLS.md export are the only consumers; generation dispatch keys on the project, not the design system | UI behaviors not reachable by source reading (none load-bearing here) |
+| Silent surface drop | read `readUserMetadata` `:2585` + fallback chain `:320-326` | an unknown `surface` is dropped on write-back and re-derived to `web` | — |
+| Components tolerance | read `isProjectManifest:3700`, `readDesignSystemAssets:500-503`, `readFileOptional:3632-3639`, `listAvailableDesignSystemPackageFiles:436-446` | a declared-but-missing `components.html` is silently ignored at every consumer | that no *future* consumer hard-fails (re-check on upgrade) |
+| Rehearsal | throwaway `/tmp` repo + the edited script: install → manifest-honored check → re-run → `--uninstall` | fresh create, catalog `summary` = manifest description (manifest honored under the new id), reporting no-op, residue-free teardown | daemon-down arms (unchanged since (b)) |
+| Manifest honored, live | `GET /api/design-systems` after the real re-link | `user:xtty-design-system` published, `summary`/`category`/`swatches` all match the package (the silent-void failure mode did not fire) | downstream consumers beyond the catalog |
+| Token channel, end to end | sentinel `--bg: #0c2e6d` in `tokens.css` → one `POST /api/runs` generation → grep `design/mockups/channel-probe.html` | the sentinel appeared in freshly generated output — the renamed chain (symlink → catalog → `designSystemId` → prompt → artifact) carries tokens under `user:xtty-design-system` | per-run stability; sentinel + probe removed by explicit path afterwards |
+| Round-trip | real `make design-unlink` → `make design-link`; `git status --porcelain design/` before/after | the script alone reproduces symlink + catalog + configured project under the new id; byte-identical design/ status; re-run a reporting no-op | that tokens reach a prompt (the generation grep above is that proof) |
+
+### Fates (this addendum)
+
+| Theory | Fate | Killed by |
+|---|---|---|
+| "The loud install-collision 400 makes a generic basename acceptable" (addendum (d)) | ❌ Reversed (owner call) | loud ≠ available: the flat namespace is first-come-first-served, so a generic name is a machine-global land grab either way; a project-carrying basename removes the contest by construction |
+| "`surface` should say something desktop-ish for a macOS app" | ❌ Refuted | the schema has no such value (`web\|image\|video\|audio`); the field names the artifact medium, and platform targeting lives on the *project* (`platform: desktop-app`) |
+| "An invented `surface` value would at least be visible somewhere" | ❌ Refuted | `readUserMetadata` silently drops non-schema values on write-back and the catalog re-derives `web` — a no-op with extra steps |
+| "The declared `components.html` must exist or the package breaks" | ❌ Refuted | every consumer reads it optionally and swallows absence (`readFileOptional`, stat-and-skip) — the dangling key was invisible, which is exactly why it was a dead promise |
+| "`files.usage` is how USAGE.md gets picked up" | ❌ Refuted | the validator and readers ignore unknown `files` keys; `USAGE.md` was reached only via the top-level `usage` field's *default fallback* — the declaration was coincidental until moved to the top level |
+
+### Re-verify by effect
+
+- `readlink "<data>/design-systems/xtty-design-system"` must resolve into the repo's `design/xtty-design-system/`; `/api/design-systems` must list `user:xtty-design-system` `published` with the manifest description as its `summary` and `surface: "web"`; `make design-status` must report 56/56 tokens.
+- The channel check is unchanged and is the only proof: change one token value in `design/xtty-design-system/tokens.css`, run one generation, grep the produced HTML for the new value; revert both.
+- The `surface`/`components` verdicts are version-pinned to `f52fda2` / v0.16.1 — on an app upgrade, re-grep `DesignSystemSurface` and `isProjectManifest` before citing them.
+
+### Reusable guidelines (continuing this doc's numbering)
+
+12. **In a flat, shared install namespace, name tool-facing identities after the project (`<project>-<kind>`), never generically** — a loud collision error does not make a generic name safe; it just decides the winner by install order, machine-wide.
+13. **Settle a tool's metadata enum from its validator, not from the product being described** — here `surface` names the artifact medium (HTML), not the target platform (macOS), and the tool silently drops values its validator does not know, so an "honest-looking" invented value degrades to the default anyway. Corollary: declare in a tool-read manifest only files that exist — this tool ignores dangling declarations silently, so a dead key can sit unnoticed indefinitely.
