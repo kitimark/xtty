@@ -166,3 +166,53 @@ Every citation above was independently re-checked against ground truth the day a
 The review's corrections were precision fixes (the wipe's exact extent and surviving residue, the Sources citation roots, two confusingly-worded table cells), not substance changes.
 
 **The 2026-07-29 planning pass that followed was not.** Re-deriving the same ground with a different question ("how do we do this for real?") surfaced substantive errors the citation-by-citation review had passed over — a wrong project name, a false "only surviving record" claim, an inverted safety mechanism, a missing schema contract, and a mechanism (the picker) whose effect the doc had recorded as an open question while the answer sat in `server.ts`. Every one of them survived a pass that checked whether each citation *resolved*. The lesson is general enough to state plainly: **verifying that a doc's citations resolve is not the same as verifying its claims are true** — only re-deriving the subject with a fresh purpose reliably finds the second class of error.
+
+## Addendum 2026-07-29 — project creation is scriptable (the GUI-only belief reversed)
+
+> **Provenance:** 2026-07-29, produced while adding `--create-project` to `scripts/design-link.sh`. Source ground truth: `/tmp/open-design` @ `f52fda2` read directly; live verification against the installed v0.16.1 app's running daemon. A prior investigation of this question was flagged for probing the daemon's internals (raw IPC connections to mint tokens by hand, reading process env for secrets); this pass used **only** the documented first-party CLI, which mints its token internally — the method constraint is part of the finding.
+
+### The reversal, precisely
+
+The belief "project creation requires the GUI" rested on a true premise and a false conclusion. True: `POST /api/import/folder` over HTTP **is** gated — re-measured first-hand this pass, a tokenless POST returns `403 {"error":{"code":"FORBIDDEN","message":"desktop import token rejected","details":{"reason":"token missing"}}}` and creates nothing. False: that the gate makes creation human-only. The installed app ships a first-party CLI subcommand that does the whole thing:
+
+```
+od project import-folder <path> [--name "<title>"] [--skill <id>] [--design-system <id>] [--json]
+```
+
+- **Where it lives:** `Contents/Resources/app/prebundled/daemon/daemon-cli.mjs`. No system `node` needed — run it through the bundled Electron helper: `ELECTRON_RUN_AS_NODE=1 "<app>/Contents/Frameworks/Open Design Helper.app/Contents/MacOS/Open Design Helper" <daemon-cli.mjs> project import-folder …`.
+- **How it passes the gate:** `mintCliImportToken` (`apps/daemon/src/cli.ts:6975`) sends `MINT_IMPORT_TOKEN` for the target `baseDir` over the daemon's IPC socket read from `OD_SIDECAR_IPC_PATH`, and attaches the result as `x-od-desktop-import-token`. The gate is **satisfied, never bypassed** — the token is minted by the daemon itself.
+- **The env it needs:** without `OD_SIDECAR_IPC_PATH` the CLI both mints no token **and** resolves the daemon URL to a wrong default (`daemon-url.ts`: flag → `OD_DAEMON_URL` → IPC STATUS roundtrip → dev-tools probe → hardcoded `http://127.0.0.1:7456`, while the real daemon binds an ephemeral port). The socket path is discoverable from public process metadata alone: the daemon's own `--od-stamp-ipc=<path>` argument (via `ps`), its `OD_SIDECAR_IPC_PATH` env, or the deterministic default `/tmp/open-design/ipc/<namespace>/daemon.sock`.
+- **What the route stamps:** `metadata = {kind:"prototype", baseDir:<realpath>, importedFrom:"folder", entryFile, fromTrustedPicker:true}` (`import-export-routes.ts:395-410`) — the same folder-backed shape the GUI picker produces, with `baseDir` canonicalized through `realpath` at import.
+
+**The semantic cost, stated plainly:** `fromTrustedPicker: true` is stamped for *any* valid token (`import-export-routes.ts:301-322` verifies HMAC+path+nonce, nothing about origin). While creation was GUI-only the flag genuinely meant "a human chose this folder in the native picker"; with creation scripted it means "a valid HMAC was presented". The owner accepted this knowingly; it is recorded in `design/README.md` so the flag is never read back as an audit trail of human consent.
+
+### Two operational hazards (both measured 2026-07-29)
+
+1. **No dedupe on folder import.** The import route has no existing-project check and the `projects` table constrains only `id` — not `name`, not `metadata.baseDir` (`db.ts:58-67`). Re-importing the same directory creates a second independent project at the same folder, each with its own design-system setting; a run in the unconfigured one silently skips the tokens. Observed live via a double-fired GUI click. Consequence: any scripted creation must dedupe by `realpath(metadata.baseDir)` *before* creating (names are not identity), which is exactly what `design-link.sh --create-project` and its `--status` duplicate advisory do.
+2. **API/CLI project deletion leaves a phantom card in the app's UI** that the in-app "Refresh" button does **not** clear — only quitting and relaunching does (DB and disk had one project while the UI showed two). Delete projects in the app, or expect to relaunch after an API delete. (Deletion itself is clean at the data layer: the row is gone on re-GET and `baseDir` content is untouched.)
+
+### Probes (this pass)
+
+| Probe | Command | Proves | Does NOT prove |
+|---|---|---|---|
+| The gate is armed | tokenless `curl -X POST …/api/import/folder` with a throwaway `/tmp` baseDir | `403 FORBIDDEN reason:"token missing"`; project list unchanged after — the tokenless probe is side-effect-free *once the gate is known armed* | Anything about an installation whose desktop secret never registered (the 503 `DESKTOP_AUTH_PENDING` arm was not exercised) |
+| CLI creation end-to-end | `ELECTRON_RUN_AS_NODE=1 <helper> <daemon-cli.mjs> project import-folder /tmp/<throwaway> --daemon-url <base> --json` with `OD_SIDECAR_IPC_PATH` from the daemon's `--od-stamp-ipc` arg | Created project re-read from `/api/projects` with `importedFrom:"folder"`, `fromTrustedPicker:true`, realpath'd `baseDir`; zero bytes written into the imported folder; `od project delete <id>` then removes the row (re-GET confirms) | That the CLI matches the daemon on a *future* auto-updated app version — re-check `od project --help` before relying on flags |
+| Script paths | `scripts/design-link.sh --create-project` twice; then once after nulling `designSystemId` via the ungated PATCH | Dedupe no-op (reports the existing project, mutates nothing) and the half-configured repair (chains the select flow, verified by re-read) | The from-scratch path against the real `design/mockups` (deliberately not exercised — the throwaway-dir CLI probe covers creation; never create a second project at `design/mockups`) |
+
+### Fates (this addendum)
+
+| Theory | Fate | Killed by |
+|---|---|---|
+| "Project creation requires the GUI" (this doc's era-1 script banner, `design/README.md`, design.md D8) | ❌ Reversed 2026-07-29 | The bundled first-party CLI discovery + a live throwaway-dir import producing the exact GUI shape |
+| "The only safe probe of the import route is a real import" (the old script comment's rationale for never probing) | ❌ Refuted for an armed gate | The tokenless 403 probe: it rejects before any project is created, so it is side-effect-free — the *caveat* survives for an unarmed gate, where the same POST would create a project |
+| "`fromTrustedPicker` attests a human picker choice" | ❌ Narrowed | `import-export-routes.ts:301-322`: any valid HMAC earns the stamp; the flag attests token validity, not human origin |
+
+### Re-verify by effect
+
+- Gate still armed: the tokenless POST above must 403 with `reason:"token missing"` and leave `/api/projects` unchanged.
+- CLI still works: `scripts/design-link.sh --create-project` against a healthy setup must report the existing project untouched (dedupe), and `make design-link` on a fresh machine must end with a configured folder-backed project — confirmed by re-GET, never by exit codes.
+
+### Reusable guidelines (continuing this doc's numbering)
+
+7. **Before declaring a gated HTTP route "human-only", inventory the vendor's own CLI surface** — a first-party tool that mints the gate's credentials internally is the sanctioned scripting path, and using it keeps the gate's integrity (never hand-mint tokens or read secrets from process state; if the CLI route fails, fall back to documented manual steps, not a workaround).
+8. **When scripting replaces a human action, re-read what the recorded trust markers now mean** — a flag stamped by a gate ("a valid token was presented") stops meaning what the human workflow made it mean ("a person chose this"), and the docs must say so at the point of use or the marker becomes silent misinformation.
