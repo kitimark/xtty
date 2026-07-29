@@ -44,7 +44,7 @@
 
 > Scope for this change is the workflow being *provably* usable, not a complete gallery. The remaining baselines and any proposals follow as ordinary work once the loop is closed.
 
-- [ ] 5.1 Settle the sidebar-material question before authoring (one screenshot of an installed build), since it decides how mockup panels are painted
+- [x] 5.1 Settle the sidebar-material question before authoring (one screenshot of an installed build), since it decides how mockup panels are painted — settled by a solid-backdrop measurement matrix (4 backdrops × active/inactive, both panels, installed 0.0.1 (500) build): `.listStyle(.sidebar)` is a live vibrancy material even in bare `NSHostingView`s (≈18% backdrop mix + ~2× saturation boost; opaque `#282a35` inactive; empty states/titlebar are the opaque window ground `#1f212c`) — mockups paint fixed measured values (D13; `--xtty-panel-bg`/`--xtty-panel-bg-inactive`/corrected `--surface`), never `backdrop-filter`; record: `research/03-analysis/appkit-sidebar-material-forensics.md`
 - [ ] 5.2 Author the first baseline (`app-shell.baseline.html`) — it establishes the window-chrome markup the other scenarios reuse
 - [ ] 5.3 Author a second baseline exercising the widest token slice (`git-review-flat.baseline.html`), including the all-panels-open squeeze at the default window width
 - [ ] 5.4 Confirm both baselines cite the source implementing what they draw, and that neither invents a colour outside the token file
