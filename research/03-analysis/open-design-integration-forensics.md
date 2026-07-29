@@ -149,7 +149,7 @@ Before any cleanup, the surviving app-side residue was mined and copied to `/tmp
 - ⟲ **Whether the UI exposes the local-install (symlink) route at all.** The HTTP endpoint exists and is origin-guarded, but if the UI only surfaces "Import from folder" (which maps to the *destructive* CSS-scanning generator), then `curl` to the daemon is the only safe path. **Highest-value thing the next setup settles.**
 - ⟲ Whether the picker UI even *lists* draft systems. Drafts appear in the catalog (`server-services.ts:113-138`) but are rejected at selection (`:193-199`) — if listed without explanation, a package missing `"status":"published"` looks selectable and fails confusingly. Possibly exactly what happened in the POC.
 - ⟲ Whether `deleteUserDesignSystem`'s `rm(path, {recursive:true, force:false})` (`index.ts:1455`) unlinks a top-level **symlink** or recurses into the repo. POSIX semantics say unlink, and the sibling `uninstallById` lstats-and-unlinks explicitly (`library-install.ts:209-214`), but this was **deliberately never executed** — the downside if wrong is the git working tree. Remove symlinks by hand; if ever tested, test on a throwaway.
-- ⟲ Whether the `ds-<dirId>` workspace copy has any in-app re-sync affordance. `tokens.css` propagates through the symlink automatically (mtime-fingerprinted); **DESIGN.md does not** — the picker's workspace copy freezes after first sync, so a `rm -rf .../data/projects/ds-xtty/` is needed to force a re-copy. Skipping it is a silent new-tokens-with-old-prose bug.
+- ⟲ Whether the `ds-<dirId>` workspace copy has any in-app re-sync affordance. `tokens.css` propagates through the symlink automatically (mtime-fingerprinted); **DESIGN.md does not** — the picker's workspace copy freezes after first sync, so a `rm -rf .../data/projects/ds-xtty/` is needed to force a re-copy. Skipping it is a silent new-tokens-with-old-prose bug. (⟲ 2026-07-29 (b): the dir is backed by a project row that survives the `rm` and upserts on next use — the remedy stands for the freeze; clean-slate teardown needs the project DELETE. See the teardown addendum.)
 - ⟲ Whether `OD_DESIGN_TOKEN_CHANNEL` is set in the installed app's environment. If ever `0`, the entire tokens/components/pull-index injection silently disappears and only DESIGN.md is pushed (`index.ts:646-657`) — halving the picker's value with no visible signal.
 - ⟲ Whether the installed app (0.16.1, built 2026-07-23, cask marked `auto_updates`) still matches the `/tmp/open-design` clone @ `f52fda2`. `resolveDaemonResourceDir` (`server.ts:785`) prefers the *packaged* resource dir over the repo path, and the bundle's own resources were never inspected — so re-check the version at creation time.
 - ⟲ Whether `data/runs/` is ever garbage-collected. Only readers were found, no pruning path — a slow disk leak at ~320 KB per substantial turn.
@@ -216,3 +216,48 @@ od project import-folder <path> [--name "<title>"] [--skill <id>] [--design-syst
 
 7. **Before declaring a gated HTTP route "human-only", inventory the vendor's own CLI surface** — a first-party tool that mints the gate's credentials internally is the sanctioned scripting path, and using it keeps the gate's integrity (never hand-mint tokens or read secrets from process state; if the CLI route fails, fall back to documented manual steps, not a workaround).
 8. **When scripting replaces a human action, re-read what the recorded trust markers now mean** — a flag stamped by a gate ("a valid token was presented") stops meaning what the human workflow made it mean ("a person chose this"), and the docs must say so at the point of use or the marker becomes silent misinformation.
+
+## Addendum 2026-07-29 (b) — teardown symmetry: the workspace copy is a project row, and the project-delete route is the safe one
+
+> **Provenance:** 2026-07-29, produced while making `scripts/design-link.sh --uninstall` undo everything `--install` now sets up. Ground truth: `/tmp/open-design` @ `f52fda2` read directly; live verification against the installed v0.16.1 app — first through a throwaway git repo under `/tmp` driven through the same script code path, then a real `make design-unlink` → `make design-link` round-trip.
+
+### The `ds-<pkg>` workspace copy is a full project row, not just a directory
+
+The frozen-DESIGN.md workspace this doc's freeze remedy targets (`rm -rf …/data/projects/ds-xtty/`) is only half the object. `ensureUserDesignSystemWorkspaceProject` (`apps/daemon/src/design-systems/server-services.ts:226-270`) **upserts a project row** — id from the design system's stamped `projectId` if safe, else `ds-<dirId>` (`:230`) — with metadata `{kind:"other", importedFrom:"design-system", entryFile:"DESIGN.md"}` and **no `baseDir`**, then copies the package files into `<data>/projects/<id>/`. Two consequences:
+
+- The `projectId` the daemon writes back into the repo's `design/xtty/metadata.json` is the **workspace project's id** (`ds-xtty`), not the mockups project's UUID — so it is stable across teardown/re-link and the committed value never goes stale.
+- The freeze remedy (`rm -rf` of the dir alone) still works — the row is *upserted* on next picker use, dir re-copied — but it is not a clean-slate teardown: the row survives as residue. Complete removal is the ungated `DELETE /api/projects/ds-<pkg>`, which removes row **and** dir in one app-sanctioned move.
+
+### The two delete routes have opposite safety profiles — name them precisely
+
+- **Design-system delete** (`DELETE /api/design-systems/user:<id>` → `rm(path,{recursive:true,force:false})`, `index.ts:1451-1460`): still **banned** — whether it unlinks the symlink or recurses into the repo working tree remains deliberately unverified. Teardown removes the symlink by hand, `unlink(2)` only.
+- **Project delete** (`DELETE /api/projects/:id`, `routes/project/index.ts:2273-2288`): **safe and now used by teardown.** It cancels owned runs, deletes the row, then `removeProjectDir` — which resolves only `<data>/projects/<id>` and **never** `metadata.baseDir` (`projects.ts:1339-1342`). Proven live, not just read: `git status --porcelain design/` (and an md5 over the tree) byte-identical across a real delete of the folder-backed mockups project. The bundled CLI's `od project delete` is a bare unauthenticated `fetch` of this same route (`cli.ts:6220-6230`) — so plain `curl` is the same mechanism; the Electron-helper + IPC ceremony is only ever needed to mint the *import* token.
+- The route is **forgiving to the point of being evidence-free**: it returns `{ok:true}` when only the dir exists (row long gone), and when *neither* exists (`dbDeleteProject` no-op + `rm force:true`). A 200 from it proves nothing — verify by re-`GET /api/projects`.
+
+### What even the app's own delete leaves behind
+
+Run history lives at `<data>/runs/<runId>/` keyed by run id, with `state.json` carrying the owning `projectId`; project deletion does not touch it. Observed live: run dirs referencing project ids that no longer exist in the DB (including pre-POC GUI-deleted projects) — so "delete the project in the app" never was a full clean slate either. `--uninstall` reports the count of orphaned run dirs rather than deleting them (they are app-side only and reference nothing in the repo).
+
+### Probes (this pass)
+
+| Probe | Command | Proves | Does NOT prove |
+|---|---|---|---|
+| Teardown end-to-end, safely | copy the script into a throwaway `/tmp` git repo (differently-named package so `user:<id>`, the symlink, and `ds-<id>` are all disjoint from the real ones), run its install then `--uninstall` | Project deleted (re-GET empty at that `baseDir`), workspace row+dir gone, link gone, catalog empty, repo byte-identical, rerun a no-op exit 0 | The real setup's teardown (covered by the round-trip below) |
+| Duplicate arm | import the same throwaway folder twice via the bundled CLI, then `--uninstall` | Reports both ids + design-system settings, deletes neither, exit 3; rest of teardown proceeds | Which duplicate a human should keep |
+| Daemon-down arm | stub `pgrep` to exit 1 on `PATH` (the daemon keeps running untouched), then `--uninstall` | Filesystem half only (link + workspace dir), plain report of what was skipped, exit 2 | Behavior against a *genuinely* stopped daemon's half-written state |
+| Real round-trip | `make design-unlink` then `make design-link` | Full teardown then full restore (new project UUID, `user:xtty`, `desktop-app`, live symlink), `design/` byte-identical in git across both | That tokens reach a prompt (that check stays the generated-output grep) |
+
+### Fates (this addendum)
+
+| Theory | Fate | Killed by |
+|---|---|---|
+| "The freeze remedy `rm -rf …/projects/ds-xtty/` is the complete workspace cleanup" | ❌ Narrowed | `server-services.ts:226-270`: a project row backs the dir and survives the `rm`; the row upserts on next use (so the remedy still *works*), but clean-slate teardown needs the project DELETE |
+| "Teardown must never call any app delete API" (this doc's era-1 posture, `design-link.sh`'s old residue banner) | ❌ Narrowed | The ban was only ever measured against the *design-system* route; the *project* route's target resolution is `<data>/projects/<id>` only (`projects.ts:1339-1342`), re-proven live by the bracketing git byte-compare |
+
+### Re-verify by effect
+
+- `make design-unlink && make design-link` must round-trip: teardown leaves `GET /api/projects` with nothing at `design/mockups` and no `ds-xtty` row, the data dir without the symlink and workspace dir, and `git status design/` byte-identical; re-link must restore a configured folder-backed project — all confirmed by re-reads, never exit codes.
+
+### Reusable guidelines (continuing this doc's numbering)
+
+9. **When a tool exposes several delete routes, rate each by what its target *resolution* can reach, not by the verb** — here one delete recurses over a path that may be a repo symlink (banned) while another provably resolves only app-owned storage (used); a blanket "never call delete APIs" posture hides the distinction and leaves teardown half-manual forever.
