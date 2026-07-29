@@ -101,6 +101,18 @@ A same-day second pass settled that the vendor's own help/prompt text ("write it
 
 If a mockup ever genuinely needs a real image file, that is the moment to design its home with the tool's measured behavior in hand — not before. Evidence and probes: forensics doc, addendum (g) incl. the second-pass subsection.
 
+### D12 — Model selection is scripted, and prefers tier aliases over pinned ids *(added 2026-07-29, owner request)*
+
+Different jobs in this workflow want different models — a cheap one to iterate on a layout, a strong one to author a baseline that must hold token discipline and cite real Swift source. Open Design's pick is a **global per-agent** preference, not a per-project one, and the GUI exposes it two clicks deep inside the composer's runtime chip: fine to set once, tedious to flip repeatedly. `scripts/design-model.sh` (+ `make design-model MODEL=…`) is that dropdown, scripted.
+
+It writes `agentModels.<agentId>.model` through the same route the GUI uses (`PUT /api/app-config`). Three mechanics decide the implementation:
+
+- **The route is a whole-config replace, not a merge** (`writeAppConfig(RUNTIME_DATA_DIR, req.body)`, `routes/media.ts:485`), so the script always does read-modify-write of the entire object and asserts on every write that `telemetry.content` is still `false`. A partial PUT would silently re-enable the content telemetry that ships file bodies to a remote relay — the one config value in this project with a safety consequence.
+- **Writing the file directly does not work.** The daemon holds app-config in memory and fires `onAppConfigWritten` hooks; a file poke is ignored until relaunch and is overwritten by the next GUI action. Verified in the other direction too: a scripted write appears live in the GUI's chip and dropdown with no restart.
+- **Prefer the tier aliases (`opus`/`sonnet`/`haiku`) over pinned ids.** They resolve inside the agent CLI at spawn, so they always mean the current model of that tier. This Open Design build's pinned list is 4.x-era and predates Claude 5 entirely; a pinned id that is no longer served fails the run. Models outside the tool's list — `fable`, or any future id — reach the CLI through `sanitizeCustomModel` (`models.ts:205`), which the vendor documents as the escape hatch for "a brand-new model the CLI's list hasn't surfaced yet". The script validates against that same regex so a malformed id fails loudly at set time rather than no-op'ing at spawn.
+
+One standing assumption was corrected by driving the GUI: nothing was pinning Sonnet app-side. The stored preference was **unset**, which passes no `--model` flag at all — so the model in use was whatever the `claude` CLI's own config said. Setting it here now overrides that.
+
 ## Risks / Trade-offs
 
 - **The agent can reach the whole repo** → folder scope bounds blast radius without enforcing it. Mitigation is detect-and-revert: clean *pushed* tree before every run, repository-wide status/diff/reflog/stash review after, explicit-path staging. Accepted deliberately in exchange for mockups being a git-tracked deliverable; the alternative that removes rather than bounds the risk is an out-of-repo folder.

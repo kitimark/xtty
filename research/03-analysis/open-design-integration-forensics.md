@@ -501,3 +501,44 @@ Run history lives at `<data>/runs/<runId>/` keyed by run id, with `state.json` c
 **Not measured, on purpose:** no live pull-route call (the `OD_TOOL_TOKEN` gate is the finding, not an obstacle). **Re-verify by effect** (on a tool upgrade): from *inside* a spawned agent run, `"$OD_NODE_BIN" "$OD_BIN" tools design-systems read --path DESIGN.md` must 404 with the is-not-declared message (DESIGN.md is not pull-eligible), and any path the manifest doesn't declare must 404 identically; a pull-eligible declared path (none in our package today) must return file content. Version-pinned to `f52fda2` / v0.16.1.
 
 17. **A gating mechanism justifies a hygiene fix only if the fixed key is actually inside the gate's allowlist — verify membership before crediting the gate with retroactive teeth.** Here the pull route's manifest gate is real and strict, but both of (e)'s fixes touched keys the gate never consults; their real consumer is a different channel (the prompt-build push read) with its own semantics (a default-name fallback and a validator permissive on unknown keys), where the fixes bought manifest honesty, not reachability.
+
+---
+
+## Addendum 2026-07-29 (i) — model selection: a global per-agent config key, scripted through the GUI's own route; the tier aliases outlive the app's pinned list
+
+> **Provenance:** 2026-07-29, prompted by an owner request to match the model to the job (cheap to iterate, strong to author a baseline) and to make the pick reproducible. Method: source-read on the pinned `f52fda2` clone, **plus one deliberate GUI drive** (peekaboo) to capture ground truth for the write rather than infer it, plus a live round-trip of the resulting script. Artifacts: `scripts/design-model.sh`, `make design-model`; decision record: `add-design-exploration-workflow` design.md D12.
+
+✅ **Resolution order at spawn (`server.ts:4925-4936`).** Per-request `model` field → `agentModels.<agentId>.model` from app-config → `"default"`. A value `isKnownModel` recognizes passes verbatim; anything else goes through `sanitizeCustomModel` (`models.ts:205`: `^[A-Za-z0-9][A-Za-z0-9._/:@-]*$`, ≤200 chars) and is passed through if it matches. `resolveModelForAgent` (`:175-197`) returns a non-`default` resolved value unchanged, so a custom id reaches the CLI as `--model <id>` intact. For the `claude` runtime there is **no env-var lever** — the def declares no `defaultModelEnvVar` — so the request field and the config key are the only two.
+
+✅ **`"default"` means no flag at all, not a model.** `buildArgs` pushes `--model` only when `options.model && options.model !== 'default'` (`defs/claude.ts:66-68`). The out-of-the-box state is therefore *the agent CLI's own configured model*, with Open Design expressing no opinion.
+
+❌ **"Open Design was defaulting us to Sonnet" — refuted by the GUI drive.** The stored config had no `agentModels` key at all and the dropdown read `Default (CLI config)`; the Sonnet in use came from the local `claude` CLI's own configuration. The app was not choosing a model; it was declining to.
+
+✅ **The write is one additive key, captured by driving the real picker.** Selecting `Opus (alias)` in the composer chip → Model dropdown wrote exactly `"agentModels": {"claude": {"model": "opus"}}` — a whole-config diff before/after showed nothing else moved, `telemetry.content` still `false`. That observed shape is what the script reproduces; it was not guessed from the type definition.
+
+✅ **`PUT /api/app-config` is a whole-config replace, not a merge** (`routes/media.ts:485` → `writeAppConfig(RUNTIME_DATA_DIR, req.body)`). A partial PUT would silently drop every unsent key — including `telemetry.content: false`, the one value here with a safety consequence (default-on content telemetry ships file bodies to a remote relay). The script therefore always read-modify-writes the full object and asserts `content === false` on every write, failing loudly otherwise. Origin gating (`isLocalSameOrigin`) admits a local non-browser client: curl sends `Host: 127.0.0.1:<port>` and no `Origin`, which `isAllowedBrowserHost` accepts (`origin-validation.ts:212-243`).
+
+✅ **Config normalization does not validate the model string.** `normalizeRetiredAgentPrefs` (`app-config.ts:449-478`) only drops entries for retired agent ids; any model string survives the write and is adjudicated later at spawn. Hence the script validates against the daemon's own regex at set time — otherwise a malformed id would store cleanly and then silently no-op at spawn, which reads as "the setting did nothing".
+
+✅ **Scripted writes appear in the GUI live, with no restart** — re-opening the chip after a scripted set showed the new value in both the header line and the dropdown. Conversely a direct file poke is the wrong mechanism: the daemon holds app-config in memory and fires `onAppConfigWritten` hooks, so a file write is ignored until relaunch and is overwritten by the next GUI action.
+
+✅ **Prefer tier aliases over pinned ids.** `CLAUDE_FALLBACK_MODELS` (`defs/claude.ts:6-14`) offers `default` + `sonnet`/`opus`/`haiku` aliases + pinned `claude-{opus,sonnet,haiku}-4-5`. The aliases resolve inside the agent CLI at spawn, so they track the current model of each tier; the pinned ids are 4.x-era and predate Claude 5 entirely. Models outside the list — `fable` — are reachable only through the `sanitizeCustomModel` path, which the vendor's own comment documents as the escape hatch for "a brand-new model the CLI's `models` command hasn't surfaced yet" (`models.ts:199-204`). Local `claude` 2.1.220 accepts both `fable` and `claude-fable-5`; an unknown id is rejected by the CLI with a readable message and **exit code 0**, so an exit-status check is not a valid model probe.
+
+### Fates (this addendum)
+
+| Theory | Fate | Killed by |
+| --- | --- | --- |
+| Open Design stores a Sonnet default that overrides the CLI | ❌ | GUI drive + config read: `agentModels` absent, dropdown on `Default (CLI config)`; no `--model` flag is passed at all |
+| The model can be pinned via an env var for the claude runtime | ❌ | `defs/claude.ts` declares no `defaultModelEnvVar`; `resolveModelForAgent` consults it only when one exists |
+| A `PUT /api/app-config` with just the key being changed is enough | ❌ | the route replaces the whole config; unsent keys (incl. the telemetry opt-out) are dropped |
+| Writing `app-config.json` directly is equivalent | ❌ | the daemon caches config in memory and fires write hooks; the poke is invisible until relaunch and lost on the next GUI action |
+| A model id that stores successfully is a model that will be used | ❌ | config normalization ignores the model string entirely; adjudication is at spawn, where a bad id silently yields no flag |
+| Exit status distinguishes a valid from an invalid `--model` for the claude CLI | ❌ | an invalid id prints an explanatory message and still exits 0 — match on the message, not the code |
+
+**Re-verify by effect** (on a tool or CLI upgrade): set a tier alias, run one generation, and read the per-message `model` field in the stream events (`claude-stream.ts:384`) / the stored run record (`runtimes/runs.ts:47`) — that reports what actually *served* the run, unlike the config key, which only reports what was asked for. Version-pinned to `f52fda2` / Claude Code 2.1.220.
+
+### Reusable guidelines (continuing this doc's numbering)
+
+18. **A "default" setting may mean *no opinion expressed*, not *a default value chosen* — check whether the flag is emitted at all before attributing behavior to the tool.** The visible symptom (runs using Sonnet) was produced entirely outside the tool being blamed; the tool's stored state was empty and its code path omitted the flag.
+19. **Before scripting a settings write, drive the real UI once and diff the store.** The observed write here was one additive key; a type definition would have suggested several plausible shapes, and a wrong guess against a whole-config-replace route silently destroys unrelated settings.
+20. **When a config route replaces rather than merges, treat every unsent key as deleted — and assert the safety-relevant ones after each write.** Read-modify-write is necessary but not sufficient; the post-write assertion is what catches a merge bug before it becomes a silent privacy regression.

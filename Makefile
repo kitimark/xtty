@@ -51,7 +51,7 @@ VERSION         := $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^
 VERSION         := $(or $(VERSION),$(PROJECT_VERSION),0.0.1)
 BUILD           := $(shell git rev-list --count HEAD 2>/dev/null || echo 1)
 
-.PHONY: help doctor setup build run install restart test test-core build-core bench audit-leaks design-link design-status design-unlink image image-zsh bootstrap generate clean reset
+.PHONY: help doctor setup build run install restart test test-core build-core bench audit-leaks design-link design-status design-unlink design-model image image-zsh bootstrap generate clean reset
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -135,6 +135,9 @@ design-status: ## Report Open Design linkage (read-only; 0=linked+published, 2=a
 
 design-unlink: ## Undo design-link: delete the 'xtty' project + workspace copy, unlink the symlink by hand (idempotent)
 	@scripts/design-link.sh --uninstall
+
+design-model: ## Select the model Open Design's code agent spawns with (MODEL=opus|sonnet|haiku|fable|default|<id>; omit MODEL to report)
+	@scripts/design-model.sh $(MODEL)
 
 # --- local VM test image (packer/README.md) -----------------------------------
 

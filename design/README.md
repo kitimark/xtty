@@ -36,6 +36,25 @@ Step 2 is not optional decoration. It is the *only* channel that pastes `tokens.
 
 **Verify by effect, not by configuration.** Change one token value, run one generation, grep the output for the new value. Reading the stored design-system id proves only a precondition: it still reads correctly when the symlink dangles or the package has regressed to draft.
 
+## Choosing the model
+
+```sh
+make design-model                 # report the current pick
+make design-model MODEL=opus      # strongest — authoring a baseline, token discipline, source fidelity
+make design-model MODEL=haiku     # cheap/fast — mechanical edits, quick iterations
+make design-model MODEL=sonnet    # balanced
+make design-model MODEL=fable
+make design-model MODEL=default   # pass no --model flag; the claude CLI's own config decides
+```
+
+**Prefer the tier aliases over pinned ids.** `opus`/`sonnet`/`haiku`/`fable` resolve inside the agent CLI at spawn, so they always mean the current model of that tier. The app's own dropdown also offers pinned ids (`claude-opus-4-5`, …) — that list is 4.x-era and predates Claude 5, so pinning nails a run to an old model and fails outright if the id is no longer served. Any other id is accepted too (validated against the daemon's own `^[A-Za-z0-9][A-Za-z0-9._/:@-]*$`), which is how models newer than the app's list are reachable at all.
+
+**The pick is global per agent, not per project** — changing it here changes it for every Open Design project using the same runtime. It is the same setting as the GUI's composer chip → Model dropdown, written through the same route, and it appears there live with no restart.
+
+`MODEL=default` is the app's out-of-the-box state: no `--model` flag is passed and whatever the `claude` CLI itself is configured to use wins. That is worth knowing before concluding the app is choosing a model for you — it usually is not.
+
+Verify what actually *served* a run in the stream events (each message carries a `model`), not just what was requested here.
+
 ## Teardown
 
 `make design-unlink` undoes everything `make design-link` set up: it deletes the `xtty` project at `design/xtty-mockups` (resolved by canonical `baseDir`, never by name; via the ungated project-delete route — the same route the app's own CLI uses; refuses with more than one match), removes the `ds-xtty-design-system` workspace copy (row + directory), and removes the symlink by hand — `unlink(2)`, never the app's design-system delete route, whose recursive behavior on a referenced directory remains deliberately unverified. Every removal is verified by re-read, the whole run is bracketed by a `git status design/` byte-compare, and re-running on a clean state is a no-op. `--keep-project` preserves the project row (and its app-side run history) while removing the rest; project deletion never touches `design/xtty-mockups/` — the mockups live in the repo, so the only thing deletion costs is app-side run/chat history.
