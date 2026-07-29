@@ -261,3 +261,46 @@ Run history lives at `<data>/runs/<runId>/` keyed by run id, with `state.json` c
 ### Reusable guidelines (continuing this doc's numbering)
 
 9. **When a tool exposes several delete routes, rate each by what its target *resolution* can reach, not by the verb** — here one delete recurses over a path that may be a repo symlink (banned) while another provably resolves only app-owned storage (used); a blanket "never call delete APIs" posture hides the distinction and leaves teardown half-manual forever.
+
+## Addendum 2026-07-29 (c) — the project's display name: renameable in place, decoration everywhere except one repo-reaching edge
+
+> **Provenance:** 2026-07-29, produced while renaming the app-side project from `mockups` to `xtty` (owner call; the *folder* cannot follow — `design/xtty/` is already the design-system package directory, so the project keeps `baseDir design/mockups/` and only the display name changes). Ground truth: a fresh shallow clone of nexu-io/open-design whose HEAD is exactly the pinned `f52fda2`, read directly; live verification against the installed v0.16.1 app — first through a throwaway `/tmp` git repo (differently-named package, `user:xttylab`) driven through the same script code path, then the real rename + a `make design-unlink` → `make design-link` round-trip.
+
+### Where a project's name actually goes (and does not)
+
+✅ **The name is display, never identity.** The `projects` table constrains only `id` (db.ts:58-67, unchanged); every consumer found by sweeping the daemon for `project.name`: the web UI's project list, the export archive filename slug + the export manifest's `projectName` (`import-export-routes.ts:869-880,1394`), the run-status body (`routes/runs.ts:1497`), routine conversation titles (`server.ts:8561`, unused here), and the conversation seeded at import, titled `Imported from <name>` — frozen at import, never re-titled by a later rename. The name reaches **neither the agent's system prompt** (zero hits in `prompts/system.ts`) **nor any artifact path** (folder-backed projects write into `baseDir`; app-backed ones into `<data>/projects/<id>`). So a project named `xtty` over a folder named `mockups` breaks nothing — and `design-link.sh`'s matcher, dedupe, and teardown never used the name anyway (`realpath(metadata.baseDir)` throughout).
+
+✅ **Rename in place is scriptable and ungated.** `PATCH /api/projects/:id {"name":…}` runs through the same handler as the `designSystemId` PATCH the script already used (`routes/project/index.ts:2095`, name arm `:2231-2261`, persisted by `updateProject` at `:2262`) — no desktop-auth gate. Preserves the row's id and app-side run/chat history, which delete-and-recreate would not.
+
+⚠️ **The one repo-reaching edge: the rename write-through.** A rename does not always stop at the project row. `propagateWorkspaceProjectRename` (`design-systems/index.ts:1302-1314`) writes the new name **into the bound design system's `metadata.json` as its `title`** — which for `user:xtty` is the **symlinked repo file** `design/xtty/metadata.json`: an app-initiated write into the git tree. The gate (`workspaceRenameDesignSystemId`, `:1279-1291`): `designSystemId` starts with `user:` **and** `metadata.importedFrom === "design-system"` — i.e. only the `ds-<pkg>` workspace rows. Our project is `importedFrom: "folder"`, so its rename is `'not-applicable'` and cannot fire (proven live by a bracketing `git status --porcelain design/` compare, not just read). The inverse is the standing warning, now in `design/README.md`: **never rename the `ds-xtty` workspace row in the app** — for that row the write-through *does* fire and reaches the repo through the symlink.
+
+✅ **Naming at creation.** The bundled CLI's `od project import-folder --name "<title>"` sends `name` in the body (`cli.ts:6207-6214`); the route trims it and only falls back to `basename(baseDir)` when it is absent (`import-export-routes.ts:380-384`). `--design-system` exists too but was deliberately **not** folded in: the import 400s outright on a missing/draft package (`validateProjectDesignSystemId` — the same check the PATCH route runs), which would replace the recoverable created-but-half-configured state with no project at all, and the platform PATCH has no import flag and must run anyway — so the chained select flow stays the single configuration path for every shape.
+
+⚠️ **The display collision.** `ensureUserDesignSystemWorkspaceProject` stamps the `ds-<pkg>` row's name from the design system's **title** on every ensure (`design-systems/server-services.ts:255`) — and our title is `xtty`. Once that row exists, the project list shows **two rows displaying "xtty"**. Accepted (owner call; the row whose card opens `design/mockups/` is the project), and the script's `--select-project` matcher now narrows a multi-row *name* hit by `baseDir` before failing as ambiguous — tested live against a genuine two-projects-same-name collision.
+
+### Probes (this pass)
+
+| Probe | Command | Proves | Does NOT prove |
+|---|---|---|---|
+| Name at creation | throwaway `/tmp` repo + copy of the script, `install` with `--package-dir …/xttylab` | the created project re-reads as `name=xtty` from `/api/projects` (the `--name` flag works by effect); re-run a reporting no-op | GUI import naming (still defaults to the folder's basename) |
+| In-place convergence | PATCH the throwaway project's name away, re-run the script | rename back by effect: same id on re-read, `git status` byte-identical across the rename; then the same live on the real row (`a00db798…`, id preserved) | that a rename could never touch the repo for *other* project shapes — that is the write-through gate's job, below |
+| Write-through gate | read `design-systems/index.ts:1279-1314` at the pinned ref; bracketing `git status --porcelain design/` around both live renames | the propagation requires `importedFrom:"design-system"`; a `"folder"` project's rename is `'not-applicable'` and wrote nothing | what `updateUserDesignSystem` does to a symlinked `metadata.json` when it DOES fire (never exercised — the ban on renaming `ds-xtty` stands on the read, deliberately unverified by effect) |
+| Collision narrowing | two live projects sharing one display name; `--select-project <that name>` from the throwaway repo | the matcher narrows name hits by `baseDir` and configures only its own repo's project | disambiguation between two projects at the *same* baseDir (still a human decision, exit 3) |
+| Round-trip | real `make design-unlink` → `make design-link` | the script alone reproduces the renamed project from scratch (fresh id, `name=xtty`, `user:xtty`, `desktop-app`, folder-backed), `design/` byte-identical in git across both halves; app relaunched after (deletes leave phantom UI cards), end state re-read from the new daemon | that tokens reach a prompt (unchanged: that check stays the generated-output grep) |
+
+### Fates (this addendum)
+
+| Theory | Fate | Killed by |
+|---|---|---|
+| "A project rename is a pure DB write — display-only, so nothing to check" | ❌ Narrowed | `propagateWorkspaceProjectRename` writes the design system's `metadata.json` — the symlinked repo file — when `importedFrom:"design-system"`; display-only holds *because* our project is `"folder"`, not in general |
+| "Renaming the project would break `--select-project mockups`" | ❌ Refuted | names were never identity: an unmatched name falls back to the `baseDir` matcher, so the old name keeps resolving; the *new* name gained a collision instead (the `ds-xtty` row shows the same title), fixed by narrowing name hits by `baseDir` |
+| "Fold `--design-system` into the import call while adding `--name`" (considered) | ❌ Rejected | `validateProjectDesignSystemId` 400s the whole import on a missing/draft package — a worse failure mode than the current created-then-configured chain, for the price of one saved PATCH |
+
+### Re-verify by effect
+
+- `curl <daemon>/api/projects` must list exactly one project whose `metadata.baseDir` realpath-resolves to `design/mockups`, with `name:"xtty"` — and `make design-status` must print that row and warn if the name drifted.
+- The rename stays repo-inert: `git status --porcelain design/` before and after any `make design-link` (which converges the name) must be byte-identical.
+
+### Reusable guidelines (continuing this doc's numbering)
+
+10. **Before renaming anything in a tool that mirrors state across records, find the rename's write-through path first** — here a "display" rename can propagate into a file the repo owns (workspace row → design-system `metadata.json` → through the symlink into git); rename only records whose propagation arm is proven unreachable, bracket the rename with a working-tree compare anyway, and write the never-rename warning at the point of use for the records where it *does* fire.
