@@ -32,7 +32,7 @@ DESIGN.md.tmp.*
 # App-side rename temp (projects.ts).
 .od-rename-*.tmp
 
-# ── lands in the package dir (design/xtty/) ──────────────────────────────────
+# ── lands in the package dir (design/design-system/) ─────────────────────────
 
 # Revision-accept staging; removed in a finally block, but survives a crash.
 .tmp-revision-accept-*/
@@ -67,7 +67,7 @@ DESIGN.md.tmp.*
 #   mockups/DESIGN.md       A real document if "finalize" ever runs here.
 #
 # COMMITTED ON PURPOSE: *.html, *.artifact.json (provenance sidecars),
-#   index.html, README.md, assets/**, and all of design/xtty/**.
+#   index.html, README.md, assets/**, and all of design/design-system/**.
 #
 # NEVER name a subfolder any of: build out dist debug target vendor .build
 #   .swiftpm .cache coverage node_modules — the app's own ignore list hides

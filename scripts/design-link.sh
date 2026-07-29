@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # design-link.sh — register xtty's committed Open Design design-system package
-# (design/xtty/) with the *installed* Open Design desktop app, by symlink, and
+# (design/design-system/) with the *installed* Open Design desktop app, by symlink, and
 # verify the registration BY EFFECT.
 #
 # Why this route, and only this route: selecting a *published* design system in
@@ -39,7 +39,7 @@
 #   scripts/design-link.sh --create-project     dedupe/create/configure the 'xtty' project only
 #   scripts/design-link.sh --select-project ID  opt-in: set a project's picker
 # Options:
-#   --package-dir PATH   package to link (default: <repo>/design/xtty)
+#   --package-dir PATH   package to link (default: <repo>/design/design-system)
 #   --keep-project       with --uninstall: leave the project row (and its
 #                        app-side run history) in place; remove the rest
 # Env:
@@ -52,7 +52,13 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PKG_DIR="$ROOT/design/xtty"
+# The basename of this directory IS the identity: the install route symlinks
+# <data>/design-systems/<basename> and the catalog id is always
+# "user:<basename>" (library-install.ts:162-180; design-systems/index.ts:310 —
+# no install-body field can decouple them). Renaming this directory renames the
+# design-system id; manifest.json's "id" must equal the basename or the whole
+# manifest is silently ignored (isProjectManifest, index.ts:3683-3702).
+PKG_DIR="$ROOT/design/design-system"
 MOCKUPS_DIR="$ROOT/design/mockups"
 OD_APP="${OD_APP:-/Applications/Open Design.app}"
 DEFAULT_DATA_DIR="$HOME/Library/Application Support/Open Design/namespaces/release-stable/data"
@@ -63,7 +69,7 @@ KEEP_PROJECT=0
 PLATFORM="desktop-app"
 # App-side DISPLAY name of the design/mockups project — never identity: every
 # lookup here resolves projects by realpath(metadata.baseDir) (PY_PROJ). The
-# folder stays design/mockups (design/xtty is the package dir, a sibling); the
+# folder stays design/mockups (design/design-system is the package dir, a sibling); the
 # name exists for the app's project list and export filenames, and reaches
 # neither the agent prompt nor any artifact path. Set at creation (--name) and
 # converged on an existing row (ensure_name). Owner call, 2026-07-29.
@@ -120,7 +126,7 @@ print((e.get("message") or e.get("code") or "") if isinstance(e,dict) else (e or
 }
 
 # ── package pre-flight (local, before touching the daemon) ───────────────────
-[ -d "$PKG_DIR" ] || die "no package at $PKG_DIR — author design/xtty/ first (DESIGN.md + tokens.css + metadata.json)"
+[ -d "$PKG_DIR" ] || die "no package at $PKG_DIR — author design/design-system/ first (DESIGN.md + tokens.css + metadata.json)"
 # Canonicalize with the same primitive class the daemon uses
 # (fs.realpathSync.native at library-install.ts:138-140) — NOT `pwd -P`, whose
 # case handling can differ on case-insensitive APFS.
@@ -261,7 +267,7 @@ manual_creation_instructions() {
     Choose:          $MOCKUPS_DIR
     /!\\ That is the PROJECT folder import. Do NOT confuse it with
         Settings > Design Systems > "Import from folder" — that one would
-        regenerate DESIGN.md from a CSS scan and destroy design/xtty/.
+        regenerate DESIGN.md from a CSS scan and destroy design/design-system/.
     Then:            re-run  make design-link
                      (the GUI names the import '$(basename "$MOCKUPS_DIR")' after the folder;
                       the re-run renames it to '$PROJECT_NAME' and configures
@@ -386,7 +392,7 @@ advisories() {
       warn "  so these are independent projects writing into the same directory — one may"
       warn "  have the design system attached and another not, and a generation run in the"
       warn "  wrong one silently skips your tokens. Delete the extras IN THE APP (deleting"
-      warn "  a project never touches baseDir), keeping the one that reports user:xtty:"
+      warn "  a project never touches baseDir), keeping the one that reports $DS_ID:"
       printf '%s\n' "$projs" | while IFS='|' read -r i n ds _rest; do
         warn "    id=$i  name=$n  designSystem=$ds"
       done
@@ -396,7 +402,7 @@ advisories() {
   # 0. Artifact-mode tripwire — the one marker design/.gitignore hides from git status.
   if [ -e "$PKG_REAL/.od-generated.json" ]; then
     warn "TRIPWIRE: $PKG_REAL/.od-generated.json exists — artifactMode was lost; the scaffold"
-    warn "  generator ran (or is armed). Inspect design/xtty/ for scaffolded README.md/"
+    warn "  generator ran (or is armed). Inspect design/design-system/ for scaffolded README.md/"
     warn "  design-tokens.json/tailwind-v4.css/preview/ and re-assert artifactMode:\"agent-managed\"."
   fi
 
@@ -545,7 +551,7 @@ print("  verified: baseDir still %s"%m["baseDir"])' "$PLATFORM" \
     || die "platform verification failed"
   say ""
   say "This proves the DB field. It does NOT prove tokens reach a prompt — for"
-  say "that: change one value in design/xtty/tokens.css, generate a mockup, and"
+  say "that: change one value in design/design-system/tokens.css, generate a mockup, and"
   say "grep the produced HTML for the new value."
 }
 
@@ -554,7 +560,7 @@ print("  verified: baseDir still %s"%m["baseDir"])' "$PLATFORM" \
 # designSystemId PATCH uses (routes/project/index.ts:2095). Renaming in place
 # preserves the row's id and its app-side run/chat history. It cannot reach
 # the repo: the daemon's one rename write-through — into the bound design
-# system's metadata.json, which for us is the SYMLINKED design/xtty/ — is
+# system's metadata.json, which for us is the SYMLINKED design/design-system/ — is
 # gated on metadata.importedFrom=="design-system" (a ds-<pkg> workspace row;
 # design-systems/index.ts:1279-1291), and every row this script touches is
 # importedFrom=="folder". That is still proven by the git bracket below, not
@@ -1007,11 +1013,11 @@ Linked, published, and the '$PROJECT_NAME' project (design/mockups) is created
 and configured.
 
  ONE CHECK REMAINS, AND IT IS BY EFFECT: change one value in
- design/xtty/tokens.css, generate a mockup, grep the produced HTML for the
- new value. Nothing above proves a single token reached a prompt; that does.
+ design/design-system/tokens.css, generate a mockup, grep the produced HTML for
+ the new value. Nothing above proves a single token reached a prompt; that does.
 
  Before that first run: clean, pushed working tree. After: repo-wide
- 'git status' + 'git diff'; check design/xtty/.od-generated.json does not
+ 'git status' + 'git diff'; check design/design-system/.od-generated.json does not
  exist; stage by explicit path only. The agent runs with
  --permission-mode bypassPermissions and folder scope is not enforced.
 ──────────────────────────────────────────────────────────────────────────────
@@ -1025,8 +1031,8 @@ fully set up (details
 and the manual fallback are printed above; exit code $CREATE_RC).
 
  After finishing it by hand, verify the channel BY EFFECT: change one value
- in design/xtty/tokens.css, generate a mockup, grep the produced HTML for
- the new value.
+ in design/design-system/tokens.css, generate a mockup, grep the produced
+ HTML for the new value.
 ──────────────────────────────────────────────────────────────────────────────
 EOF
   fi
