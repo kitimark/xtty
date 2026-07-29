@@ -28,9 +28,12 @@
 # Full mechanism record: research/03-analysis/open-design-integration-forensics.md
 #
 # Usage:
-#   scripts/design-link.sh                      install / repair, then verify   (make design-link)
+#   scripts/design-link.sh                      install / repair the link, then
+#                                               create+configure the mockups
+#                                               project, then verify            (make design-link)
 #   scripts/design-link.sh --status             verify only; mutates nothing    (make design-status)
 #   scripts/design-link.sh --uninstall          unlink by hand, then verify     (make design-unlink)
+#   scripts/design-link.sh --create-project     dedupe/create/configure the mockups project only
 #   scripts/design-link.sh --select-project ID  opt-in: set a project's picker
 # Options:
 #   --package-dir PATH   package to link (default: <repo>/design/xtty)
@@ -57,6 +60,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --status)          MODE=status ;;
     --uninstall)       MODE=uninstall ;;
+    --create-project)  MODE=create ;;
     --select-project)  MODE=select; SELECT_PROJECT="${2:?--select-project needs a project id or name}"; shift ;;
     --platform)        PLATFORM="${2:?--platform needs a slug (default: desktop-app)}"; shift ;;
     --package-dir)     PKG_DIR="${2:?--package-dir needs a path}"; shift ;;
@@ -158,7 +162,7 @@ discover_daemon() {
 if discover_daemon; then
   step "Open Design daemon: pid $DAEMON_PID, port $PORT"
 else
-  if [ "$MODE" = install ] || [ "$MODE" = select ]; then
+  if [ "$MODE" = install ] || [ "$MODE" = select ] || [ "$MODE" = create ]; then
     cat >&2 <<EOF
 error: Open Design is not running.
 
@@ -196,6 +200,100 @@ od_json() { # $1=method $2=path $3=body $4=out-file -> prints http status
   curl -sS --max-time 30 -X "$1" \
        -H "Origin: $BASE" -H 'Content-Type: application/json' \
        -d "$3" -o "$4" -w '%{http_code}' "$BASE$2"
+}
+
+# One scratch dir for every mode. A single EXIT trap, set once — the chained
+# flows below (create -> select) would otherwise clobber each other's traps.
+TMPD="$(mktemp -d)"; trap 'rm -rf "$TMPD"' EXIT
+
+# Shared project matcher, defined ONCE: a project is identified by
+# realpath(metadata.baseDir) — never by name. Open Design enforces NO
+# uniqueness on name or baseDir (db.ts:58-67), so names are decoration and
+# duplicate projects at the same directory are representable (and observed).
+PY_PROJ='
+import json,sys,os
+def _base(p):
+    b=((p.get("metadata") or {}).get("baseDir")) or ""
+    return os.path.realpath(b) if b else ""
+def by_basedir(projs, want):
+    want=os.path.realpath(want)
+    return [p for p in projs if _base(p)==want]
+'
+
+# stdin = /api/projects body; $1 = directory. Prints one
+# "id|name|designSystemId|platform|importedFrom|fromTrustedPicker" line per
+# project whose baseDir resolves to $1.
+projects_at() {
+  "$py" -c "$PY_PROJ"'
+d=json.load(sys.stdin)
+for p in by_basedir(d.get("projects") or [], sys.argv[1]):
+    m=p.get("metadata") or {}
+    print("|".join(str(x) for x in (p.get("id",""), p.get("name",""),
+        p.get("designSystemId"), m.get("platform"),
+        m.get("importedFrom"), m.get("fromTrustedPicker"))))' "$1"
+}
+
+# The documented fallback whenever scripted creation cannot run. Route history:
+# creation was believed GUI-only because POST /api/import/folder is HMAC-gated
+# (measured live: 403 {"code":"FORBIDDEN","reason":"token missing"}). The gate
+# stands — but the app ships a first-party CLI (`od project import-folder`)
+# that mints the token itself, so the scripted path SATISFIES the gate rather
+# than bypassing it. When that CLI is unusable, the GUI is the only path.
+manual_creation_instructions() {
+  cat <<EOF
+
+  MANUAL FALLBACK — create the mockups project in the GUI:
+    In Open Design:  new project -> "Open folder"
+    Choose:          $MOCKUPS_DIR
+    /!\\ That is the PROJECT folder import. Do NOT confuse it with
+        Settings > Design Systems > "Import from folder" — that one would
+        regenerate DESIGN.md from a CSS scan and destroy design/xtty/.
+    Then:            scripts/design-link.sh --select-project mockups
+EOF
+}
+
+# The bundled CLI needs OD_SIDECAR_IPC_PATH to (a) discover the daemon's
+# ephemeral HTTP port and (b) mint the folder-import HMAC token, both over the
+# daemon's IPC socket (cli.ts mintCliImportToken; daemon-url.ts). Without it
+# the CLI silently falls back to a wrong default port and a null token. Three
+# discovery routes, most authoritative first — all read public process
+# metadata via ps; this script NEVER connects to the socket itself.
+discover_ipc_socket() {
+  local cmd="" sock="" ns=""
+  if [ -n "$DAEMON_PID" ]; then
+    cmd="$(ps -p "$DAEMON_PID" -o command= 2>/dev/null || true)"
+    # (a) the daemon process's own --od-stamp-ipc=<path> argument
+    sock="$(printf '%s\n' "$cmd" | tr ' ' '\n' | sed -n 's/^--od-stamp-ipc=//p' | head -1)"
+    if [ -n "$sock" ] && [ -S "$sock" ]; then printf '%s' "$sock"; return 0; fi
+    # (b) the daemon process's own environment
+    sock="$(ps -E -p "$DAEMON_PID" 2>/dev/null | tr ' ' '\n' | sed -n 's/^OD_SIDECAR_IPC_PATH=//p' | head -1)"
+    if [ -n "$sock" ] && [ -S "$sock" ]; then printf '%s' "$sock"; return 0; fi
+    ns="$(printf '%s\n' "$cmd" | tr ' ' '\n' | sed -n 's/^--od-stamp-namespace=//p' | head -1)"
+  fi
+  # (c) the deterministic default, namespaced like the daemon's stamp says
+  sock="/tmp/open-design/ipc/${ns:-release-stable}/daemon.sock"
+  if [ -S "$sock" ]; then printf '%s' "$sock"; return 0; fi
+  return 1
+}
+
+# Run the app's own first-party CLI through the app's bundled Electron helper
+# as the interpreter — no system node required, and the exact CLI build that
+# matches the running daemon. Returns 9 when the CLI cannot run at all
+# (distinct from the CLI's own exit codes).
+od_cli() {
+  local cli="$OD_APP/Contents/Resources/app/prebundled/daemon/daemon-cli.mjs"
+  local helper="$OD_APP/Contents/Frameworks/Open Design Helper.app/Contents/MacOS/Open Design Helper"
+  local sock
+  sock="$(discover_ipc_socket)" || { warn "no daemon IPC socket found — the CLI could not mint an import token"; return 9; }
+  [ -f "$cli" ] || { warn "bundled CLI not found at $cli"; return 9; }
+  if [ -x "$helper" ]; then
+    ELECTRON_RUN_AS_NODE=1 OD_SIDECAR_IPC_PATH="$sock" "$helper" "$cli" "$@"
+  elif command -v node >/dev/null 2>&1; then
+    OD_SIDECAR_IPC_PATH="$sock" node "$cli" "$@"
+  else
+    warn "neither the bundled Electron helper nor a system node is available"
+    return 9
+  fi
 }
 
 # ── on-disk state machine (authoritative; NOT the API) ───────────────────────
@@ -254,18 +352,11 @@ advisories() {
   # made `--select-project mockups` ambiguous. Names are not identity here —
   # always resolve by baseDir.
   if [ -n "$BASE" ]; then
-    dups="$(od_get /api/projects 2>/dev/null | "$py" -c '
-import json,sys,os
-try: d=json.load(sys.stdin)
-except Exception: raise SystemExit
-want=os.path.realpath(sys.argv[1])
-hits=[]
-for p in (d.get("projects") or []):
-    b=((p.get("metadata") or {}).get("baseDir")) or ""
-    if b and os.path.realpath(b)==want:
-        hits.append((p.get("id",""), p.get("name",""), p.get("designSystemId")))
-if len(hits)>1:
-    for i,n,ds in hits: print("%s|%s|%s"%(i,n,ds))' "$MOCKUPS_DIR" 2>/dev/null || true)"
+    dups="$(od_get /api/projects 2>/dev/null | projects_at "$MOCKUPS_DIR" 2>/dev/null || true)"
+    case "$dups" in
+      *$'\n'*) : ;;   # >1 line = >1 project at the same baseDir — fall through and warn
+      *)       dups="" ;;
+    esac
     if [ -n "$dups" ]; then
       warn "DUPLICATE PROJECTS: more than one project has baseDir $MOCKUPS_DIR."
       warn "  Open Design does not dedupe folder imports (no uniqueness on name or baseDir),"
@@ -273,7 +364,7 @@ if len(hits)>1:
       warn "  have the design system attached and another not, and a generation run in the"
       warn "  wrong one silently skips your tokens. Delete the extras IN THE APP (deleting"
       warn "  a project never touches baseDir), keeping the one that reports user:xtty:"
-      printf '%s\n' "$dups" | while IFS='|' read -r i n ds; do
+      printf '%s\n' "$dups" | while IFS='|' read -r i n ds _rest; do
         warn "    id=$i  name=$n  designSystem=$ds"
       done
     fi
@@ -353,6 +444,172 @@ print("false" if t is False else ("true" if t is True else "unset"))' "$cfg")"
   say "           expect that one-line diff; commit or discard it deliberately."
 }
 
+# ── project configuration (shared by --select-project, --create-project, install)
+# Setting the picker on an EXISTING project IS scriptable: PATCH
+# /api/projects/:id accepts designSystemId and is NOT behind the desktop-auth
+# gate (routes/project/index.ts:2218-2228). Creation is gated over raw HTTP but
+# scriptable via the app's own bundled CLI — see create_flow.
+# NOTE the project NAME defaults to basename(baseDir) = "mockups" when the
+# import's name field is left alone (import-export-routes.ts:380-382); when the
+# given name/id matches nothing, fall back to resolving by baseDir ==
+# design/mockups (the shared matcher — names are not identity here).
+select_flow() {
+  step "Pointing project '$SELECT_PROJECT' at $DS_ID"
+  verify_catalog || die "refusing: $DS_ID is not present+published — run 'make design-link' first"
+  local projects match ppid was tmp code now meta
+  projects="$(od_get /api/projects)"
+  match="$("$py" -c "$PY_PROJ"'
+want=sys.argv[1]; root=os.path.realpath(sys.argv[2]); mock=sys.argv[3]
+d=json.load(sys.stdin); projs=d.get("projects") or []
+hits=[p for p in projs if p.get("id")==want or p.get("name")==want]
+if not hits:
+    hits=by_basedir(projs, mock)   # fallback: resolve by baseDir (shared matcher)
+if len(hits)!=1: print("AMBIGUOUS %d"%len(hits)); raise SystemExit
+p=hits[0]; b=_base(p)
+if not (b==root or b.startswith(root+os.sep)): print("OUTSIDE %s"%b); raise SystemExit
+print("OK %s %s"%(p["id"], p.get("designSystemId")))' "$SELECT_PROJECT" "$ROOT" "$MOCKUPS_DIR" <<<"$projects")"
+  case "$match" in
+    "AMBIGUOUS 0") die "no project matches '$SELECT_PROJECT' by id/name, and none has baseDir $MOCKUPS_DIR — run 'scripts/design-link.sh --create-project' (or import the folder in the GUI)" 3 ;;
+    AMBIGUOUS*)    die "more than one project matches — pass the exact project id" 3 ;;
+    OUTSIDE*)      die "that project's baseDir (${match#OUTSIDE }) is outside $ROOT — refusing to retarget an unrelated project" 3 ;;
+  esac
+  ppid="$(printf '%s' "$match" | cut -d' ' -f2)"
+  was="$(printf '%s' "$match" | cut -d' ' -f3)"
+  say "  project $ppid (design_system_id was: $was)"
+  tmp="$TMPD/select-resp"
+  code="$(od_json PATCH "/api/projects/$ppid" "{\"designSystemId\":\"$DS_ID\"}" "$tmp")"
+  [ "$code" = 200 ] || die "PATCH failed ($code): $(api_err <"$tmp")"
+  # Verify by re-READ, never by the PATCH echo.
+  now="$(od_get "/api/projects/$ppid" | "$py" -c 'import json,sys; d=json.load(sys.stdin); print((d.get("project") or d).get("designSystemId"))')"
+  [ "$now" = "$DS_ID" ] || die "re-read says design_system_id=$now, expected $DS_ID"
+  say "  verified: design_system_id = $now"
+
+  # Target platform. The folder-import route sets NO platform at all, which
+  # leaves the prompt carrying "platform: (unknown — ask …)" (prompts/system.ts
+  # :1626) so the agent re-asks every session. Worse is the WRONG value:
+  # `responsive` injects a contract demanding no horizontal scroll at 360px and
+  # verification across ten breakpoints (:1631) — which flatly contradicts this
+  # design base (DESIGN.md §8: no breakpoints; panels collapse to zero, they do
+  # not reflow). `desktop-app` as a SINGLE target avoids both, and also avoids
+  # the >1-target rule that would demand one file per platform (:1636).
+  # Slug per apps/web NewProjectPanel.tsx:119. Metadata is replaced wholesale,
+  # so re-send the whole object; the route re-stamps baseDir/fromTrustedPicker
+  # itself (routes/project/index.ts:2100-2145), which the re-read below proves.
+  meta="$(od_get "/api/projects/$ppid" | "$py" -c '
+import json,sys
+d=json.load(sys.stdin); m=((d.get("project") or d).get("metadata")) or {}
+m["platform"]=sys.argv[1]; m["platformTargets"]=[sys.argv[1]]
+m.pop("fromTrustedPicker", None)   # immutable; the route rejects any change
+print(json.dumps({"metadata": m}))' "$PLATFORM")"
+  code="$(od_json PATCH "/api/projects/$ppid" "$meta" "$tmp")"
+  [ "$code" = 200 ] || die "platform PATCH failed ($code): $(api_err <"$tmp")"
+  od_get "/api/projects/$ppid" | "$py" -c '
+import json,sys
+m=((json.load(sys.stdin).get("project") or {}).get("metadata")) or {}
+want=sys.argv[1]
+if m.get("platform")!=want: raise SystemExit("platform re-read=%s, expected %s"%(m.get("platform"),want))
+if not m.get("baseDir"):    raise SystemExit("baseDir LOST by the platform patch — folder link broken")
+print("  verified: platform = %s, targets = %s"%(m["platform"], m.get("platformTargets")))
+print("  verified: baseDir still %s"%m["baseDir"])' "$PLATFORM" \
+    || die "platform verification failed"
+  say ""
+  say "This proves the DB field. It does NOT prove tokens reach a prompt — for"
+  say "that: change one value in design/xtty/tokens.css, generate a mockup, and"
+  say "grep the produced HTML for the new value."
+}
+
+# ── project creation (dedupe-first; the app itself NEVER dedupes) ────────────
+# Auto-run from `install` on purpose, not opt-in, because:
+#  - dedupe-first makes it a no-op whenever a project already points at
+#    design/mockups, so auto-running cannot mint duplicates — while leaving
+#    creation to humans provably CAN (the app has no uniqueness on name or
+#    baseDir, and a double-fired GUI click already produced two `mockups` rows);
+#  - every failure degrades to exactly the pre-CLI behavior: print the manual
+#    GUI instructions and leave the link intact;
+#  - it collapses a fresh clone's setup to the one documented command.
+# Exit: 0 ok/no-op | 2 fell back to manual | 3 duplicates need a human.
+create_flow() {
+  step "Mockups project (baseDir $MOCKUPS_DIR)"
+  local before hits n out rc id nm ds pf ifrom trusted
+  hits="$(od_get /api/projects | projects_at "$MOCKUPS_DIR")" || die "GET /api/projects failed"
+  n=0; [ -n "$hits" ] && n="$(printf '%s\n' "$hits" | wc -l | tr -d ' ')"
+
+  if [ "$n" -gt 1 ]; then
+    warn "refusing to touch anything: $n projects already point at design/mockups —"
+    printf '%s\n' "$hits" | while IFS='|' read -r id nm ds pf _rest; do
+      warn "    id=$id  name=$nm  designSystem=$ds  platform=$pf"
+    done
+    warn "Open Design does not dedupe folder imports; delete the extras IN THE APP"
+    warn "(deleting via the API leaves a phantom card in the UI until relaunch),"
+    warn "keeping the one that reports designSystem=$DS_ID. Then re-run."
+    return 3
+  fi
+
+  if [ "$n" -eq 1 ]; then
+    IFS='|' read -r id nm ds pf ifrom trusted <<<"$hits"
+    say "  exists:  id=$id  name=$nm  designSystem=$ds  platform=$pf"
+    if [ "$ds" = "$DS_ID" ] && [ "$pf" = "$PLATFORM" ]; then
+      say "  already configured — nothing to do"
+      return 0
+    fi
+    # Exists but half-configured (exactly the shape the observed duplicate-
+    # import incident left behind) — finish it via the ungated PATCH path.
+    SELECT_PROJECT="$id"
+    select_flow
+    return 0
+  fi
+
+  # No project yet -> create via the app's own bundled first-party CLI, which
+  # mints the folder-import HMAC token itself over the daemon's IPC socket.
+  # The HTTP gate is SATISFIED, not bypassed — this script never reads secrets
+  # or hand-mints tokens; if the CLI route fails we print manual instructions.
+  #
+  # NOTE the trust-semantics shift, documented in design/README.md: the route
+  # stamps fromTrustedPicker:true for ANY valid token regardless of origin.
+  # With creation scripted, that flag attests "a valid HMAC was presented",
+  # NOT "a human chose this folder in the native picker". Owner-accepted.
+  before="$(git -C "$ROOT" status --porcelain design/ 2>/dev/null || true)"
+  say "  creating via the bundled od CLI (Electron helper as interpreter)"
+  rc=0
+  out="$(od_cli project import-folder "$MOCKUPS_DIR" --daemon-url "$BASE" --json 2>&1)" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    warn "bundled-CLI import failed (rc=$rc): $(first_line "$out")"
+    manual_creation_instructions >&2
+    return 2
+  fi
+  say "  CLI call succeeded (not evidence — verifying by effect next)"
+
+  # ── verify by effect: three independent checks, none trusting the CLI ──────
+  # 1. the daemon's own project list shows exactly one folder-backed project
+  #    whose baseDir realpath-resolves to design/mockups (the matcher's test);
+  # 2. its shape is the trusted folder import (importedFrom + fromTrustedPicker);
+  # 3. the import wrote zero bytes into the repo (git status unchanged).
+  hits="$(od_get /api/projects | projects_at "$MOCKUPS_DIR")" || true
+  n=0; [ -n "$hits" ] && n="$(printf '%s\n' "$hits" | wc -l | tr -d ' ')"
+  if [ "$n" -ne 1 ]; then
+    warn "post-create re-read finds $n projects at design/mockups (expected exactly 1)"
+    manual_creation_instructions >&2
+    return 2
+  fi
+  IFS='|' read -r id nm ds pf ifrom trusted <<<"$hits"
+  if [ "$ifrom" != folder ] || [ "$trusted" != True ]; then
+    warn "created project has importedFrom=$ifrom fromTrustedPicker=$trusted (expected folder/True) — wrong project shape; delete it in the app and use the GUI import"
+    manual_creation_instructions >&2
+    return 2
+  fi
+  if [ "$(git -C "$ROOT" status --porcelain design/ 2>/dev/null || true)" != "$before" ]; then
+    warn "IMPORT WROTE INTO THE REPO: git status design/ changed across the import — inspect immediately (git status design/ && git diff design/)"
+    return 2
+  fi
+  say "  verified: id=$id  baseDir -> $MOCKUPS_DIR  importedFrom=folder  fromTrustedPicker=true"
+  say "  verified: zero bytes written into design/ (git status unchanged)"
+
+  # Chain design system + platform in the same command, via the existing
+  # ungated PATCH path (each step verified by re-read inside select_flow).
+  SELECT_PROJECT="$id"
+  select_flow
+}
+
 case "$MODE" in
 
 status)
@@ -419,79 +676,17 @@ uninstall)
   ;;
 
 select)
-  # OPT-IN. Setting the picker on an EXISTING project IS scriptable:
-  # PATCH /api/projects/:id accepts designSystemId and is NOT behind the
-  # desktop-auth gate (routes/project/index.ts:2218-2228). Creation is gated.
-  # NOTE the project NAME defaults to basename(baseDir) = "mockups" when the
-  # GUI import dialog's name field is left alone (import-export-routes.ts:
-  # 380-382); when the given name/id matches nothing, fall back to resolving
-  # by baseDir == design/mockups.
-  step "Pointing project '$SELECT_PROJECT' at $DS_ID"
-  verify_catalog || die "refusing: $DS_ID is not present+published — run 'make design-link' first"
-  projects="$(od_get /api/projects)"
-  match="$("$py" -c '
-import json,sys,os
-want=sys.argv[1]; root=os.path.realpath(sys.argv[2]); mock=os.path.realpath(sys.argv[3])
-d=json.load(sys.stdin); projs=d.get("projects") or []
-def base(p):
-    b=((p.get("metadata") or {}).get("baseDir")) or ""
-    return os.path.realpath(b) if b else ""
-hits=[p for p in projs if p.get("id")==want or p.get("name")==want]
-if not hits:
-    hits=[p for p in projs if base(p)==mock]   # fallback: resolve by baseDir
-if len(hits)!=1: print("AMBIGUOUS %d"%len(hits)); raise SystemExit
-p=hits[0]; b=base(p)
-if not (b==root or b.startswith(root+os.sep)): print("OUTSIDE %s"%b); raise SystemExit
-print("OK %s %s"%(p["id"], p.get("designSystemId")))' "$SELECT_PROJECT" "$ROOT" "$MOCKUPS_DIR" <<<"$projects")"
-  case "$match" in
-    "AMBIGUOUS 0") die "no project matches '$SELECT_PROJECT' by id/name, and none has baseDir $MOCKUPS_DIR — create it first (GUI folder import; see 'make design-link' output)" 3 ;;
-    AMBIGUOUS*)    die "more than one project matches — pass the exact project id" 3 ;;
-    OUTSIDE*)      die "that project's baseDir (${match#OUTSIDE }) is outside $ROOT — refusing to retarget an unrelated project" 3 ;;
-  esac
-  pid="$(printf '%s' "$match" | cut -d' ' -f2)"
-  was="$(printf '%s' "$match" | cut -d' ' -f3)"
-  say "  project $pid (design_system_id was: $was)"
-  tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
-  code="$(od_json PATCH "/api/projects/$pid" "{\"designSystemId\":\"$DS_ID\"}" "$tmp")"
-  [ "$code" = 200 ] || die "PATCH failed ($code): $(api_err <"$tmp")"
-  # Verify by re-READ, never by the PATCH echo.
-  now="$(od_get "/api/projects/$pid" | "$py" -c 'import json,sys; d=json.load(sys.stdin); print((d.get("project") or d).get("designSystemId"))')"
-  [ "$now" = "$DS_ID" ] || die "re-read says design_system_id=$now, expected $DS_ID"
-  say "  verified: design_system_id = $now"
-
-  # Target platform. The folder-import route sets NO platform at all, which
-  # leaves the prompt carrying "platform: (unknown — ask …)" (prompts/system.ts
-  # :1626) so the agent re-asks every session. Worse is the WRONG value:
-  # `responsive` injects a contract demanding no horizontal scroll at 360px and
-  # verification across ten breakpoints (:1631) — which flatly contradicts this
-  # design base (DESIGN.md §8: no breakpoints; panels collapse to zero, they do
-  # not reflow). `desktop-app` as a SINGLE target avoids both, and also avoids
-  # the >1-target rule that would demand one file per platform (:1636).
-  # Slug per apps/web NewProjectPanel.tsx:119. Metadata is replaced wholesale,
-  # so re-send the whole object; the route re-stamps baseDir/fromTrustedPicker
-  # itself (routes/project/index.ts:2100-2145), which the re-read below proves.
-  meta="$(od_get "/api/projects/$pid" | "$py" -c '
-import json,sys
-d=json.load(sys.stdin); m=((d.get("project") or d).get("metadata")) or {}
-m["platform"]=sys.argv[1]; m["platformTargets"]=[sys.argv[1]]
-m.pop("fromTrustedPicker", None)   # immutable; the route rejects any change
-print(json.dumps({"metadata": m}))' "$PLATFORM")"
-  code="$(od_json PATCH "/api/projects/$pid" "$meta" "$tmp")"
-  [ "$code" = 200 ] || die "platform PATCH failed ($code): $(api_err <"$tmp")"
-  od_get "/api/projects/$pid" | "$py" -c '
-import json,sys
-m=((json.load(sys.stdin).get("project") or {}).get("metadata")) or {}
-want=sys.argv[1]
-if m.get("platform")!=want: raise SystemExit("platform re-read=%s, expected %s"%(m.get("platform"),want))
-if not m.get("baseDir"):    raise SystemExit("baseDir LOST by the platform patch — folder link broken")
-print("  verified: platform = %s, targets = %s"%(m["platform"], m.get("platformTargets")))
-print("  verified: baseDir still %s"%m["baseDir"])' "$PLATFORM" \
-    || die "platform verification failed"
-  say ""
-  say "This proves the DB field. It does NOT prove tokens reach a prompt — for"
-  say "that: change one value in design/xtty/tokens.css, generate a mockup, and"
-  say "grep the produced HTML for the new value."
+  # OPT-IN standalone entry; the shared flow is also chained from create_flow.
+  select_flow
   exit 0
+  ;;
+
+create)
+  # Standalone entry for the same flow `install` auto-runs. Exit code says
+  # what happened: 0 created-or-already-exists (idempotent no-op), 2 fell
+  # back to the printed manual GUI instructions, 3 duplicates need a human.
+  rc=0; create_flow || rc=$?
+  exit "$rc"
   ;;
 
 install)
@@ -519,7 +714,7 @@ EOF
   esac
 
   if [ "$st" = A ]; then
-    tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
+    tmp="$TMPD/install-resp"
     code="$(od_json POST /api/design-systems/install \
       "$("$py" -c 'import json,sys; print(json.dumps({"source":"local","path":sys.argv[1]}))' "$PKG_REAL")" "$tmp")"
     msg="$(api_err <"$tmp")"
@@ -557,35 +752,25 @@ EOF
   verify_catalog || die "the daemon does not list $DS_ID as a published user system"
   advisories
 
-  cat <<EOF
+  # Project creation + configuration, auto-run (rationale at create_flow).
+  # POST /api/import/folder IS HMAC-gated (measured: 403 "token missing"
+  # without a token; import-export-routes.ts:287-323) — the pre-CLI era read
+  # that gate as "expected to require the GUI". The app's own bundled CLI
+  # mints the token internally, so the gate is satisfied, never bypassed.
+  # Soft-fail in a subshell: a creation failure prints the manual GUI
+  # instructions and must not un-succeed the linkage above.
+  CREATE_RC=0
+  ( create_flow ) || CREATE_RC=$?
+
+  if [ "$CREATE_RC" -eq 0 ]; then
+    cat <<EOF
 
 ──────────────────────────────────────────────────────────────────────────────
-Linked and published. Two steps remain; only ONE is expected to need you.
+Linked, published, and the mockups project is created and configured.
 
- 1. CREATE THE MOCKUPS PROJECT — expected to require the GUI.
-      In Open Design: new project -> import a folder
-      Choose:  $MOCKUPS_DIR
-    Why: POST /api/import/folder demands an HMAC token bound to the chosen
-    path + a one-shot nonce whenever the desktop has registered its auth
-    secret (import-export-routes.ts:287-323; registration confirmed at
-    sidecar/server.ts:212-219, sticky once set). Whether the gate fired on
-    THIS install is verify-on-first-use — record the outcome in
-    design/README.md. This script does not probe the route: the only safe
-    probe IS the real import (the route creates projects, and its ungated
-    behaviour on a bogus baseDir is unobserved).
-    /!\\ This is the PROJECT folder import. Do NOT confuse it with
-        Settings > Design Systems > "Import from folder" — that one would
-        regenerate DESIGN.md from a CSS scan and destroy design/xtty/.
-
- 2. POINT THE PROJECT AT THIS DESIGN SYSTEM — GUI or scripted:
-      GUI:     project settings -> Design system -> "$PKG_NAME"
-      Script:  scripts/design-link.sh --select-project mockups
-    (The GUI import names the project basename(baseDir) = "mockups" unless
-     you typed a name; the script also falls back to matching by baseDir.)
-
- THEN VERIFY THE CHANNEL BY EFFECT: change one value in design/xtty/tokens.css,
- generate a mockup, grep the produced HTML for the new value. Nothing above
- proves a single token reached a prompt; that check does.
+ ONE CHECK REMAINS, AND IT IS BY EFFECT: change one value in
+ design/xtty/tokens.css, generate a mockup, grep the produced HTML for the
+ new value. Nothing above proves a single token reached a prompt; that does.
 
  Before that first run: clean, pushed working tree. After: repo-wide
  'git status' + 'git diff'; check design/xtty/.od-generated.json does not
@@ -593,5 +778,18 @@ Linked and published. Two steps remain; only ONE is expected to need you.
  --permission-mode bypassPermissions and folder scope is not enforced.
 ──────────────────────────────────────────────────────────────────────────────
 EOF
+  else
+    cat <<EOF
+
+──────────────────────────────────────────────────────────────────────────────
+Linked and published — but the mockups project is NOT fully set up (details
+and the manual fallback are printed above; exit code $CREATE_RC).
+
+ After finishing it by hand, verify the channel BY EFFECT: change one value
+ in design/xtty/tokens.css, generate a mockup, grep the produced HTML for
+ the new value.
+──────────────────────────────────────────────────────────────────────────────
+EOF
+  fi
   ;;
 esac

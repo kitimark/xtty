@@ -5,7 +5,7 @@ A place to try a visual direction before writing SwiftUI. Two halves:
 | | What it is | How it reaches the app |
 |---|---|---|
 | `xtty/` | The **design-system package** — xtty's visual language, hand-authored from Swift source | Symlinked into Open Design by `make design-link`. Repo bytes *are* app bytes. |
-| `mockups/` | The **project folder** — the design agent's working directory | Imported once through the app's folder picker. |
+| `mockups/` | The **project folder** — the design agent's working directory | Imported once by `make design-link` via the app's bundled CLI (GUI folder picker is the fallback). |
 
 Open Design emits **HTML only**. Its coherent role here is mockup exploration; translating an accepted direction into SwiftUI is separate, human work. It cannot and must not edit Swift.
 
@@ -14,17 +14,19 @@ Background, mechanism, and the retired theories: `research/03-analysis/open-desi
 ## Setup
 
 ```sh
-make design-link      # register the package (idempotent; needs the app running)
+make design-link      # register the package + create/configure the mockups project (idempotent; needs the app running)
 make design-status    # read-only linkage report
 make design-unlink    # remove the app-side symlink by hand
 ```
 
-Then, in the app — these two steps cannot be scripted:
+`make design-link` now does the whole setup: it registers the package, then creates the `mockups` project through the app's **bundled first-party CLI** (`od project import-folder`, run via the app's own Electron helper — it mints the gated import token itself; the script never touches the daemon's socket or secrets) and points it at the `xtty` design system. It dedupes by `baseDir` first, so re-running is a no-op that reports the existing project. If any of that fails, the script prints the manual GUI steps, which remain the documented fallback:
 
-1. **New project → import folder →** `design/mockups/`
-2. **Set the project's design system to `xtty`.**
+1. **New project → "Open folder" →** `design/mockups/`
+2. **Set the project's design system to `xtty`** (or `scripts/design-link.sh --select-project mockups`).
 
 Step 2 is not optional decoration. It is the *only* channel that pastes `tokens.css` and `DESIGN.md` into the agent's prompt. A package that is registered but not selected — or selected but not published — contributes **nothing**, and the agent may still produce plausible-looking output by reading files on its own. That is exactly how an earlier attempt looked successful while being wired up wrong.
+
+> **What `fromTrustedPicker` means now.** The import route stamps `fromTrustedPicker: true` for **any valid HMAC token**, regardless of origin. While creation was GUI-only, that flag genuinely meant "a human chose this folder in the native picker". With creation scripted through the app's own CLI, it means only "a valid token was presented". The gate itself still stands (a bare `POST /api/import/folder` without a token is still 403), but the flag no longer carries human-consent semantics. Owner-accepted tradeoff, recorded here so nobody later reads the flag as an audit trail of human choices.
 
 **Verify by effect, not by configuration.** Change one token value, run one generation, grep the output for the new value. Reading the stored design-system id proves only a precondition: it still reads correctly when the symlink dangles or the package has regressed to draft.
 
@@ -54,7 +56,7 @@ Moving or renaming this checkout dangles the symlink silently — re-run `make d
 
 ## Portable vs per-machine
 
-**In git:** everything under `design/`. **Not in git, and re-created by re-running the setup above:** the symlink, the app's project row, and its config. A fresh clone on another machine needs `make design-link` plus the two GUI steps — nothing else.
+**In git:** everything under `design/`. **Not in git, and re-created by re-running the setup above:** the symlink, the app's project row, and its config. A fresh clone on another machine needs `make design-link` — nothing else (the two GUI steps are only the fallback if the scripted creation fails).
 
 `manifest.json`'s `source.path` is repo-relative and provenance-only; no code branches on it.
 
@@ -85,9 +87,9 @@ That last line is not redundant. `.gitignore` hides that file, so `git status` c
 
 ## What the interface actually exposed
 
-*Settled 2026-07-29 by driving the GUI (peekaboo) and reading `app.sqlite` after each step.*
+*Settled 2026-07-29 by driving the GUI (peekaboo) and reading `app.sqlite` after each step. Amended the same day: manual import is no longer the only route.*
 
-**Use "Open folder". It is the only route that puts mockups in this repo.** The New project dialog offers three storage-ish affordances and they produce three different project shapes — only one is folder-backed:
+**In the GUI, use "Open folder". It is the only GUI route that puts mockups in this repo** — the New project dialog offers three storage-ish affordances and they produce three different project shapes, only one folder-backed:
 
 | Route | `metadata_json` | Where artifacts land |
 |---|---|---|
@@ -96,6 +98,13 @@ That last line is not redundant. `.gitignore` hides that file, so `git status` c
 | Home composer → "Select working directory" | `linkedDirs` | App's data dir. Its own tooltip says it: *"Let the agent read this local folder (not imported into Design Files)."* |
 
 Two of the three look like what you want and are not. Verify after creating: the project's `metadata_json` must contain `baseDir`.
+
+**But the GUI is no longer required at all**: the app ships a first-party CLI (`od project import-folder`, at `Contents/Resources/app/prebundled/daemon/daemon-cli.mjs`, runnable through the bundled Electron helper with `ELECTRON_RUN_AS_NODE=1`) that produces the exact same folder-backed shape, HMAC token and all. `make design-link` uses it; verified by effect — identical `metadata_json` (`importedFrom:"folder"`, `fromTrustedPicker:true`, realpath'd `baseDir`), zero bytes written into the imported folder. See the `fromTrustedPicker` semantics note in Setup above.
+
+**Two operational hazards, both measured 2026-07-29:**
+
+- **Open Design does not dedupe folder imports.** The import route has no existing-project check and the `projects` table constrains only `id` — not `name`, not `metadata.baseDir`. Importing the same directory twice yields two independent projects writing into the same folder, each with its own design-system setting, and nothing warns at import time; a generation run in the unconfigured one silently skips our tokens. This is why the script dedupes by `realpath(baseDir)` before creating, and why `make design-status` warns when more than one project points at `design/mockups`.
+- **Deleting a project via the HTTP API (or the CLI, same route) leaves a phantom card in the app's UI** that the in-app "Refresh" button does **not** clear — only quitting and relaunching does (DB and disk had one project while the UI showed two). Delete projects in the app, or expect to relaunch after an API delete.
 
 Other findings from that first run:
 
