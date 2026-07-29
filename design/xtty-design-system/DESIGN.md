@@ -44,7 +44,7 @@ Terminal content in a mockup must come from `--xtty-ansi-0` … `--xtty-ansi-15`
 
 No branded typeface, intentionally. Chrome is the system font at SwiftUI's semantic sizes; the terminal is the monospaced system font (SF Mono) at 13pt, user-overridable (`XttyConfig.swift:124`, `TerminalConfigurator.swift:19`).
 
-Measured sizes: 9px block-status captions (`SessionSidebar.swift:127`), 11px for the glyph and diff-row workhorse, 12px in the toast (`SpatialToast.swift:16`), 24px for empty-state glyphs (`GitReviewView.swift:89`).
+Measured sizes: 9px for the sidebar's disclosure chevron (`SessionSidebar.swift:127` — *not* a block-status caption; block rows use `.caption`/`.caption2` at 10px, `:170,187,191`), 11px for the glyph and diff-row workhorse, 12px in the toast (`SpatialToast.swift:16`), 24px for empty-state glyphs (`GitReviewView.swift:89`).
 
 **The one trap:** an unmodified SwiftUI `Text` renders at default body — 13px, not 11. The sidebar's pane label (`SessionSidebar.swift:207`) has no `.font()` modifier, so it is 13px and binds `--text-xl`. `--text-base` (11px) is for glyphs and diff rows, *not* body copy. Getting this backwards makes the sidebar look uniformly too small.
 
@@ -54,11 +54,11 @@ SF Mono is not available to a browser; use the `--font-mono` stack and accept th
 
 **Window** — content 900×560 (`TerminalWindowController.swift:92`); the titlebar sits *above* that rect, so do not draw chrome inside the 560. Native macOS tabs.
 
-**Session sidebar** — 220pt, content minimum 180pt (`TerminalWindowController.swift:68`, `SessionSidebar.swift:114`). One section per tab; pane rows with block rows indented 18pt beneath them; inactive panes dimmed to 0.55.
+**Session sidebar** — 220pt, content minimum 180pt (`TerminalWindowController.swift:68`, `SessionSidebar.swift:114`). One section per tab; pane rows with block rows indented 18pt beneath them. The 0.55 dim (`SessionSidebar.swift:179`) applies to a **block** row whose scroll/copy anchor is stale or trimmed — **nothing dims a pane row for being inactive**; an active pane row is marked only by the accent tint at `:137`.
 
 **Git review panel** — 280pt (`TerminalWindowController.swift:79`); the 240 in `GitReviewView.swift:30` is the SwiftUI *content minimum*, a different layer — never conflate the two. Collapses to 0, it does not reflow. Flat and tree layouts; the file list clamps to 220pt once a diff is showing (`GitReviewView.swift:131`).
 
-**Splits** — nested with `.thin` dividers. The *only* focus cue is the caret: filled when focused, 3pt hollow when not. No border, no dimming.
+**Splits** — nested with `.thin` dividers. The *only* focus cue is the caret: filled when focused, 3pt hollow when not (`CaretView.swift:24-29`, vendor). That caret also tracks **window activation**, not just pane focus — SwiftTerm's `hasFocus` folds in `window.isKeyWindow` (`MacTerminalView.swift:708-712`) — so an inactive window draws a hollow caret even in its first-responder pane. No border, no dimming.
 
 **Toast** — the one bespoke component in the app: black at 78%, radius 8, white 12pt text, 250ms/350ms fades (`SpatialToast.swift:16-56`). Its radius is the only custom corner radius anywhere.
 
@@ -68,7 +68,9 @@ SF Mono is not available to a browser; use the `--font-mono` stack and accept th
 
 ## 5. Layout Principles
 
-Horizontal composition is `[sidebar 220 | terminal flex | git 280→0]`. At the default 900pt width with everything open, the terminal is squeezed to roughly 400pt — that squeeze is a real design fact worth showing, not a mockup bug to avoid.
+Horizontal composition is `[sidebar 220 | terminal flex | git 280→0]`. **At launch the git panel is collapsed** — `gitReviewVisible = false` (`TerminalWindowController.swift:85`), its host created then hidden at `:213-215` with the width constraint pinned to `0` at `:222` — so the shipped launch state is `[220 | 680 | 0]`. Open the panel and the terminal is squeezed to roughly 400pt at the default 900pt width; that squeeze is a real design fact worth showing, not a mockup bug to avoid — but it belongs to a panel-open scenario, not to the app shell at launch.
+
+Column counts are not the pane width: SwiftTerm reserves a 17pt legacy `NSScroller` on the terminal's trailing edge and subtracts it from the grid's usable width (`MacTerminalView.swift:562-564`), whether or not there is anything to scroll. Subtract it before counting cells.
 
 **Spacing is dense: a 2px rhythm**, not a web 8px one. Row spacing of 2, padding of 6–10 (`SessionSidebar.swift:121`, `GitReviewView.swift:40,61`). Generic web padding turns xtty into a dashboard — this is the single fastest way to make a mockup stop looking like the app.
 
@@ -76,7 +78,7 @@ Horizontal composition is `[sidebar 220 | terminal flex | git 280→0]`. At the 
 
 ## 6. Depth & Elevation
 
-Flat. Hairline separators and native window chrome do all the layering work. `--elev-raised` is bound to `none` on purpose, overriding the schema's shadow default — a raised tier would be a fabrication. The only depth cues in the entire app are AppKit's own sidebar material (§1 — painted flat in a mockup, never `backdrop-filter`) and the toast floating over the grid, which earns it with opacity, not a shadow.
+Flat — and flatter than "hairlines everywhere": `buildLayout` (`TerminalWindowController.swift:206-243`) adds three subviews and **no divider view at all**, so there is no separator between the sidebar and the terminal. The boundary is simply where the sidebar material stops. Native window chrome and the split-view `.thin` dividers do the rest of the layering work. `--elev-raised` is bound to `none` on purpose, overriding the schema's shadow default — a raised tier would be a fabrication. The only depth cues in the entire app are AppKit's own sidebar material (§1 — painted flat in a mockup, never `backdrop-filter`) and the toast floating over the grid, which earns it with opacity, not a shadow.
 
 ## 7. Do's and Don'ts
 

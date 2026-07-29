@@ -70,7 +70,9 @@
                               * approximate — say so in any mockup that measures columns. */
 
   /* ── A1 structure — type ─────────────────────────────────────────────── */
-  --text-xs:       9px;   /* M SessionSidebar.swift:127 (block-status caption) */
+  --text-xs:       9px;   /* M SessionSidebar.swift:127 — the pane row's DISCLOSURE CHEVRON.
+                           * Not a "block-status caption": block rows are .caption/.caption2
+                           * (10px) at :170,187,191. Corrected 2026-07-30 from the app-shell baseline. */
   --text-sm:       10px;  /* P .caption and .caption2 are both 10.0pt; only weight differs */
   --text-base:     11px;  /* M .system(size:11) appears 8× — the glyph/diff workhorse.
                            * CAVEAT: an unmodified SwiftUI Text (the sidebar pane label,
@@ -148,7 +150,12 @@
   --xtty-git-filelist-max-h: 220px;  /* M GitReviewView.swift:131 — list clamps to this once a diff shows */
   --xtty-scroller-w:         17px;   /* P NSScroller.scrollerWidth(for:.regular, scrollerStyle:.legacy)
                                       * = 17.0 on macOS 26. Runtime-computed — re-run the probe on OS
-                                      * updates. It is NOT 15. */
+                                      * updates. It is NOT 15.
+                                      * LOAD-BEARING, not decorative: SwiftTerm pins the scroller to the
+                                      * terminal's trailing edge and getEffectiveWidth subtracts it from
+                                      * the grid's usable width (MacTerminalView.swift:562-564), whether
+                                      * or not there is scrollback to scroll. Any scenario that counts
+                                      * columns must subtract it from the pane width first. */
   --xtty-panel-bg:           #393a40; /* P — the .listStyle(.sidebar) panels (session sidebar AND the
                                        * git panel's file list) are a LIVE AppKit vibrancy material,
                                        * even in xtty's bare NSHostingViews: ≈ #24252b + ~18% of the
@@ -176,7 +183,16 @@
   --xtty-row-indent:         18px;  /* M SessionSidebar.swift:177 */
   --xtty-icon-slot:          14px;  /* M SessionSidebar.swift:129 */
   --xtty-icon-slot-sm:       12px;  /* M SessionSidebar.swift:168 */
-  --xtty-row-dim:            0.55;  /* M SessionSidebar.swift:179 — inactive-pane dimming */
+  --xtty-row-dim:            0.55;  /* M SessionSidebar.swift:179 — dims a BLOCK row whose
+                                     * scroll/copy anchor is stale or trimmed
+                                     * (.opacity(block.isActionable ? 1.0 : 0.55) on SidebarBlockRow).
+                                     * NOT pane dimming: nothing dims a pane row for being inactive —
+                                     * an active pane is marked by the accent tint at :137 alone.
+                                     * Corrected 2026-07-30 from the app-shell baseline. */
+  --xtty-space-05:           1px;   /* M SessionSidebar.swift:176 (.padding(.vertical, 1)) and
+                                     * :206 (VStack spacing: 1). The schema's --space-* scale starts
+                                     * at 2px, so this measured 1pt value has no schema home.
+                                     * Added 2026-07-30 — proposed by the app-shell baseline. */
 
   /* Tints — alphas are M, hues are P (at runtime the hue is the USER's accent) */
   --xtty-tint-selection:     rgba(0,122,255,0.18);  /* M SessionSidebar.swift:137, GitReviewView.swift:229 */

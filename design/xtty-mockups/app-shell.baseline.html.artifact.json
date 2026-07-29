@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "app-shell.baseline.html",
+  "entry": "app-shell.baseline.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-07-29T17:07:35.836Z",
+  "updatedAt": "2026-07-29T17:07:35.836Z",
+  "metadata": {
+    "inferred": true,
+    "reconciled": true
+  }
+}

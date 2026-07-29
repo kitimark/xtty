@@ -1,0 +1,1131 @@
+<!doctype html>
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+  xtty — app shell, BASELINE
+  Reproduces what xtty ships today at launch. Authored by reading the shipped
+  Swift, not by inference. Every structural fact carries an App/*.swift:line
+  citation in the "Source citations" table at the bottom of the page.
+
+  THIS FILE IS THE CHROME DONOR for every later scenario (git-review-flat,
+  session-sidebar, splits, overlays, …). The reusable parts are fenced:
+
+    LAYER 0   tokens.css :root, pasted verbatim               — copy as-is
+    LAYER 0Q  QUARANTINE: values NOT in tokens.css            — copy + shrink
+    LAYER 1   window chrome (.xt-*)                           — copy as-is
+    LAYER 2   session sidebar (.sb-*)                         — copy as-is
+    LAYER 3   terminal pane (.tm-*)                           — copy as-is
+    LAYER 4   mockup page scaffolding (.pg-*)                 — DO NOT copy
+
+  To open the git panel in a later scenario, set ONE property on .xt-window:
+      --xt-git-w: var(--xtty-git-panel-w);
+  Nothing else in LAYER 1 changes. That is the whole point of this file.
+  ═══════════════════════════════════════════════════════════════════════════
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xtty — app shell (baseline)</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   LAYER 0 — tokens.css :root, pasted verbatim.
+   Provenance tags: M measured in xtty's Swift · P platform (AppKit/SwiftUI
+   resolves it) · D derived (xtty has no equivalent).
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  /* ── A1 identity ─────────────────────────────────────────────────────── */
+  --bg:            #1d1f21;  /* M XttyConfig.swift:62 */
+  --surface:       #1f212c;  /* P measured window ground (titlebar, no-List regions) */
+  --fg:            #c5c8c6;  /* M XttyConfig.swift:61,63 */
+  --muted:         rgba(255,255,255,0.549);  /* P Color.secondary */
+  --border:        rgba(255,255,255,0.098);  /* P separatorColor */
+  --accent:        #007aff;  /* P controlAccentColor, DEFAULT ONLY — never a brand */
+  --font-display:  -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+  --font-body:     -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+
+  /* ── B slots ─────────────────────────────────────────────────────────── */
+  --surface-warm:  var(--surface);
+  --fg-2:          rgba(255,255,255,0.847);  /* P Color.primary */
+  --meta:          rgba(255,255,255,0.247);  /* P tertiaryLabelColor */
+  --border-soft:   var(--border);
+
+  /* ── A2 color ────────────────────────────────────────────────────────── */
+  --accent-on:     #ffffff;
+  --accent-hover:  color-mix(in srgb, var(--accent) 92%, black);
+  --accent-active: color-mix(in srgb, var(--accent) 86%, black);
+  --success:       #30d158;  /* P Color.green darkAqua */
+  --warn:          #ff9230;  /* P Color.orange darkAqua */
+  --danger:        #ff4245;  /* P Color.red darkAqua */
+  --font-mono:     "SF Mono", ui-monospace, Menlo, Monaco, monospace;
+
+  /* ── A1 structure — type ─────────────────────────────────────────────── */
+  --text-xs:       9px;   /* M SessionSidebar.swift:127 */
+  --text-sm:       10px;  /* P .caption / .caption2 = 10.0pt */
+  --text-base:     11px;  /* M .system(size:11) — glyph/diff workhorse, NOT body */
+  --text-lg:       12px;  /* M SpatialToast.swift:16 */
+  --text-xl:       13px;  /* M XttyConfig.swift:124; P SwiftUI default body */
+  --text-2xl:      16px;
+  --text-3xl:      20px;
+  --text-4xl:      24px;  /* M GitReviewView.swift:89 */
+  --leading-body:  1.35;
+  --leading-tight: 1.15;
+  --tracking-display: 0;  /* asserted: zero kerning anywhere in the app */
+
+  /* ── A2 space — xtty's 2px-dense rhythm ──────────────────────────────── */
+  --space-1:       2px;   /* M */
+  --space-2:       4px;   /* M */
+  --space-3:       6px;   /* M */
+  --space-4:       8px;   /* M */
+  --space-5:       10px;  /* M */
+  --space-6:       12px;  /* M */
+  --space-8:       16px;  /* M */
+  --space-12:      24px;
+
+  /* ── A1 structure — sections ─────────────────────────────────────────── */
+  --section-y-desktop: 0px;
+  --section-y-tablet:  0px;
+  --section-y-phone:   0px;
+
+  /* ── A2 shape, elevation, motion ─────────────────────────────────────── */
+  --radius-sm:     6px;
+  --radius-md:     8px;    /* M SpatialToast.swift:25 — the only custom radius */
+  --radius-lg:     10px;
+  --radius-pill:   9999px;
+  --elev-flat:     none;
+  --elev-ring:     0 0 0 1px var(--border);
+  --elev-raised:   none;   /* deliberate: xtty has zero shadows */
+  --focus-ring:    0 0 0 3px rgba(26,169,255,0.5);
+  --motion-fast:   250ms;  /* M SpatialToast.swift:51 */
+  --motion-base:   350ms;  /* M SpatialToast.swift:56 */
+  --ease-standard: ease-in-out;
+
+  /* ── A1 structure — container ────────────────────────────────────────── */
+  --container-max:              900px;  /* M TerminalWindowController.swift:92 */
+  --container-gutter-desktop:   10px;   /* M GitReviewView.swift:61 */
+  --container-gutter-tablet:    8px;
+  --container-gutter-phone:     6px;
+
+  /* ═══ Layer C — xtty extensions ═════════════════════════════════════════ */
+  --xtty-content-w:          900px;  /* M TerminalWindowController.swift:92 */
+  --xtty-content-h:          560px;  /* M TerminalWindowController.swift:92 */
+  --xtty-sidebar-w:          220px;  /* M TerminalWindowController.swift:68 */
+  --xtty-sidebar-min-w:      180px;  /* M SessionSidebar.swift:114 */
+  --xtty-git-panel-w:        280px;  /* M TerminalWindowController.swift:79 */
+  --xtty-git-panel-min-w:    240px;  /* M GitReviewView.swift:30 — different layer */
+  --xtty-panel-collapsed-w:  0px;    /* M TerminalWindowController.swift:222,299 */
+  --xtty-git-filelist-max-h: 220px;  /* M GitReviewView.swift:131 */
+  --xtty-scroller-w:         17px;   /* P NSScroller.scrollerWidth(.regular,.legacy) */
+  --xtty-panel-bg:           #393a40; /* P live sidebar material, window ACTIVE */
+  --xtty-panel-bg-inactive:  #282a35; /* P same material, window INACTIVE (opaque) */
+  --xtty-quake-h:            40vh;
+
+  /* Terminal */
+  --xtty-term-font-size:     13px;    /* M XttyConfig.swift:124 */
+  --xtty-term-bg-light:      #ffffff; /* M XttyConfig.swift:71 */
+  --xtty-term-fg-light:      #1d1f21; /* M XttyConfig.swift:70,72 */
+
+  /* Sidebar rows */
+  --xtty-row-indent:         18px;  /* M SessionSidebar.swift:177 */
+  --xtty-icon-slot:          14px;  /* M SessionSidebar.swift:129,205 */
+  --xtty-icon-slot-sm:       12px;  /* M SessionSidebar.swift:168 */
+  --xtty-row-dim:            0.55;  /* M SessionSidebar.swift:179 — see correction C1 */
+  --xtty-space-05:           1px;   /* M SessionSidebar.swift:176,206 — added to tokens.css 2026-07-30
+                                     * in response to this page's gap U7. No longer quarantined. */
+
+  /* Tints — alphas M, hues P (at runtime the hue is the USER's accent) */
+  --xtty-tint-selection:     rgba(0,122,255,0.18);  /* M SessionSidebar.swift:137 */
+  --xtty-tint-hunk-header:   rgba(0,122,255,0.12);
+  --xtty-tint-emphasis:      rgba(0,122,255,0.30);
+
+  /* Diff tinting */
+  --xtty-diff-add-bg:        rgba(48,209,88,0.18);
+  --xtty-diff-del-bg:        rgba(255,66,69,0.18);
+  --xtty-diff-add-emph:      rgba(48,209,88,0.40);
+  --xtty-diff-del-emph:      rgba(255,66,69,0.40);
+
+  /* Git status letters */
+  --xtty-git-modified:       var(--warn);
+  --xtty-git-added:          var(--success);
+  --xtty-git-deleted:        var(--muted);   /* deliberately MUTED, not red */
+  --xtty-git-untracked:      var(--muted);
+  --xtty-git-conflicted:     var(--danger);
+  --xtty-git-renamed:        #0091ff;
+
+  /* Session status vocabulary */
+  --xtty-status-blocked:     #db34f2;
+
+  /* Toast */
+  --xtty-toast-bg:           rgba(0,0,0,0.78);
+  --xtty-toast-fg:           #ffffff;
+
+  /* ANSI palette — M XttyConfig.swift:38-55 (shared by BOTH built-in themes) */
+  --xtty-ansi-0:  #000000;  --xtty-ansi-8:  #7f7f7f;
+  --xtty-ansi-1:  #cd0000;  --xtty-ansi-9:  #ff0000;
+  --xtty-ansi-2:  #00cd00;  --xtty-ansi-10: #00ff00;
+  --xtty-ansi-3:  #cdcd00;  --xtty-ansi-11: #ffff00;
+  --xtty-ansi-4:  #0000ee;  --xtty-ansi-12: #5c5cff;
+  --xtty-ansi-5:  #cd00cd;  --xtty-ansi-13: #ff00ff;
+  --xtty-ansi-6:  #00cdcd;  --xtty-ansi-14: #00ffff;
+  --xtty-ansi-7:  #e5e5e5;  --xtty-ansi-15: #ffffff;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LAYER 0Q — QUARANTINE. NOT FROM tokens.css. NOT MEASURED IN xtty.
+
+   A window cannot be drawn without a titlebar height, and a monospace grid
+   cannot be drawn without a line height. Rather than scatter unsourced numbers
+   through the rules — where they would be indistinguishable from measured ones
+   — every value xtty's source does not supply is declared here, prefixed
+   --mock-, and listed in the "Unsourced values" table on the page.
+
+   NOTHING BELOW THIS COMMENT IS A CLAIM ABOUT xtty.
+   Each one is either an AppKit platform metric that was never probed, or a
+   drawing necessity. Do not cite any of them back as an xtty design decision.
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --mock-titlebar-h:        28px;   /* AppKit .titled titlebar, no toolbar. UNMEASURED. */
+  --mock-tabbar-h:          28px;   /* AppKit native tab bar. UNMEASURED. */
+  --mock-window-radius:     var(--radius-lg);  /* macOS window corner. UNMEASURED — reusing a D token. */
+  --mock-traffic-d:         12px;   /* traffic-light diameter. UNMEASURED. */
+  --mock-traffic-gap:       8px;    /* traffic-light spacing. UNMEASURED. */
+  --mock-traffic-inset:     20px;   /* leading inset of the first light. UNMEASURED. */
+  --mock-traffic-close:     #ff5f57;/* AppKit close/min/zoom fills, window key. UNMEASURED. */
+  --mock-traffic-min:       #febc2e;
+  --mock-traffic-zoom:      #28c840;
+  --mock-traffic-inactive:  #55565c;/* uniform grey when the window is not key. UNMEASURED. */
+  --mock-sidebar-row-inset: 10px;   /* SwiftUI .listStyle(.sidebar) row inset. UNMEASURED. */
+  --mock-sidebar-row-radius: 5px;   /* sidebar row-background corner. UNMEASURED. */
+  --mock-sidebar-top-pad:   6px;    /* List's own top inset. UNMEASURED. */
+  --mock-term-line-h:       1.2;    /* CTFont ascent+descent+leading at 13pt. UNMEASURED. */
+  --mock-caret-stroke:      3px;    /* SwiftTerm's unfocused caret stroke — vendor, cited V3. */
+  --mock-hairline:          1px;    /* tab-bar rules. UNMEASURED — see gap U9. */
+
+  /* LAYER 4 only — this DOCUMENT's own layout. Says nothing about xtty at all,
+     but kept here rather than inline so no raw value appears anywhere below. */
+  --pg-hairline:            1px;
+  --pg-tracking-caps:       0.06em;  /* LAYER 4 headings only. xtty's own chrome
+                                        sets NO letter-spacing anywhere — that is
+                                        what --tracking-display: 0 asserts. */
+  --pg-rule:                2px;
+  --pg-max:                 980px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LAYER 1 — WINDOW CHROME. Reusable. Copy verbatim into every later scenario.
+
+   The three-column composition is ONE rule (.xt-content). A later scenario
+   opens the git panel by setting --xt-git-w on .xt-window and nothing else.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* The window as a whole: titlebar stacked ABOVE the 900x560 content rect.
+   TerminalWindowController.swift:92 sizes the CONTENT; :97's .titled style mask
+   adds the titlebar outside it. Never draw chrome inside the 560. */
+.xt-window {
+  /* The two knobs a later scenario touches. Defaults = xtty at launch. */
+  --xt-sidebar-w: var(--xtty-sidebar-w);          /* :68 default when shown */
+  --xt-git-w:     var(--xtty-panel-collapsed-w);  /* :85 starts collapsed → :222 constant 0 */
+
+  width: var(--xtty-content-w);
+  border-radius: var(--mock-window-radius);
+  overflow: hidden;
+  /* No shadow. --elev-raised is `none` on purpose; xtty draws zero shadows and
+     a mockup must not invent the drop shadow macOS composites outside the
+     window's own bounds. */
+  box-shadow: var(--elev-raised);
+  background: var(--surface);
+  font-family: var(--font-body);
+  color: var(--fg-2);
+}
+
+/* ── Titlebar ─────────────────────────────────────────────────────────────
+   Standard NSWindow titlebar. No toolbar, no titlebarAppearsTransparent, no
+   .fullSizeContentView anywhere in the source — so this is stock AppKit over
+   the window's own opaque ground (--surface, the measured no-List region). */
+.xt-titlebar {
+  height: var(--mock-titlebar-h);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  position: relative;
+  /* NO bottom separator. xtty draws no border of its own, and whether AppKit
+     puts a titlebarSeparator under a toolbar-less .titled window was never
+     probed — so drawing one would be an unmeasured claim. Gap U11. */
+}
+.xt-traffic {
+  display: flex;
+  gap: var(--mock-traffic-gap);
+  padding-left: var(--mock-traffic-inset);
+}
+.xt-light {
+  width: var(--mock-traffic-d);
+  height: var(--mock-traffic-d);
+  border-radius: var(--radius-pill);
+}
+.xt-light-close { background: var(--mock-traffic-close); }
+.xt-light-min   { background: var(--mock-traffic-min); }
+.xt-light-zoom  { background: var(--mock-traffic-zoom); }
+.xt-window[data-key="false"] .xt-light { background: var(--mock-traffic-inactive); }
+
+.xt-title {
+  position: absolute;
+  left: 0; right: 0;
+  text-align: center;
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--fg-2);
+  pointer-events: none;
+}
+/* AppKit dims an inactive window's title. The exact colour was not probed;
+   --muted stands in and is listed as gap U3. */
+.xt-window[data-key="false"] .xt-title { color: var(--muted); }
+
+/* ── Native tab bar ───────────────────────────────────────────────────────
+   NOT PRESENT AT LAUNCH. tabbingMode = .preferred (:145) groups xtty windows,
+   but macOS shows the bar only once a second tab exists (XttyApp.swift:296
+   addTabbedWindow) or the user picks View ▸ Show Tab Bar. Kept here so the
+   window-tabs scenario reuses it; hidden unless data-tabbar="true". */
+.xt-tabbar { display: none; }
+.xt-window[data-tabbar="true"] .xt-tabbar {
+  display: flex;
+  align-items: stretch;
+  height: var(--mock-tabbar-h);
+  background: var(--surface);
+  border-bottom: var(--mock-hairline) solid var(--border);
+}
+.xt-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-lg);
+  color: var(--fg-2);
+}
+.xt-tab-plus {
+  width: var(--mock-tabbar-h);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: var(--text-2xl);
+  border-left: var(--mock-hairline) solid var(--border);
+}
+
+/* ── THE THREE-COLUMN COMPOSITION ─────────────────────────────────────────
+   window content = [ sidebar | terminalContainer | git-review ]
+   TerminalWindowController.swift:224-240 pins them edge to edge with Auto
+   Layout: sidebar.leading→container.leading, terminal.leading→sidebar.trailing,
+   terminal.trailing→gitHost.leading, gitHost.trailing→container.trailing.
+
+   NO DIVIDER VIEWS EXIST. buildLayout adds three subviews and nothing else, so
+   there is no hairline between the sidebar and the terminal. Do not draw one. */
+.xt-content {
+  display: grid;
+  grid-template-columns: var(--xt-sidebar-w) minmax(0, 1fr) var(--xt-git-w);
+  height: var(--xtty-content-h);
+  background: var(--surface);
+}
+
+/* ── The collapsed git-review panel ───────────────────────────────────────
+   STRUCTURALLY PRESENT, ZERO WIDTH. The NSHostingView is created at launch
+   (:213), immediately `isHidden = true` (:215), and its width constraint is
+   activated at constant 0 (:222). setGitReviewVisible flips both (:299-300).
+   Left in the markup so git-review-flat reuses this shell instead of
+   re-deriving it — that scenario sets --xt-git-w: var(--xtty-git-panel-w). */
+.xt-git {
+  overflow: hidden;
+  background: var(--surface);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LAYER 2 — SESSION SIDEBAR. Reusable.
+   SwiftUI List(.listStyle(.sidebar)) in a bare NSHostingView.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* PAINTED FLAT ON PURPOSE. On screen this is a live AppKit vibrancy material
+   that mixes ~18% of the user's desktop behind the window, saturation-boosted
+   ~2x, over a #24252b base. A mockup's backdrop is the page, not the wallpaper,
+   so backdrop-filter would blur-and-tint the wrong thing — confidently wrong.
+   These two tokens are the screen-measured stand-ins. NEVER backdrop-filter. */
+.sb-pane {
+  background: var(--xtty-panel-bg);
+  padding-top: var(--mock-sidebar-top-pad);
+  overflow: hidden;
+  min-width: 0;
+}
+.xt-window[data-key="false"] .sb-pane {
+  /* Inactive is the honest one: the material goes fully opaque at exactly this
+     value, backdrop-invariant. This is a measurement, not an approximation. */
+  background: var(--xtty-panel-bg-inactive);
+}
+
+/* Section header — one Section per tab. Text(tab.title).font(.caption), bold
+   when isCurrent. SessionSidebar.swift:106-110. */
+.sb-section-header {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--muted);
+  padding: var(--space-1) var(--mock-sidebar-row-inset);
+  margin-bottom: var(--space-1);
+}
+
+/* Pane row. TWO nested HStacks in the source, with DIFFERENT spacings — the
+   nesting is reproduced here because collapsing it would silently change the
+   gaps:
+     paneRow          HStack(spacing: 2)  :121  [ chevron | rowbody ]
+       SidebarPaneRow HStack(spacing: 8)  :203  [ glyph | VStack | Spacer ]
+   So the chevron→glyph gap is 2, and the glyph→text gap is 8. Not 8 and 8. */
+.sb-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);              /* :121 spacing: 2 */
+  margin: 0 var(--mock-sidebar-row-inset);
+  border-radius: var(--mock-sidebar-row-radius);
+}
+.sb-rowbody {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);              /* :203 spacing: 8 */
+  padding: var(--space-1) 0;        /* :212 .padding(.vertical, 2) */
+  flex: 1;
+  min-width: 0;
+}
+/* .listRowBackground(Color.accentColor.opacity(0.18)) when isActive — :137.
+   A literal fill, NOT AppKit's emphasized-selection colour, so nothing in the
+   code path desaturates it when the window resigns key. Same in both variants. */
+.sb-row[data-active="true"] { background: var(--xtty-tint-selection); }
+
+/* Disclosure chevron: .system(size: 9, weight: .semibold), .secondary,
+   .frame(width: 14) — :126-129. Shown only when the pane has blocks (:122). */
+.sb-chevron {
+  width: var(--xtty-icon-slot);
+  flex: 0 0 var(--xtty-icon-slot);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+.sb-chevron svg { width: var(--text-xs); height: var(--text-xs); }
+
+/* Status glyph: .system(size: 11) in a 14pt frame — :204-205, :270-274. */
+.sb-glyph {
+  width: var(--xtty-icon-slot);
+  flex: 0 0 var(--xtty-icon-slot);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sb-glyph svg { width: var(--text-base); height: var(--text-base); }
+.sb-glyph-succeeded { color: var(--success); }   /* :262 checkmark.circle.fill, .green */
+/* SVG luminance-mask stencil. Not colours — white keeps, black cuts. Bound to
+   the two ANSI tokens that already carry exactly those values, so no raw hex
+   appears outside :root. */
+.sb-mask-keep { fill: var(--xtty-ansi-15); }
+.sb-mask-cut  { stroke: var(--xtty-ansi-0); }
+
+/* The label stack: VStack(alignment: .leading, spacing: 1) — :206.
+   Followed in the source by Spacer(minLength: 0) at :210, which is what lets
+   the text truncate rather than push. */
+.sb-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--xtty-space-05);        /* :206 spacing: 1 — now a real token (gap U7 closed) */
+  min-width: 0;
+}
+/* THE TYPE TRAP: Text(pane.label) at :207 carries NO .font() modifier, so it
+   renders at SwiftUI's default body — 13px, --text-xl. Not --text-base. */
+.sb-label {
+  font-size: var(--text-xl);
+  color: var(--fg-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Secondary line: .font(.caption).foregroundStyle(.secondary).lineLimit(1) —
+   :228-232, the last finished command when nothing is running. */
+.sb-sub {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LAYER 3 — TERMINAL PANE. Reusable.
+   One XttyTerminalView filling terminalContainer with no inset:
+   setTerminalRoot sets view.frame = terminalContainer.bounds (:247-253).
+   ═══════════════════════════════════════════════════════════════════════════ */
+.tm-pane {
+  background: var(--bg);            /* nativeBackgroundColor ← theme.background */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--xtty-scroller-w);
+  min-width: 0;
+  overflow: hidden;
+}
+.tm-grid {
+  font-family: var(--font-mono);
+  font-size: var(--xtty-term-font-size);
+  line-height: var(--mock-term-line-h);
+  color: var(--fg);                 /* nativeForegroundColor ← theme.foreground */
+  white-space: pre;
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
+}
+/* SwiftTerm reserves a .legacy NSScroller on the trailing edge and subtracts
+   its width from the usable grid width, whether or not it can scroll. At launch
+   there is no scrollback, so it is present but disabled.
+   Drawn as bare terminal ground with NO border and no track fill: the scroller's
+   own appearance is AppKit's and was never probed, and inventing a track would
+   put an unmeasured value in the one place a reader would trust it. The 17pt IS
+   reserved — the measure strip under each window states it. Gap U11. */
+.tm-scroller {
+  background: var(--bg);
+}
+/* SGR colours resolve against the theme's 16-colour palette. */
+.tm-ansi-1 { color: var(--xtty-ansi-1); }
+
+/* Caret. FILLED BLOCK when SwiftTerm's hasFocus is true; a 3pt HOLLOW STROKE
+   when it is not — and hasFocus folds in window.isKeyWindow, so an inactive
+   window's caret is hollow even though the pane is still first responder.
+   Cited V2/V3. Both draw in caretColor ← theme.cursor. */
+.tm-caret {
+  display: inline-block;
+  width: 1ch;
+  height: calc(var(--xtty-term-font-size) * var(--mock-term-line-h));
+  vertical-align: text-bottom;
+  background: var(--fg);
+}
+.xt-window[data-key="false"] .tm-caret {
+  background: transparent;
+  box-shadow: inset 0 0 0 var(--mock-caret-stroke) var(--fg);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LAYER 4 — MOCKUP PAGE SCAFFOLDING. DO NOT COPY INTO A SCENARIO.
+   Describes this document, not xtty.
+   ═══════════════════════════════════════════════════════════════════════════ */
+* { box-sizing: border-box; }
+/* The page ground is ANSI 0, not --bg. Deliberate: --surface (#1f212c) sits so
+   close to --bg (#1d1f21) that a window drawn on --bg would be invisible as an
+   object. That near-identity IS xtty's design and is preserved *inside* the
+   window; the page behind it is this document's, and says nothing about the app. */
+body {
+  margin: 0;
+  padding: var(--space-12) var(--space-12) calc(var(--space-12) * 2 + var(--space-8));
+  background: var(--xtty-ansi-0);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--text-xl);
+  line-height: var(--leading-body);
+}
+.pg-main { max-width: var(--pg-max); margin: 0 auto; }
+.pg-h1 {
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+  letter-spacing: var(--tracking-display);
+}
+.pg-badge {
+  display: inline-block;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--pg-tracking-caps);
+  padding: var(--xtty-space-05) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--xtty-diff-add-bg);
+  color: var(--success);
+  margin-bottom: var(--space-3);
+}
+.pg-lede { color: var(--muted); margin: 0 0 var(--space-6); max-width: 72ch; }
+.pg-h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--pg-tracking-caps);
+  color: var(--muted);
+  margin: var(--space-12) 0 var(--space-4);
+  padding-top: var(--space-6);
+  border-top: var(--pg-hairline) solid var(--border);
+}
+.pg-h3 {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  margin: var(--space-8) 0 var(--space-2);
+}
+.pg-note {
+  border-left: var(--pg-rule) solid var(--border);
+  padding: var(--space-2) 0 var(--space-2) var(--space-6);
+  margin: var(--space-4) 0;
+  color: var(--muted);
+  font-size: var(--text-lg);
+  max-width: 78ch;
+}
+.pg-note strong { color: var(--fg-2); font-weight: 600; }
+.pg-note-warn { border-left-color: var(--warn); }
+.pg-note-cite { border-left-color: var(--success); }
+
+/* The fixed-size window specimens. These are 900pt canvases, not responsive
+   pages: below ~950px of viewport the strip scrolls horizontally rather than
+   squeezing a window that cannot squeeze in the app either. */
+.pg-stage {
+  overflow-x: auto;
+  padding: var(--space-2) 0 var(--space-6);
+}
+.pg-stage-inner { width: var(--xtty-content-w); }
+.pg-variant-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  color: var(--fg-2);
+  margin-bottom: var(--space-3);
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.pg-variant-label span { color: var(--muted); font-family: var(--font-body); }
+.pg-measure {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--meta);
+  display: flex;
+  width: var(--xtty-content-w);
+  margin-top: var(--space-1);
+}
+.pg-measure b { font-weight: 400; color: var(--muted); }
+/* Fixed, never shrinking — the strip's whole job is to line up with the 220pt
+   column above it. */
+.pg-measure-sb   { flex: 0 0 var(--xtty-sidebar-w); }
+.pg-measure-tm   { flex: 1 1 auto; min-width: 0; }
+.pg-measure-git  { flex: 0 0 auto; white-space: nowrap; padding-left: var(--space-2); }
+
+/* Chrome-only specimen: a sliver of content under the tab bar, since that
+   specimen is about the chrome, not the scenario. */
+.pg-chrome-sliver { height: calc(var(--space-12) * 4); }
+
+table.pg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-lg);
+  margin: var(--space-4) 0;
+}
+table.pg-table th {
+  text-align: left;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: var(--pg-hairline) solid var(--border);
+  padding: var(--space-2) var(--space-4) var(--space-2) 0;
+  vertical-align: bottom;
+}
+table.pg-table td {
+  border-bottom: var(--pg-hairline) solid var(--border-soft);
+  padding: var(--space-3) var(--space-4) var(--space-3) 0;
+  vertical-align: top;
+  color: var(--fg-2);
+}
+table.pg-table code, .pg-code {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  color: var(--fg);
+  white-space: nowrap;
+}
+table.pg-table td:first-child { white-space: nowrap; }
+.pg-tag {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  border: var(--pg-hairline) solid var(--border);
+  color: var(--muted);
+}
+.pg-tag-vendor { color: var(--warn); border-color: var(--warn); }
+.pg-tag-gap    { color: var(--danger); border-color: var(--danger); }
+</style>
+</head>
+
+<body>
+<main class="pg-main" data-od-id="page-root">
+
+  <header data-od-id="page-header">
+    <div class="pg-badge">Baseline</div>
+    <h1 class="pg-h1" data-od-id="page-title">app shell — xtty at launch</h1>
+    <p class="pg-lede">
+      The window macOS puts on screen when xtty starts: one tab, one pane, the session
+      sidebar open at 220pt, the git-review panel collapsed to zero. Read from the shipped
+      Swift at the tip of <code class="pg-code">main</code>; every structural fact below
+      carries a <code class="pg-code">file:line</code> citation. This file is also the
+      chrome donor — later scenarios copy its <code class="pg-code">.xt-*</code> layer
+      rather than re-deriving the window.
+    </p>
+  </header>
+
+  <div class="pg-note pg-note-cite" data-od-id="note-launch-state">
+    <strong>The launch state, verified rather than assumed.</strong>
+    <code class="pg-code">gitReviewVisible</code> is initialised <code class="pg-code">false</code>
+    (<code class="pg-code">TerminalWindowController.swift:85</code>), its hosting view is created and
+    immediately hidden (<code class="pg-code">:213–215</code>), and its width constraint is activated
+    at constant <code class="pg-code">0</code> (<code class="pg-code">:222</code>). The sidebar's is
+    activated at <code class="pg-code">220</code> (<code class="pg-code">:220</code>) with
+    <code class="pg-code">sidebarVisible = true</code> (<code class="pg-code">:75</code>).
+    So at launch the terminal gets <em>all</em> the remaining width — 680pt, not the ~400pt squeeze
+    DESIGN.md §5 describes. That squeeze is real, but it belongs to
+    <code class="pg-code">git-review-flat</code>, where the panel is open.
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       VARIANT 1 — WINDOW ACTIVE
+       ══════════════════════════════════════════════════════════════════════ -->
+  <h2 class="pg-h2" data-od-id="variant-active-heading">Variant 1 — window active</h2>
+  <div class="pg-variant-label">
+    data-key="true"
+    <span>sidebar painted <code class="pg-code">--xtty-panel-bg</code> · caret filled · traffic lights coloured</span>
+  </div>
+
+  <div class="pg-stage" data-od-id="stage-active">
+   <div class="pg-stage-inner">
+    <div class="xt-window" data-key="true" data-tabbar="false" data-od-id="window-active">
+
+      <!-- Titlebar. Sits ABOVE the 900x560 content rect (:92 sizes content; :97
+           adds .titled). Title is window.title = "xtty" (:116) until the shell
+           emits OSC 0/2, which paneDidUpdateTitle then adopts (:458-462). -->
+      <div class="xt-titlebar" data-od-id="titlebar-active">
+        <div class="xt-traffic">
+          <div class="xt-light xt-light-close"></div>
+          <div class="xt-light xt-light-min"></div>
+          <div class="xt-light xt-light-zoom"></div>
+        </div>
+        <div class="xt-title">xtty</div>
+      </div>
+
+      <!-- Native tab bar — absent at launch. See the tab-bar specimen below. -->
+      <div class="xt-tabbar">
+        <div class="xt-tab">xtty</div>
+        <div class="xt-tab-plus">+</div>
+      </div>
+
+      <!-- [ sidebar 220 | terminal 1fr | git 0 ] — one grid rule, :224-240 -->
+      <div class="xt-content" data-od-id="content-active">
+
+        <!-- ── Session sidebar ─────────────────────────────────────────── -->
+        <div class="sb-pane" data-od-id="sidebar-active">
+          <!-- One Section per tab in the native tab group (XttyApp.swift:317-328).
+               One tab at launch → one section, header = window.title, bold
+               because isCurrent (SessionSidebar.swift:107-109). -->
+          <div class="sb-section-header">xtty</div>
+
+          <!-- One pane row. The tree is a single leaf at launch
+               (TerminalWindowController.swift:101-105); label is
+               pane.profileName ?? "shell" (:352), and the base profile's name is
+               nil (PaneController.swift:87), so it reads "shell". -->
+          <div class="sb-row" data-active="true" data-od-id="sidebar-pane-row">
+
+            <!-- chevron.right — collapsed is the default (expandedPanes = [], :88).
+                 SF Symbol approximated with inline SVG; see divergence H2. -->
+            <div class="sb-chevron">
+              <svg viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                <path d="M3.2 1.4 L6.6 5 L3.2 8.6" stroke="currentColor"
+                      stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+
+            <!-- The inner HStack(spacing: 8) — SidebarPaneRow, :203. -->
+            <div class="sb-rowbody">
+              <!-- checkmark.circle.fill / .green — activity .succeeded, because the
+                   last finished block exited 0 (SessionActivity.swift:35-37,
+                   SessionSidebar.swift:262). The tick is a transparent cutout, as
+                   a monochrome SF Symbol renders it — masked, not over-painted, so
+                   the row tint shows through it correctly. -->
+              <div class="sb-glyph sb-glyph-succeeded">
+                <svg viewBox="0 0 11 11" aria-hidden="true">
+                  <mask id="ck-active" maskUnits="userSpaceOnUse" x="0" y="0" width="11" height="11">
+                    <rect class="sb-mask-keep" width="11" height="11"/>
+                    <path class="sb-mask-cut" d="M2.9 5.6 L4.6 7.3 L8.1 3.8" stroke-width="1.4"
+                          fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                  </mask>
+                  <circle cx="5.5" cy="5.5" r="5.5" fill="currentColor" mask="url(#ck-active)"/>
+                </svg>
+              </div>
+
+              <div class="sb-text">
+                <div class="sb-label">shell</div>
+                <div class="sb-sub">git status -sb</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Terminal pane ───────────────────────────────────────────── -->
+        <div class="tm-pane" data-od-id="terminal-active">
+          <pre class="tm-grid">markmark@Marks-MacBook-Pro xtty % git status -sb
+## main...origin/main
+<span class="tm-ansi-1"> M</span> App/SessionSidebar.swift
+<span class="tm-ansi-1">??</span> design/xtty-mockups/app-shell.baseline.html
+markmark@Marks-MacBook-Pro xtty % <span class="tm-caret"></span></pre>
+          <!-- Legacy NSScroller, always reserved, disabled with no scrollback. -->
+          <div class="tm-scroller"></div>
+        </div>
+
+        <!-- ── Git-review panel: present, zero width, hidden ───────────── -->
+        <div class="xt-git" data-od-id="git-panel-collapsed" aria-hidden="true"></div>
+
+      </div>
+    </div>
+
+    <div class="pg-measure">
+      <div class="pg-measure-sb"><b>220</b> sidebar &nbsp;·&nbsp; :68</div>
+      <div class="pg-measure-tm"><b>680</b> terminal container (<b>663</b> grid + <b>17</b> scroller)</div>
+      <div class="pg-measure-git"><b>0</b> git panel &nbsp;·&nbsp; :85, :222</div>
+    </div>
+   </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       VARIANT 2 — WINDOW INACTIVE
+       ══════════════════════════════════════════════════════════════════════ -->
+  <h2 class="pg-h2" data-od-id="variant-inactive-heading">Variant 2 — window inactive</h2>
+  <div class="pg-variant-label">
+    data-key="false"
+    <span>sidebar painted <code class="pg-code">--xtty-panel-bg-inactive</code> · caret 3pt hollow · traffic lights grey</span>
+  </div>
+
+  <div class="pg-stage" data-od-id="stage-inactive">
+   <div class="pg-stage-inner">
+    <div class="xt-window" data-key="false" data-tabbar="false" data-od-id="window-inactive">
+
+      <div class="xt-titlebar" data-od-id="titlebar-inactive">
+        <div class="xt-traffic">
+          <div class="xt-light xt-light-close"></div>
+          <div class="xt-light xt-light-min"></div>
+          <div class="xt-light xt-light-zoom"></div>
+        </div>
+        <div class="xt-title">xtty</div>
+      </div>
+
+      <div class="xt-tabbar">
+        <div class="xt-tab">xtty</div>
+        <div class="xt-tab-plus">+</div>
+      </div>
+
+      <div class="xt-content" data-od-id="content-inactive">
+
+        <div class="sb-pane" data-od-id="sidebar-inactive">
+          <div class="sb-section-header">xtty</div>
+          <div class="sb-row" data-active="true">
+            <div class="sb-chevron">
+              <svg viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                <path d="M3.2 1.4 L6.6 5 L3.2 8.6" stroke="currentColor"
+                      stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div class="sb-rowbody">
+              <div class="sb-glyph sb-glyph-succeeded">
+                <svg viewBox="0 0 11 11" aria-hidden="true">
+                  <mask id="ck-inactive" maskUnits="userSpaceOnUse" x="0" y="0" width="11" height="11">
+                    <rect class="sb-mask-keep" width="11" height="11"/>
+                    <path class="sb-mask-cut" d="M2.9 5.6 L4.6 7.3 L8.1 3.8" stroke-width="1.4"
+                          fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                  </mask>
+                  <circle cx="5.5" cy="5.5" r="5.5" fill="currentColor" mask="url(#ck-inactive)"/>
+                </svg>
+              </div>
+              <div class="sb-text">
+                <div class="sb-label">shell</div>
+                <div class="sb-sub">git status -sb</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tm-pane" data-od-id="terminal-inactive">
+          <pre class="tm-grid">markmark@Marks-MacBook-Pro xtty % git status -sb
+## main...origin/main
+<span class="tm-ansi-1"> M</span> App/SessionSidebar.swift
+<span class="tm-ansi-1">??</span> design/xtty-mockups/app-shell.baseline.html
+markmark@Marks-MacBook-Pro xtty % <span class="tm-caret"></span></pre>
+          <div class="tm-scroller"></div>
+        </div>
+
+        <div class="xt-git" data-od-id="git-panel-collapsed-inactive" aria-hidden="true"></div>
+
+      </div>
+    </div>
+
+    <div class="pg-measure">
+      <div class="pg-measure-sb"><b>220</b> sidebar &nbsp;·&nbsp; :68</div>
+      <div class="pg-measure-tm"><b>680</b> terminal container (<b>663</b> grid + <b>17</b> scroller)</div>
+      <div class="pg-measure-git"><b>0</b> git panel &nbsp;·&nbsp; :85, :222</div>
+    </div>
+   </div>
+  </div>
+
+  <div class="pg-note pg-note-warn" data-od-id="note-vibrancy">
+    <strong>Both sidebars are painted flat, and that is deliberate.</strong>
+    xtty authors no material anywhere — a grep for <code class="pg-code">NSVisualEffectView</code>,
+    vibrancy, blur and shadow across <code class="pg-code">App/</code> and
+    <code class="pg-code">XttyCore/Sources/</code> returns nothing. AppKit supplies one regardless:
+    the <code class="pg-code">.listStyle(.sidebar)</code> List
+    (<code class="pg-code">SessionSidebar.swift:113</code>) renders a <em>live behind-window
+    vibrancy material</em> even inside xtty's bare <code class="pg-code">NSHostingView</code>. Active,
+    it is roughly 18% of whatever desktop sits behind the window, saturation-boosted ~2×, over a
+    <code class="pg-code">#24252b</code> base — so the real colour depends on the viewer's wallpaper
+    and cannot be reproduced here. <code class="pg-code">--xtty-panel-bg</code> is that material
+    measured over a neutral mid-grey backdrop. Inactive is the honest one: the material goes fully
+    opaque at exactly <code class="pg-code">--xtty-panel-bg-inactive</code>, backdrop-invariant.
+    <br><br>
+    <strong>No <code class="pg-code">backdrop-filter</code> is used, and none should be.</strong>
+    A mockup's backdrop is this page, not the user's desktop — a blur here would sample the wrong
+    thing and present the result as measured.
+  </div>
+
+  <div class="pg-note pg-note-cite" data-od-id="note-caret">
+    <strong>The caret differs between the two variants, and that is sourced, not stylistic.</strong>
+    SwiftTerm's caret draws a filled block when <code class="pg-code">hasFocus</code> is true and a
+    <code class="pg-code">3</code>pt hollow stroke when it is not
+    (<code class="pg-code">CaretView.swift:24–40</code>). <code class="pg-code">hasFocus</code> is
+    <code class="pg-code">_hasFocus &amp;&amp; (window?.isKeyWindow ?? true)</code>
+    (<code class="pg-code">MacTerminalView.swift:708–712</code>) — it folds in window-key state, not
+    just first-responder state. So an inactive xtty window shows a hollow caret even though its pane
+    is still the first responder. DESIGN.md §4 records the filled/hollow rule under <em>Splits</em>
+    but does not mention that window activation triggers it too.
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       CHROME SPECIMEN — TAB BAR
+       ══════════════════════════════════════════════════════════════════════ -->
+  <h2 class="pg-h2" data-od-id="tabbar-heading">Chrome specimen — the native tab bar</h2>
+
+  <div class="pg-note pg-note-warn" data-od-id="note-tabbar">
+    <strong>A single-tab xtty window shows no tab bar, so the two variants above have none.</strong>
+    <code class="pg-code">tabbingMode = .preferred</code> and a shared
+    <code class="pg-code">tabbingIdentifier</code> (<code class="pg-code">TerminalWindowController.swift:145–146</code>)
+    tell macOS to <em>group</em> xtty windows as tabs; they do not make the bar appear. macOS shows it
+    once a second tab joins the group — <code class="pg-code">addTabbedWindow</code>,
+    <code class="pg-code">XttyApp.swift:296</code> — or when the user picks View ▸ Show Tab Bar.
+    The window controller reads the same truth back as
+    <code class="pg-code">window.tabbedWindows?.count ?? 1</code> (<code class="pg-code">:785</code>,
+    a DEBUG-only harness dump — corroborating, not load-bearing).
+    Drawn here as a labelled specimen so <code class="pg-code">window-tabs</code> reuses the markup
+    (<code class="pg-code">data-tabbar="true"</code>) without it contaminating the launch baseline.
+  </div>
+
+  <div class="pg-stage" data-od-id="stage-tabbar">
+   <div class="pg-stage-inner">
+    <div class="xt-window" data-key="true" data-tabbar="true" data-od-id="window-tabbar-specimen">
+      <div class="xt-titlebar">
+        <div class="xt-traffic">
+          <div class="xt-light xt-light-close"></div>
+          <div class="xt-light xt-light-min"></div>
+          <div class="xt-light xt-light-zoom"></div>
+        </div>
+        <div class="xt-title">xtty</div>
+      </div>
+      <div class="xt-tabbar">
+        <div class="xt-tab">xtty</div>
+        <div class="xt-tab-plus">+</div>
+      </div>
+      <!-- Content sliver only: this specimen is about chrome, not the scenario. -->
+      <div class="xt-content pg-chrome-sliver">
+        <div class="sb-pane"></div>
+        <div class="tm-pane"><pre class="tm-grid"> </pre><div class="tm-scroller"></div></div>
+        <div class="xt-git" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div class="pg-measure">
+      <div class="pg-measure-tm">
+        tab bar height, selected-tab fill, divider weight and the “+” glyph are all AppKit's —
+        none of them measured. See gaps U2 and U9.
+      </div>
+    </div>
+   </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SOURCE CITATIONS
+       ══════════════════════════════════════════════════════════════════════ -->
+  <h2 class="pg-h2" data-od-id="citations-heading">Source citations — everything drawn above</h2>
+
+  <h3 class="pg-h3">Window and composition</h3>
+  <table class="pg-table">
+    <thead><tr><th>Citation</th><th>What it fixes</th></tr></thead>
+    <tbody>
+      <tr><td><code>App/TerminalWindowController.swift:92</code></td><td><code>contentSize: NSSize(width: 900, height: 560)</code> — the <em>content</em> rect. The titlebar is outside it.</td></tr>
+      <tr><td><code>App/TerminalWindowController.swift:97</code></td><td><code>styleMask: [.titled, .closable, .resizable, .miniaturizable]</code> — a standard titlebar; no toolbar, no transparent titlebar, no full-size content view anywhere in the source.</td></tr>
+      <tr><td><code>App/TerminalWindowController.swift:116</code></td><td><code>window.title = "xtty"</code> — the launch title, and the sidebar section header via <code>tabTitle</code> (<code>:333</code>).</td></tr>
+      <tr><td><code>App/TerminalWindowController.swift:458–462</code></td><td><code>paneDidUpdateTitle</code> replaces it with the terminal-emitted title once the shell sends OSC 0/2. A stock zsh sends none, so “xtty” is the honest launch value.</td></tr>
+      <tr><td><code>App/TerminalWindowController.swift:68</code>, <code>:220</code></td><td><code>sidebarWidth = 220</code>, activated as the hosting view's width constraint.</td></tr>
+      <tr><td><code>App/TerminalWindowController.swift:75</code></td><td><code>sidebarVisible = true</code> — the sidebar is open at launch.</td></tr>
+      <tr><td><code>App/TerminalWindowController.swift:79</code>, <code>:299</code></td><td><code>gitPanelWidth = 280</code>, applied only when <code>setGitReviewVisible(true)</code> runs. Not at launch.</td></tr>
+      <tr><td><code>App/TerminalWindowController.swift:85</code></td><td><code>gitReviewVisible = false</code> — “Starts collapsed (the panel is only useful in a repo and costs width).”</td></tr>
+      <tr><td><code>App/TerminalWindowController.swift:213–215</code>, <code>:222</code></td><td>The git panel's <code>NSHostingView</code> is built, set <code>isHidden = true</code>, and given a width constraint of constant <code>0</code>. Present in the tree, zero-width — exactly how it is drawn here.</td></tr>
+      <tr><td><code>App/TerminalWindowController.swift:224–240</code></td><td>The three-column chain: sidebar.leading→container.leading, terminal.leading→sidebar.trailing, terminal.trailing→gitPanel.leading, gitPanel.trailing→container.trailing. A 0-width panel leaves the terminal full width. <strong>No divider views are added</strong> — hence no hairline between sidebar and terminal.</td></tr>
+      <tr><td><code>App/TerminalWindowController.swift:247–253</code></td><td><code>setTerminalRoot</code> sets <code>view.frame = terminalContainer.bounds</code> — the pane fills its column with no inset or padding.</td></tr>
+      <tr><td><code>App/TerminalWindowController.swift:101–105</code></td><td>One root <code>PaneController</code>; <code>tree = .leaf(root.pane)</code>. One pane at launch, no <code>NSSplitView</code>.</td></tr>
+      <tr><td><code>App/TerminalWindowController.swift:145–146</code></td><td><code>tabbingMode = .preferred</code>, <code>tabbingIdentifier "xtty"</code> — grouping, not a visible bar.</td></tr>
+      <tr><td><code>App/TerminalWindowController.swift:150–152</code></td><td><code>positionOnBuiltInDisplay()</code> → <code>makeKeyAndOrderFront</code> → <code>focusActivePane()</code>: the window comes up key with the pane focused, which is Variant 1.</td></tr>
+      <tr><td><code>App/TerminalWindowController.swift:352</code></td><td><code>label: pane.profileName ?? "shell"</code>.</td></tr>
+      <tr><td><code>App/PaneController.swift:87</code></td><td><code>baseProfile = XttyProfile(name: nil, …)</code> — the default profile has no name, so the row reads “shell”.</td></tr>
+      <tr><td><code>App/XttyApp.swift:42–46</code></td><td><code>applicationDidFinishLaunching</code> builds exactly one <code>TerminalWindowController</code>.</td></tr>
+      <tr><td><code>App/XttyApp.swift:296</code></td><td><code>addTabbedWindow</code> — the only path that produces a second tab.</td></tr>
+      <tr><td><code>App/XttyApp.swift:317–328</code></td><td><code>sidebarTabs(forTabGroupOf:)</code> maps the native tab group to sections. One tab → one section.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="pg-h3">Session sidebar</h3>
+  <table class="pg-table">
+    <thead><tr><th>Citation</th><th>What it fixes</th></tr></thead>
+    <tbody>
+      <tr><td><code>App/SessionSidebar.swift:95–115</code></td><td><code>List { … }.listStyle(.sidebar).frame(minWidth: 180)</code> — the 180 is a SwiftUI <em>content</em> floor, a different layer from the AppKit 220.</td></tr>
+      <tr><td><code>App/SessionSidebar.swift:106–110</code></td><td>Section header: <code>Text(tab.title).font(.caption)</code>, <code>.fontWeight(.bold)</code> when <code>isCurrent</code>. → 10px bold, secondary.</td></tr>
+      <tr><td><code>App/SessionSidebar.swift:121</code></td><td><code>HStack(spacing: 2)</code> — the pane row's own gap. The 2px rhythm, literally.</td></tr>
+      <tr><td><code>App/SessionSidebar.swift:88</code>, <code>:122–133</code></td><td><code>expandedPanes = []</code> (all collapsed by default); the chevron appears only when the pane has blocks, otherwise a 14pt spacer keeps rows aligned.</td></tr>
+      <tr><td><code>App/SessionSidebar.swift:126–129</code></td><td><code>chevron.right</code> at <code>.system(size: 9, weight: .semibold)</code>, <code>.secondary</code>, in a 14pt frame.</td></tr>
+      <tr><td><code>App/SessionSidebar.swift:137</code></td><td><code>.listRowBackground(pane.isActive ? Color.accentColor.opacity(0.18) : .clear)</code> — the active pane's tint. A literal fill, not AppKit's emphasized-selection colour, so it does not desaturate on resign-key.</td></tr>
+      <tr><td><code>App/SessionSidebar.swift:203–205</code></td><td><code>HStack(spacing: 8)</code>; the status indicator in a <code>.frame(width: 14)</code>.</td></tr>
+      <tr><td><code>App/SessionSidebar.swift:206</code></td><td><code>VStack(alignment: .leading, spacing: 1)</code> — label over secondary line. <strong>1pt has no token</strong> (gap U7).</td></tr>
+      <tr><td><code>App/SessionSidebar.swift:207</code></td><td><code>Text(pane.label)</code> with <em>no</em> <code>.font()</code> modifier → SwiftUI default body, 13px. Binds <code>--text-xl</code>, not <code>--text-base</code>.</td></tr>
+      <tr><td><code>App/SessionSidebar.swift:212</code></td><td><code>.padding(.vertical, 2)</code> on the pane row.</td></tr>
+      <tr><td><code>App/SessionSidebar.swift:228–232</code></td><td>Secondary line = the last finished command, <code>.font(.caption)</code>, <code>.secondary</code>, <code>.lineLimit(1)</code>.</td></tr>
+      <tr><td><code>App/SessionSidebar.swift:256–274</code></td><td>Status vocabulary: spinner running · <code>circle</code> secondary idle · <code>checkmark.circle.fill</code> green succeeded · <code>xmark.octagon.fill</code> red failed · <code>rectangle.inset.filled</code> purple full-screen — each at <code>.system(size: 11)</code>.</td></tr>
+      <tr><td><code>XttyCore/…/SessionActivity.swift:28–40</code></td><td>Precedence fullScreen → running → failed → succeeded → idle. A command that exited 0 gives <code>.succeeded</code>, which is why the glyph drawn here is the green check.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="pg-h3">Terminal</h3>
+  <table class="pg-table">
+    <thead><tr><th>Citation</th><th>What it fixes</th></tr></thead>
+    <tbody>
+      <tr><td><code>XttyCore/…/XttyConfig.swift:61–63</code></td><td>Dark theme: foreground <code>#c5c8c6</code>, background <code>#1d1f21</code>, cursor <code>#c5c8c6</code>. Foreground and cursor are the same value.</td></tr>
+      <tr><td><code>XttyCore/…/XttyConfig.swift:38–55</code></td><td>The 16-colour ANSI palette, shared by both built-in themes. Every colour in the grid above comes from these.</td></tr>
+      <tr><td><code>XttyCore/…/XttyConfig.swift:122–128</code></td><td>Defaults: <code>fontFamily nil</code>, <code>fontSize 13</code> (<code>:124</code>), theme <code>dark</code>, scrollback 10 000.</td></tr>
+      <tr><td><code>App/TerminalConfigurator.swift:14–20</code></td><td><code>fontFamily nil</code> → <code>NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)</code>. No branded typeface.</td></tr>
+      <tr><td><code>App/TerminalConfigurator.swift:29–32</code></td><td><code>installColors(theme.ansi)</code>, <code>nativeBackgroundColor</code>, <code>nativeForegroundColor</code>, <code>caretColor</code> — the seam from config to the drawn grid.</td></tr>
+      <tr><td><code>App/PaneController.swift:199</code></td><td><code>TerminalConfigurator.apply(profile.config, to: view)</code> runs before the shell starts, so the first frame already carries the theme.</td></tr>
+      <tr><td><code>App/Resources/shell-integration/zsh/xtty-integration:29–52</code></td><td><code>_xtty_report_cwd</code> / <code>_xtty_precmd</code> / <code>_xtty_preexec</code> emit OSC 7 and OSC 133 only — <strong>invisible</strong>. xtty adds nothing visible to the prompt; the prompt string drawn above is the user's shell, not xtty's.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="pg-h3">Vendor-owned (SwiftTerm), not xtty <span class="pg-tag pg-tag-vendor">vendor</span></h3>
+  <div class="pg-note">
+    These are read from the reconstituted upstream clone at <code class="pg-code">external/SwiftTerm/</code>,
+    which is gitignored and rebuilt from a pinned ref by <code class="pg-code">scripts/bootstrap-swiftterm.sh</code>.
+    <strong>Line numbers here move when the pin moves</strong> — unlike the <code class="pg-code">App/</code>
+    citations above, they are not stable against the repo's own history. They are listed because the
+    terminal pane cannot be drawn faithfully without them.
+  </div>
+  <table class="pg-table">
+    <thead><tr><th>Citation</th><th>What it fixes</th></tr></thead>
+    <tbody>
+      <tr><td><code>Mac/MacTerminalView.swift:509</code>, <code>:529</code>, <code>:562–564</code>, <code>:576</code></td><td>V1 — a <code>.legacy</code>-style <code>NSScroller</code> is pinned to the trailing edge at <code>NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)</code>, and <code>getEffectiveWidth</code> subtracts it from the grid's usable width. So the 680pt terminal column carries a <strong>663pt grid + a 17pt scroller</strong>, not 680pt of cells.</td></tr>
+      <tr><td><code>Mac/MacTerminalView.swift:534</code></td><td><code>scroller.isEnabled = false</code> until there is scrollback — at launch it is a bare track with no knob, which is how it is drawn.</td></tr>
+      <tr><td><code>Mac/MacTerminalView.swift:708–712</code></td><td>V2 — <code>hasFocus = _hasFocus &amp;&amp; (window?.isKeyWindow ?? true)</code>. Window-key state feeds the caret.</td></tr>
+      <tr><td><code>Mac/MacCaretView.swift:22</code>, <code>:120</code></td><td><code>tracksFocus = true</code> by default; <code>drawCursor(in:hasFocus: terminal?.hasFocus ?? true)</code>.</td></tr>
+      <tr><td><code>Apple/CaretView.swift:24–29</code>, <code>:35–36</code></td><td>V3 — unfocused: <code>setLineWidth(3)</code> + <code>stroke(bounds)</code>, a hollow outline. Focused with the default block style: <code>fill(bounds)</code>. Confirms DESIGN.md §4's filled/hollow rule.</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       UNSOURCED VALUES
+       ══════════════════════════════════════════════════════════════════════ -->
+  <h2 class="pg-h2" data-od-id="gaps-heading">Unsourced values <span class="pg-tag pg-tag-gap">not measured</span></h2>
+  <p class="pg-lede">
+    Every value below is in the quarantined <code class="pg-code">--mock-*</code> block at the top of
+    the stylesheet, never inline. None is a claim about xtty: each is either an AppKit metric nobody
+    has probed or an unavoidable drawing necessity. An invented value is indistinguishable from a
+    measured one once it is in the markup — this table is what keeps them apart.
+  </p>
+  <table class="pg-table">
+    <thead><tr><th>Gap</th><th>Used for</th><th>Drawn as</th><th>Token I would add</th></tr></thead>
+    <tbody>
+      <tr><td>U1</td><td>Titlebar height — AppKit <code>.titled</code>, no toolbar</td><td><code>--mock-titlebar-h: 28px</code></td><td><code>--xtty-titlebar-h</code> (P, from <code>NSWindow.frameRect(forContentRect:)</code>)</td></tr>
+      <tr><td>U2</td><td>Native tab-bar height</td><td><code>--mock-tabbar-h: 28px</code></td><td><code>--xtty-tabbar-h</code> (P) — needed by <code>window-tabs</code></td></tr>
+      <tr><td>U3</td><td>Inactive-window title colour</td><td><code>--muted</code> stands in</td><td><code>--xtty-title-fg-inactive</code> (P)</td></tr>
+      <tr><td>U4</td><td>Window corner radius</td><td><code>--radius-lg</code> (itself a D token) reused</td><td><code>--xtty-window-radius</code> (P)</td></tr>
+      <tr><td>U5</td><td>Traffic-light diameter, gap, inset</td><td>12 / 8 / 20</td><td><code>--xtty-traffic-*</code> (P) — or leave them out and keep the annotation</td></tr>
+      <tr><td>U6</td><td>Traffic-light fills, key and non-key</td><td>4 quarantined hexes</td><td>none — these are AppKit's and change per OS release; better annotated than tokenised</td></tr>
+      <tr><td>U7</td><td><strong>1pt spacing.</strong> <code>SessionSidebar.swift:176</code> (<code>.padding(.vertical, 1)</code>) and <code>:206</code> (<code>VStack(spacing: 1)</code>) both use it. The space scale starts at <code>--space-1: 2px</code>, so a measured xtty value has nowhere to live.</td><td><code>var(--xtty-space-05)</code></td><td><strong>CLOSED 2026-07-30</strong> — added to <code>tokens.css</code> as <code>--xtty-space-05: 1px</code> (M). Namespaced rather than <code>--space-05</code>: the schema's <code>--space-*</code> set is fixed, and an unprefixed non-schema name would break the package's token-purity rule.</td></tr>
+      <tr><td>U8</td><td>SwiftUI sidebar row inset, row-background radius, List top inset</td><td>10 / 5 / 6</td><td><code>--xtty-sidebar-row-inset</code>, <code>--xtty-sidebar-row-radius</code> (both P)</td></tr>
+      <tr><td>U9</td><td>Tab-bar selected fill, divider weight, “+” glyph</td><td>approximated from <code>--surface</code> and <code>--border</code></td><td>defer to <code>window-tabs</code>, which should probe them properly</td></tr>
+      <tr><td>U10</td><td>Terminal cell height — CTFont ascent + descent + leading at 13pt</td><td><code>--mock-term-line-h: 1.2</code></td><td><code>--xtty-term-cell-h</code> / <code>--xtty-term-cell-w</code> (M, from <code>cellDimension</code>)</td></tr>
+      <tr><td>U11</td><td><strong>Two separators that are not drawn at all, rather than guessed.</strong> (a) Whether AppKit puts a <code>titlebarSeparator</code> under a toolbar-less <code>.titled</code> window; (b) the <code>.legacy</code> <code>NSScroller</code>'s own track and knob fills.</td><td>Nothing. The titlebar has no bottom rule and the 17pt scroller strip is bare terminal ground — its extent is stated in the measure strip instead.</td><td><code>--xtty-titlebar-separator</code>, <code>--xtty-scroller-track</code> (both P) — <em>after</em> a screen probe, not before</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       HTML vs APPKIT
+       ══════════════════════════════════════════════════════════════════════ -->
+  <h2 class="pg-h2" data-od-id="divergence-heading">Where this page cannot tell the truth</h2>
+  <table class="pg-table">
+    <thead><tr><th>#</th><th>On screen</th><th>Here</th></tr></thead>
+    <tbody>
+      <tr><td>H1</td><td>The sidebar is a live vibrancy material sampling the user's desktop.</td><td>A flat measured stand-in. No <code>backdrop-filter</code>, on purpose — see the note above the citations.</td></tr>
+      <tr><td>H2</td><td>SF Symbols (<code>chevron.right</code>, <code>checkmark.circle.fill</code>) drawn by CoreText at the system's optical weights.</td><td>Hand-drawn inline SVG at the cited sizes. The proportions are approximations; the sizes and colours are not.</td></tr>
+      <tr><td>H3</td><td>SF Mono at 13pt; cell width and height come from <code>CTFont</code> metrics.</td><td>SF Mono is unavailable to a browser, so the stack falls back to <code>ui-monospace</code>/Menlo. <strong>Column counts and line breaks in the grid above are approximate</strong> and will not match the app cell-for-cell.</td></tr>
+      <tr><td>H4</td><td>Traffic lights are AppKit-drawn, with hover glyphs and a per-OS gradient.</td><td>Three flat circles at quarantined sizes.</td></tr>
+      <tr><td>H5</td><td>The tab bar is drawn by macOS, including its selected-tab shape, drag affordances and overflow.</td><td>A rectangular approximation in a clearly labelled specimen, not in either variant.</td></tr>
+      <tr><td>H6</td><td>macOS composites a drop shadow <em>outside</em> the window's bounds.</td><td>Omitted. <code>--elev-raised</code> is <code>none</code> and xtty draws zero shadows; adding one would read as an xtty decision.</td></tr>
+      <tr><td>H7</td><td>SwiftUI's <code>.listStyle(.sidebar)</code> applies its own header treatment, row hover, and focus ring.</td><td>Only the cited font, weight and colour are reproduced. Header casing and hover states are AppKit's and are not drawn.</td></tr>
+      <tr><td>H8</td><td>The window is resizable; the sidebar and git panel have content minimums (180 / 240) and collapse to zero rather than reflowing.</td><td>Fixed at 900×560. Below ~950px of viewport this page scrolls horizontally rather than squeezing a window that does not squeeze in the app either.</td></tr>
+      <tr><td>H9</td><td>Prompt text and any colour in command output belong to the user's shell and the programs they run.</td><td>A stock zsh prompt and two red status letters drawn from <code>--xtty-ansi-1</code>. What is recorded is only that SGR <em>n</em> resolves to <code>--xtty-ansi-n</code> from the theme — <strong>not</strong> a claim about git's colour map, which is git's and outside this baseline.</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       DESIGN.md CORRECTIONS — the source wins
+       ══════════════════════════════════════════════════════════════════════ -->
+  <h2 class="pg-h2" data-od-id="corrections-heading">Where DESIGN.md and the source disagree — the source wins</h2>
+  <table class="pg-table">
+    <thead><tr><th>#</th><th>DESIGN.md / tokens.css says</th><th>The source says</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>C1</td>
+        <td>§4: “pane rows with block rows indented 18pt beneath them; <strong>inactive panes dimmed to 0.55</strong>.” <code>tokens.css</code> repeats it: <code>--xtty-row-dim</code> — “inactive-pane dimming”.</td>
+        <td><strong>Wrong subject.</strong> The <code>0.55</code> at <code>SessionSidebar.swift:179</code> is <code>.opacity(block.isActionable ? 1.0 : 0.55)</code> on <code>SidebarBlockRow</code> — it dims a <em>block</em> row whose scroll/copy anchor is stale or trimmed out. Nothing in <code>SessionSidebar.swift</code> dims a pane row for being inactive. No pane row on this page is dimmed, and <code>session-sidebar</code> should apply 0.55 to stale block rows only.</td>
+      </tr>
+      <tr>
+        <td>C2</td>
+        <td><code>tokens.css</code>: <code>--text-xs: 9px /* M SessionSidebar.swift:127 (block-status caption) */</code>.</td>
+        <td>Value right, description wrong. Line 127 is <code>.font(.system(size: 9, weight: .semibold))</code> on the <strong>disclosure chevron</strong>. There is no 9px block-status caption; block rows use <code>.caption</code>/<code>.caption2</code> (10px) at <code>:170</code>, <code>:187</code>, <code>:191</code>. The chevron is what this page binds it to.</td>
+      </tr>
+      <tr>
+        <td>C3</td>
+        <td>§5: “At the default 900pt width with everything open, the terminal is squeezed to roughly 400pt — that squeeze is a real design fact worth showing.”</td>
+        <td>True, but <strong>not at launch</strong> — it needs the git panel open, and <code>gitReviewVisible = false</code> (<code>:85</code>). At launch the terminal column is 680pt. The squeeze belongs to <code>git-review-flat</code>.</td>
+      </tr>
+      <tr>
+        <td>C4</td>
+        <td><code>tokens.css</code>: <code>--xtty-scroller-w: 17px</code>, tagged P with no consumer noted.</td>
+        <td>It is <em>load-bearing</em>: SwiftTerm reserves it on the terminal's trailing edge and subtracts it from the grid's usable width (<code>getEffectiveWidth</code>). Any scenario that counts columns must subtract 17 from the pane width first, whether or not the scroller can scroll.</td>
+      </tr>
+      <tr>
+        <td>C5</td>
+        <td>§4 records the filled/hollow caret rule under <em>Splits</em>, as a pane-focus cue.</td>
+        <td>It is also a <strong>window-activation</strong> cue: <code>hasFocus</code> folds in <code>window.isKeyWindow</code>. That is why Variant 2's caret is hollow — the difference between the two variants is not only the sidebar fill.</td>
+      </tr>
+      <tr>
+        <td>C6</td>
+        <td>§1: xtty “authors no material, blur, gradient, or shadow anywhere”; §6: “Flat. Hairline separators … do all the layering work.”</td>
+        <td>Confirmed for materials — and stronger than stated for separators: <code>buildLayout</code> (<code>:206–243</code>) adds three subviews and no divider view at all, so <strong>there is no hairline between the sidebar and the terminal</strong>. The only boundary is where the material stops. None is drawn here.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="pg-h2" data-od-id="reuse-heading">Reusing this shell</h2>
+  <table class="pg-table">
+    <thead><tr><th>Scenario</th><th>Change</th></tr></thead>
+    <tbody>
+      <tr><td><code>git-review-flat</code></td><td><code>--xt-git-w: var(--xtty-git-panel-w)</code> on <code>.xt-window</code>, then fill <code>.xt-git</code>. The terminal reflows to ~400pt from the one grid rule; nothing else in LAYER 1 moves.</td></tr>
+      <tr><td><code>session-sidebar</code></td><td>LAYER 2 only — more rows, expanded blocks at <code>--xtty-row-indent</code>, the 0.55 dim on stale <em>block</em> rows (see C1).</td></tr>
+      <tr><td><code>splits</code></td><td>Subdivide <code>.tm-pane</code> inside the middle column. Each leaf gets its own 17pt scroller; the only focus cue is the caret (V2/V3).</td></tr>
+      <tr><td><code>window-tabs</code></td><td><code>data-tabbar="true"</code>, plus a real probe of gaps U2 and U9.</td></tr>
+      <tr><td>sidebar hidden</td><td><code>--xt-sidebar-w: var(--xtty-panel-collapsed-w)</code> — <code>toggleSidebar</code> sets the same constraint to 0 (<code>:277–281</code>).</td></tr>
+    </tbody>
+  </table>
+
+</main>
+</body>
+</html>
