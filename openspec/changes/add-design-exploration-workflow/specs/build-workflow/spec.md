@@ -95,15 +95,50 @@ The project SHALL provide a documented command that reports the current design-t
 - **WHEN** the developer invokes the status command through the project's entry point in a repository that has never been linked
 - **THEN** the output reports the unlinked state without presenting it as a build failure
 
-### Requirement: Design-tool teardown avoids the tool's own delete path
+### Requirement: Design-tool teardown undoes the scripted setup
 
-The project SHALL provide a documented command that removes the design-tool registration. Because the registration is a reference into the version-controlled tree, teardown SHALL remove that reference directly and SHALL NOT invoke the design tool's own delete operation, whose behavior on a referenced directory is unverified and whose failure mode would reach the working tree.
+The project SHALL provide a documented command that undoes what the design-linkage entry point set up: it SHALL delete the tool-side mockups project, remove the tool's workspace copy of the design document, and remove the design-system registration. Because the registration is a reference into the version-controlled tree, teardown SHALL remove that reference directly and SHALL NOT invoke the design tool's design-system delete operation, whose behavior on a referenced directory is unverified and whose failure mode would reach the working tree. Project deletion, by contrast, MAY use the tool's own project-delete route, whose target resolution is verified to reach only the tool's own data directory and never the project's base directory.
 
-Teardown SHALL leave the version-controlled package untouched.
+Teardown SHALL resolve the project to delete by the canonical (symlink-resolved) path of its base directory — never by name — and SHALL refuse to delete any project whose base directory resolves outside the repository. When more than one project points at the committed project folder, teardown SHALL delete none of them, report each with enough identity for a human to decide, and exit distinctly. An escape hatch SHALL allow keeping the project (and its tool-side run history) while removing the rest.
 
-#### Scenario: Teardown removes only the reference
+Teardown SHALL verify each removal by effect — re-reading the tool's own project list and catalogue and re-checking the filesystem, never trusting the deleting call's response — and SHALL prove the repository untouched by comparing the version-control status of the design tree before and after the whole run. Re-running against an already-clean state SHALL be a reporting no-op that succeeds. When the design tool is not running, teardown SHALL perform the filesystem-scoped half, report plainly what could not be removed or verified without the tool, and exit distinctly from full success.
 
-- **WHEN** the developer invokes the teardown command against a registered package
-- **THEN** the reference is removed directly
+After any tool-side delete, teardown SHALL warn that the tool's running interface keeps showing a stale card for the deleted project until the tool is relaunched, because the tool's refresh affordance does not clear it.
+
+#### Scenario: Full teardown undoes the setup and is verified by effect
+
+- **WHEN** the developer invokes the teardown command against a fully set-up linkage with the design tool running
+- **THEN** the mockups project, the workspace copy, and the registration reference are all removed
+- **AND** each removal is confirmed by re-reading the tool's state and the filesystem, not by the deleting calls' responses
+- **AND** the version-control status of the design tree is byte-identical across the whole teardown
+- **AND** a warning states that the tool's running interface shows a stale card until relaunch
+
+#### Scenario: The reference is removed directly, never via the tool's design-system delete
+
+- **WHEN** the teardown command removes the registration reference
+- **THEN** the reference is unlinked directly
+- **AND** the design tool's design-system delete operation is not invoked
 - **AND** the version-controlled package directory is unmodified
-- **AND** the design tool's own delete operation is not invoked
+
+#### Scenario: Re-running on a clean state is a no-op
+
+- **WHEN** the developer invokes the teardown command and nothing it removes is present
+- **THEN** the command reports there is nothing to do and succeeds
+
+#### Scenario: Multiple projects at the committed folder defer to a human
+
+- **WHEN** the teardown command finds more than one project pointing at the committed project folder
+- **THEN** it deletes none of them and reports each with its identity and design-system setting
+- **AND** it exits distinctly so a human decides which to delete
+
+#### Scenario: The design tool is not running
+
+- **WHEN** the developer invokes the teardown command while the design tool is not running
+- **THEN** the filesystem-scoped removals still happen
+- **AND** the command reports what could not be removed or verified without the tool and exits distinctly from full success
+
+#### Scenario: The escape hatch keeps the project
+
+- **WHEN** the developer invokes the teardown command with the keep-project option
+- **THEN** the mockups project and its run history are left in place
+- **AND** the workspace copy and the registration reference are still removed

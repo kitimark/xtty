@@ -36,7 +36,7 @@
 - [x] 4.3 Create the project in the app (human step — native folder picker at `design/mockups/`), then verify the import wrote zero bytes into the repo
 - [x] 4.4 Set the project's design system to the xtty package (human step), then verify the stored id — recording that this is a precondition, not proof
 - [x] 4.5 **Close the loop by effect**: change one token value, run one generation, grep the produced HTML for the new value. Record the `metadata.json` write-back diff and commit or discard it deliberately
-- [ ] 4.6 Verify teardown: `make design-unlink` removes the app-side reference only — the committed package directory untouched, the app's own delete API never invoked — then `make design-link` re-registers cleanly
+- [x] 4.6 Verify teardown: `make design-unlink` undoes the whole setup — mockups project deleted via the app's project-delete route (resolved by canonical `baseDir`, never name; duplicates defer to a human, exit 3; `--keep-project` escape hatch), `ds-xtty` workspace row+dir removed, symlink unlinked by hand (the design-system delete API still never invoked), every removal verified by re-read, `git status design/` byte-identical across the run, already-clean rerun a no-op, daemon-down run filesystem-only with exit 2 — exercised first against a throwaway `/tmp` repo through the same script code path, then the real `make design-unlink` → `make design-link` round-trip restoring project + `user:xtty` + `desktop-app` + live symlink with the repo unchanged
 - [x] 4.7 Record in `design/README.md` what the interface actually exposed — whether the symlink-install route and the picker were reachable through the GUI at all (design.md Open Questions)
 
 ## 5. Baseline mockups
