@@ -15,7 +15,7 @@ The command SHALL verify its own result against the filesystem and the tool's ow
 - **WHEN** the developer invokes the design-linkage command with the design tool running and the package not yet registered
 - **THEN** the package is registered by reference to the version-controlled directory
 - **AND** the command confirms the registration from the filesystem and the tool's catalogue, not from the response of its own call
-- **AND** it reports the steps that still require human action in the tool's interface
+- **AND** it reports what remains for a human: any step it could not complete automatically, and the closing verification by effect
 
 #### Scenario: Re-running changes nothing
 
@@ -39,6 +39,42 @@ The command SHALL verify its own result against the filesystem and the tool's ow
 - **WHEN** the design-linkage command runs
 - **THEN** it reports whether the committed design base binds every token the design tool's schema requires
 - **AND** a shortfall is reported as a warning naming the missing tokens
+
+### Requirement: Scripted project creation deduplicates, verifies by effect, and falls back to manual instructions
+
+The design-linkage entry point SHALL create the design tool's mockups project when none exists, using the design tool's own first-party command-line interface — it SHALL NOT hand-mint authentication tokens, read secrets from process state, or bypass the tool's import gate; when the scripted route is unavailable the fallback is printed manual instructions, never a workaround of the gate. Before creating, the command SHALL resolve existing projects by the canonical (symlink-resolved) path of their base directory — never by name — and SHALL treat an existing match as the project, reporting it instead of creating a duplicate, because the design tool itself enforces no uniqueness on project names or base directories.
+
+The command SHALL verify creation by effect: re-reading the project from the tool and confirming a folder-backed project at the canonical path of the committed project folder, and confirming the import wrote nothing into the repository. It SHALL NOT treat the creating call's exit status as evidence. In the same invocation it SHALL configure the project's design system and platform through the tool's update route, each setting verified by re-read.
+
+#### Scenario: An existing project is reported, not duplicated
+
+- **WHEN** the design-linkage command runs while a project already points at the committed project folder
+- **THEN** the command reports that project and creates nothing
+- **AND** re-running the command remains a no-op
+
+#### Scenario: Creation is verified by effect
+
+- **WHEN** the command creates the project via the design tool's own CLI
+- **THEN** it re-reads the project from the tool and confirms a folder-backed project at the canonical path of the committed project folder
+- **AND** it confirms the import wrote zero bytes into the repository
+- **AND** the creating call's exit status is not treated as evidence
+
+#### Scenario: A created project is configured in the same invocation
+
+- **WHEN** the command creates the mockups project
+- **THEN** the same invocation sets the project's design system and platform
+- **AND** each setting is verified by re-reading it from the tool
+
+#### Scenario: Multiple projects at the same folder stop the command
+
+- **WHEN** the command finds more than one project pointing at the committed project folder
+- **THEN** it refuses to create or configure anything and reports each duplicate, deferring deletion to a human
+
+#### Scenario: Failure falls back to manual instructions
+
+- **WHEN** scripted creation cannot proceed for any reason
+- **THEN** the command prints the manual GUI import instructions as the documented fallback
+- **AND** the design-system registration outcome is unaffected
 
 ### Requirement: Read-only design-linkage status reporting
 

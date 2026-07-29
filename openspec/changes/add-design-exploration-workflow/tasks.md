@@ -26,6 +26,8 @@
 - [x] 3.3 `Makefile` — `design-link`, `design-status`, `design-unlink` targets with `##` descriptions, added to `.PHONY`; `design-status` prefixed so an unlinked repo does not read as a build failure
 - [x] 3.4 Verify `make` with no target lists all three new entry points with their descriptions (the self-documenting requirement)
 - [x] 3.5 Verify the not-running path: with the design tool quit, the linkage command fails naming that cause and does not attempt to launch it — and `make design-status` reports the state as indeterminate (cannot-determine), not as "not linked"
+- [x] 3.6 `--create-project` (also auto-run from install): dedupe-first by `realpath(baseDir)` via the shared matcher, creation through the app's bundled first-party CLI (Electron helper as interpreter; IPC socket located from public process metadata only — no hand-minted tokens, gate satisfied not bypassed), by-effect verification (folder-backed shape + `fromTrustedPicker` + zero bytes written into `design/`), chained design-system + platform configuration, manual-GUI fallback on any failure
+- [x] 3.7 Reconcile every artifact that asserted project creation was GUI-only (`design/README.md`, `design.md` D8/Non-Goals/Open Questions/Risks, the script's install banner, `specs/build-workflow/spec.md`), and record the `fromTrustedPicker` semantics shift plus the two measured hazards (no dedupe on folder import; API/CLI delete leaves a phantom UI card until relaunch)
 
 ## 4. Live linkage and verification
 

@@ -21,7 +21,7 @@ xtty's own constraint: it deliberately has almost no visual identity outside the
 
 **Non-Goals:**
 - Changing xtty's shipped UI. Translating an accepted mockup into SwiftUI is separate work.
-- Automating the design tool's GUI. No native-macOS automation exists in this environment; project creation and picker selection stay human steps.
+- Automating the design tool's GUI. No native-macOS automation exists in this environment. (Project creation and picker selection were originally scoped as human steps for this reason; both are now scripted — creation through the tool's bundled first-party CLI, selection through its ungated PATCH route — which automates the *outcome* without driving the GUI. The GUI remains the documented fallback, not an automation target.)
 - Committing app-side state (its database, run traces, config). Only the repo half is portable.
 - A components fixture. Deferred until the first mockups exist to distil one from.
 
@@ -59,9 +59,13 @@ The daemon rewrites that file wholesale on first run as a 9-key allowlist; any o
 
 Twelve baselines cover every surface xtty actually draws. Past that the mockups would be drawing macOS, not xtty. Three surfaces are excluded even as proposals: a project file-tree browser (a standing refutation), any account or sync chrome (a hard product requirement), and an app icon (none exists to reproduce).
 
-### D8 — The script owns what is scriptable and says what is not
+### D8 — The script owns what is scriptable and says what is not *(revised: everything is now scriptable)*
 
-Registration, verification, status, and teardown are scripted. Project creation goes through the app's native folder picker and picker selection is a GUI action; the script prints those as explicit next steps rather than pretending to cover them.
+As first shipped: registration, verification, status, and teardown were scripted; project creation was believed to require the GUI because `POST /api/import/folder` is HMAC-gated (measured live: 403 `token missing` without a token bound to the path), and the script printed the GUI import as an explicit next step.
+
+Revised 2026-07-29: the belief was wrong — the gate is real, but the installed app ships a first-party CLI (`od project import-folder`, run through the bundled Electron helper) that mints the gated token itself over the daemon's IPC socket. Creation is now scripted through that CLI: dedupe-first by `realpath(baseDir)` (the tool itself never dedupes — two projects at the same directory are representable and were observed), verified by effect (re-read shape `importedFrom:"folder"` + `fromTrustedPicker:true` + canonical `baseDir`; `git status design/` unchanged across the import), then chained into the existing selection flow. The gate is *satisfied*, never bypassed — the script reads only public process metadata to locate the socket and never mints tokens or touches secrets itself; if the CLI route fails, the printed manual GUI instructions remain the documented fallback. Creation auto-runs from the default install flow because dedupe-first makes it idempotent and every failure degrades to exactly the old behavior.
+
+*Consequence accepted knowingly:* `fromTrustedPicker: true` is stamped for any valid token regardless of origin, so once creation is scripted the flag attests "a valid HMAC was presented", not "a human chose this folder in the native picker" (see Risks).
 
 ## Risks / Trade-offs
 
@@ -72,16 +76,18 @@ Registration, verification, status, and teardown are scripted. Project creation 
 - **Teardown could reach the working tree** → the app's delete path does a recursive remove on the catalogue entry, and whether that unlinks a top-level symlink or recurses into the repo is unverified. Never exercised; teardown removes the link by hand.
 - **HTML cannot reproduce AppKit exactly** → SF Mono is not web-available, and the quake surface is sized from the screen's visible frame rather than a viewport. Accepted as approximation, annotated where it bites.
 - **Repository growth** → mockups run ~40 KB each. Mitigation: commit per *accepted* iteration, not per run; the agent's revision copies are promoted-and-deleted before commit rather than accumulating.
+- **Scripted creation redefines `fromTrustedPicker`** → the flag now attests only that a valid HMAC token was presented, not that a human chose the folder in the native picker. Accepted knowingly by the owner; recorded plainly in `design/README.md` so the flag is never later read as an audit trail of human consent.
 
 ## Migration Plan
 
 Additive; nothing existing changes behavior. Rollback is `make design-unlink` plus deleting `design/`, `scripts/design-link.sh`, and the Makefile targets — the app-side symlink is the only external state, and removing it leaves the tool as it was.
 
-Ordering matters in one place: the package must be authored and committed **before** linkage, since the symlink resolves a real directory; and linkage must precede the project's design-system selection, since the picker can only offer a registered, published package. (Project creation itself — the folder picker — has no linkage dependency; it merely sits between the two in the task order.)
+Ordering matters in one place: the package must be authored and committed **before** linkage, since the symlink resolves a real directory; and linkage must precede the project's design-system selection, since the picker can only offer a registered, published package. (Project creation itself — scripted via the bundled CLI, or the GUI folder picker as fallback — has no linkage dependency; the chained design-system selection is what requires the registered, published package first.)
 
 ## Open Questions
 
-- Whether the tool's interface exposes the symlink-install route at all. If it does not, the script is the only safe path — the alternative the interface does expose is the destructive scanner. Settled by running the linkage step.
-- Whether the interface offers the design-system picker for a folder-linked project. If not, the tokens channel is unreachable for this project shape and the package would only ever be read opportunistically — which decides whether a components fixture is worth authoring later.
+- ~~Whether the tool's interface exposes the symlink-install route at all.~~ **Settled 2026-07-29:** it does not — the script is the only safe path; the interface's "Import from folder" for design systems is the destructive scanner. Recorded in `design/README.md`.
+- ~~Whether the interface offers the design-system picker for a folder-linked project.~~ **Settled 2026-07-29:** it does (home composer and per-project), and the channel was proven by effect — a sentinel token value appeared in generated output. Recorded in `design/README.md`.
+- ~~Whether project creation can be scripted at all.~~ **Settled 2026-07-29 (reversing the original assumption):** the HTTP route is HMAC-gated as believed, but the app's bundled first-party CLI mints the token itself — creation is scripted via that CLI with the GUI as fallback (D8, revised).
 - Whether `.listStyle(.sidebar)` engages an AppKit material in xtty's bare-hosted sidebars. This decides whether mockup panels paint as a flat surface or a distinct tier, so it is worth one screenshot before authoring the first baselines.
 - Whether the artifact sidecars the tool writes churn their timestamps on unchanged regeneration. If they do, committing them is noise and they should move to the ignore list.
